@@ -492,16 +492,16 @@
       }
       ctx.closePath();
 
-      // Space rock styling
-      ctx.fillStyle = '#475569';
-      ctx.strokeStyle = '#94a3b8';
+      // Space rock styling - classic light gray (matching Color.LTGRAY / Color.GRAY from 2016)
+      ctx.fillStyle = '#94a3b8';
+      ctx.strokeStyle = '#e2e8f0';
       ctx.lineWidth = 2;
       ctx.fill();
       ctx.stroke();
 
       // Facet detail line
       if (pts.length >= 4) {
-        ctx.strokeStyle = '#334155';
+        ctx.strokeStyle = '#64748b';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y);
@@ -852,6 +852,12 @@
     init() {
       this.resizeCanvas();
       window.addEventListener('resize', () => this.resizeCanvas());
+      window.addEventListener('orientationchange', () => {
+        setTimeout(() => this.resizeCanvas(), 100);
+      });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => this.resizeCanvas());
+      }
 
       this.domElements.highScoreDisplay.textContent = this.highScore;
       this.bindInputs();
@@ -872,8 +878,10 @@
     }
 
     resizeCanvas() {
-      this.canvas.width = window.innerWidth;
-      this.canvas.height = window.innerHeight;
+      const width = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+      const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      this.canvas.width = Math.floor(width);
+      this.canvas.height = Math.floor(height);
       if (this.starfield) this.starfield.resize();
     }
 

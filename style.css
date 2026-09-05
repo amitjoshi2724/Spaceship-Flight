@@ -37,17 +37,28 @@
 html, body {
   width: 100%;
   height: 100%;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
+  position: fixed;
   background-color: var(--bg-space);
   color: var(--text-primary);
   font-family: var(--font-display);
   touch-action: none;
+  -webkit-overflow-scrolling: none;
 }
 
 #gameContainer {
-  position: relative;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
   width: 100vw;
-  height: 100vh;
+  height: 100%;
+  height: 100dvh;
   overflow: hidden;
   background-color: #000;
 }
@@ -90,12 +101,31 @@ html, body {
 .hud-stat {
   display: flex;
   flex-direction: column;
-  background: transparent;
-  border: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  padding: 2px 6px;
-  box-shadow: none;
+  background: rgba(10, 15, 30, 0.45);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.5), inset 0 0 8px rgba(56, 189, 248, 0.08);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.score-container {
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 16px;
+}
+
+.score-substat {
+  display: flex;
+  flex-direction: column;
+}
+
+.score-divider {
+  width: 1px;
+  height: 28px;
+  background: rgba(56, 189, 248, 0.25);
 }
 
 .hud-label {
@@ -118,6 +148,8 @@ html, body {
 
 .lives-container {
   align-items: center;
+  justify-content: center;
+  min-width: 90px;
 }
 
 .lives-icons {
@@ -777,28 +809,63 @@ html, body {
   display: none !important;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 600px) {
   #hud {
-    padding: 12px 14px;
+    padding: max(8px, env(safe-area-inset-top, 8px)) max(10px, env(safe-area-inset-right, 10px)) 6px max(10px, env(safe-area-inset-left, 10px));
   }
   .hud-stat {
     padding: 4px 8px;
   }
+  .score-container {
+    gap: 10px;
+    padding: 4px 10px;
+  }
+  .score-divider {
+    height: 22px;
+  }
+  .hud-label {
+    font-size: 9px;
+    letter-spacing: 1px;
+  }
   .hud-value {
     font-size: 16px;
   }
+  .lives-container {
+    min-width: 76px;
+    padding: 4px 8px;
+  }
+  .life-icon {
+    width: 14px;
+    height: 17px;
+  }
+  .hud-btn {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  #touchControls {
+    bottom: max(12px, env(safe-area-inset-bottom, 12px));
+    padding: 0 max(12px, env(safe-area-inset-right, 12px)) 0 max(12px, env(safe-area-inset-left, 12px));
+  }
+  .touch-group-left, .touch-group-right {
+    gap: 10px;
+  }
   .ctrl-btn {
-    width: 60px;
-    height: 60px;
+    width: 56px;
+    height: 56px;
   }
   .ctrl-btn.action-btn {
-    width: 62px;
-    height: 62px;
+    width: 58px;
+    height: 58px;
+    border-radius: 14px;
+  }
+  .btn-subtext {
+    font-size: 8px;
   }
   .menu-card, .modal-card {
-    padding: 24px 20px;
+    padding: 22px 18px;
+    max-height: 88vh;
   }
   .game-title {
-    font-size: 22px;
+    font-size: 20px;
   }
 }

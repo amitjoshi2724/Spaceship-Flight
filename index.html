@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="description" content="Spaceship Flight - Classic retro arcade space game created by Amit Joshi (@amitjoshi2724). Pilot your spaceship, dodge asteroids, and shoot for the high score!">
   <meta name="author" content="Amit Joshi (@amitjoshi2724)">
   <meta name="theme-color" content="#030712">
@@ -26,13 +29,16 @@
     <!-- Top HUD Bar -->
     <header id="hud">
       <div class="hud-left">
-        <div class="hud-stat">
-          <span class="hud-label">SCORE</span>
-          <span id="scoreDisplay" class="hud-value">0</span>
-        </div>
-        <div class="hud-stat">
-          <span class="hud-label">HIGH SCORE</span>
-          <span id="highScoreDisplay" class="hud-value">0</span>
+        <div class="hud-stat score-container">
+          <div class="score-substat">
+            <span class="hud-label">SCORE</span>
+            <span id="scoreDisplay" class="hud-value">0</span>
+          </div>
+          <div class="score-divider"></div>
+          <div class="score-substat">
+            <span class="hud-label">HIGH SCORE</span>
+            <span id="highScoreDisplay" class="hud-value">0</span>
+          </div>
         </div>
       </div>
 
