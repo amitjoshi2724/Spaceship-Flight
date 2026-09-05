@@ -128,6 +128,26 @@
         </div>
 
         <div class="setting-group">
+          <div class="slider-header">
+            <label for="settingShipSize" class="setting-label">SPACESHIP SIZE</label>
+            <span id="shipSizeVal" class="setting-value">54px</span>
+          </div>
+          <input type="range" id="settingShipSize" min="36" max="76" value="54" step="2" class="custom-slider">
+          <div class="slider-labels">
+            <span>Smaller (36px)</span>
+            <span>Default (54px)</span>
+            <span>Larger (76px)</span>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="toggle-row">
+            <label for="settingStars" class="setting-label">BACKGROUND STARS</label>
+            <input type="checkbox" id="settingStars" checked class="custom-toggle">
+          </div>
+        </div>
+
+        <div class="setting-group">
           <div class="toggle-row">
             <label for="settingSound" class="setting-label">SOUND EFFECTS</label>
             <input type="checkbox" id="settingSound" checked class="custom-toggle">

@@ -210,9 +210,11 @@
       }
     }
 
-    draw(ctx) {
+    draw(ctx, showStars = true) {
       ctx.fillStyle = '#030712';
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+      if (!showStars) return;
 
       for (const star of this.stars) {
         ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0.1, Math.min(1, star.alpha))})`;
@@ -334,18 +336,18 @@
       if (this.hit) return;
       ctx.save();
 
-      // Outer glow & circle (yellow)
+      // Outer glow & radiant aura (yellow)
       ctx.shadowColor = '#facc15';
-      ctx.shadowBlur = 8;
+      ctx.shadowBlur = 10;
       ctx.fillStyle = '#fef08a';
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius * 1.8, 0, Math.PI * 2);
       ctx.fill();
 
-      // Inner core (cyan/blue matching Android Bullet.java)
-      ctx.fillStyle = '#38bdf8';
+      // Solid vibrant yellow core (removed test blue dot)
+      ctx.fillStyle = '#facc15';
       ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius * 0.7, 0, Math.PI * 2);
+      ctx.arc(this.x, this.y, this.radius * 1.0, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
@@ -515,10 +517,9 @@
       this.thrusting = false;
       this.lives = 3;
       this.invincible = false;
-      this.invincibleTimer = 0;
-
-      this.width = 44;
-      this.height = 44;
+      const savedSize = parseInt(localStorage.getItem('spaceship_flight_ship_size') || '54', 10);
+      this.width = Math.max(36, Math.min(76, savedSize));
+      this.height = this.width;
       this.selectedSkin = 'red'; // 'red' or 'blue'
 
       this.flameFrame = 0;
@@ -537,6 +538,14 @@
       this.sprites.redMoving2.src = 'newspaceshipmoving2.png';
       this.sprites.blueNormal.src = 'bluenewspaceship.png';
       this.sprites.blueMoving.src = 'bluenewspaceshipmoving2.png';
+    }
+
+    setSize(size) {
+      this.width = Math.max(36, Math.min(76, size));
+      this.height = this.width;
+      try {
+        localStorage.setItem('spaceship_flight_ship_size', this.width.toString());
+      } catch (e) {}
     }
 
     reset(full = false) {
@@ -698,6 +707,7 @@
       this.state = 'START'; // 'START', 'PLAYING', 'PAUSED', 'GAMEOVER'
       this.screenShake = 0;
 
+      this.showStars = localStorage.getItem('spaceship_flight_show_stars') !== 'false';
       this.soundFx = new SoundFX();
       this.particles = new ParticleSystem();
       this.starfield = new Starfield(this.canvas);
@@ -757,6 +767,9 @@
         // Settings inputs
         selectRedShip: document.getElementById('selectRedShip'),
         selectBlueShip: document.getElementById('selectBlueShip'),
+        settingShipSize: document.getElementById('settingShipSize'),
+        shipSizeVal: document.getElementById('shipSizeVal'),
+        settingStars: document.getElementById('settingStars'),
         settingSound: document.getElementById('settingSound'),
         settingTouchControls: document.getElementById('settingTouchControls'),
         menuShipPreview: document.getElementById('menuShipPreview'),
@@ -961,6 +974,32 @@
 
       this.domElements.selectRedShip.addEventListener('click', () => updateShipChoice('red'));
       this.domElements.selectBlueShip.addEventListener('click', () => updateShipChoice('blue'));
+
+      // Ship size slider
+      if (this.domElements.settingShipSize) {
+        this.domElements.settingShipSize.value = this.ship.width;
+        if (this.domElements.shipSizeVal) {
+          this.domElements.shipSizeVal.textContent = `${this.ship.width}px`;
+        }
+        this.domElements.settingShipSize.addEventListener('input', (e) => {
+          const val = parseInt(e.target.value, 10);
+          this.ship.setSize(val);
+          if (this.domElements.shipSizeVal) {
+            this.domElements.shipSizeVal.textContent = `${val}px`;
+          }
+        });
+      }
+
+      // Background stars toggle
+      if (this.domElements.settingStars) {
+        this.domElements.settingStars.checked = this.showStars;
+        this.domElements.settingStars.addEventListener('change', (e) => {
+          this.showStars = e.target.checked;
+          try {
+            localStorage.setItem('spaceship_flight_show_stars', this.showStars.toString());
+          } catch (err) {}
+        });
+      }
 
       // Touch controls visibility setting
       this.domElements.settingTouchControls.addEventListener('change', (e) => {
@@ -1183,7 +1222,7 @@
       }
 
       // Clear & draw background
-      this.starfield.draw(this.ctx);
+      this.starfield.draw(this.ctx, this.showStars);
 
       // Draw game items
       this.particles.draw(this.ctx);
