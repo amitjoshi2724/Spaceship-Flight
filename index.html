@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="Spaceship Flight - Classic retro arcade space game created by Amit Joshi (@amitjoshi2724). Pilot your spaceship, dodge asteroids, and shoot for the high score!">
+  <meta name="author" content="Amit Joshi (@amitjoshi2724)">
+  <meta name="theme-color" content="#030712">
+  <title>Spaceship Flight | Classic Arcade Game</title>
+  
+  <!-- Modern Retro Sci-Fi Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" sizes="64x64" href="newspaceship.png">
+  <link rel="shortcut icon" type="image/png" href="newspaceship.png">
+  <link rel="apple-touch-icon" href="newspaceship.png">
+</head>
+<body>
+  <div id="gameContainer">
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Top HUD Bar -->
+    <header id="hud">
+      <div class="hud-left">
+        <div class="hud-stat">
+          <span class="hud-label">SCORE</span>
+          <span id="scoreDisplay" class="hud-value">0</span>
+        </div>
+        <div class="hud-stat">
+          <span class="hud-label">HIGH SCORE</span>
+          <span id="highScoreDisplay" class="hud-value">0</span>
+        </div>
+      </div>
+
+      <div class="hud-center">
+        <div class="hud-stat lives-container">
+          <span class="hud-label">SHIPS</span>
+          <div id="livesIcons" class="lives-icons">
+            <span class="life-icon active"></span>
+            <span class="life-icon active"></span>
+            <span class="life-icon active"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hud-right">
+        <button id="soundToggleBtn" class="hud-btn sound-btn" aria-label="Toggle Sound" title="Toggle Sound">🔊</button>
+        <button id="pauseBtn" class="hud-btn" aria-label="Pause Game" title="Pause Game">| |</button>
+      </div>
+    </header>
+
+    <!-- On-screen Controls for Touch & Mobile -->
+    <div id="touchControls">
+      <div class="touch-group-left">
+        <button id="btnLeft" class="ctrl-btn" aria-label="Rotate Counter-Clockwise">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+            <path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/>
+          </svg>
+        </button>
+        <button id="btnRight" class="ctrl-btn" aria-label="Rotate Clockwise">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+            <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="touch-group-right">
+        <button id="btnThrust" class="ctrl-btn action-btn" aria-label="Thrust Boost">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+            <path d="M12 2.5L5 16.5l3.5-1.5L12 21.5l3.5-6.5 3.5 1.5L12 2.5z"/>
+          </svg>
+          <span class="btn-subtext">THRUST</span>
+        </button>
+        <button id="btnFire" class="ctrl-btn action-btn fire-btn" aria-label="Fire Lasers">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+          </svg>
+          <span class="btn-subtext">FIRE</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Start Menu Overlay -->
+    <div id="startScreen" class="overlay active">
+      <div class="menu-card glass-panel">
+        <div class="logo-wrapper">
+          <div class="ship-preview-glow">
+            <img id="menuShipPreview" src="newspaceship.png" alt="Spaceship Preview" class="floating-ship">
+          </div>
+          <h1 class="game-title">SPACESHIP FLIGHT</h1>
+          <p class="game-subtitle">2016 Classic Arcade by Amit Joshi</p>
+        </div>
+
+        <nav class="menu-nav">
+          <button id="playBtn" class="menu-btn primary-btn">PLAY</button>
+          <button id="settingsBtn" class="menu-btn secondary-btn">SETTINGS</button>
+          <button id="instructionsBtn" class="menu-btn secondary-btn">INSTRUCTIONS</button>
+          <button id="creditsBtn" class="menu-btn secondary-btn">CREDITS</button>
+        </nav>
+
+        <div class="desktop-hints">
+          <span>⌨️ Desktop: <b>[← / →]</b> or <b>[A / D]</b> Rotate &bull; <b>[↑ / W]</b> Thrust &bull; <b>[SPACE]</b> Fire &bull; <b>[P]</b> Pause</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="overlay">
+      <div class="modal-card glass-panel">
+        <h2 class="modal-title">SETTINGS</h2>
+
+        <div class="setting-group">
+          <label class="setting-label">SELECT SPACESHIP</label>
+          <div class="ship-selector">
+            <button id="selectRedShip" class="ship-option active" data-ship="red">
+              <img src="newspaceship.png" alt="Red & White Spaceship">
+              <span>Classic Crimson</span>
+            </button>
+            <button id="selectBlueShip" class="ship-option" data-ship="blue">
+              <img src="bluenewspaceship.png" alt="Blue Spaceship">
+              <span>Cobalt Blue</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="toggle-row">
+            <label for="settingSound" class="setting-label">SOUND EFFECTS</label>
+            <input type="checkbox" id="settingSound" checked class="custom-toggle">
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="toggle-row">
+            <label for="settingTouchControls" class="setting-label">ON-SCREEN BUTTONS</label>
+            <select id="settingTouchControls" class="custom-select">
+              <option value="auto">Auto (Touch Devices)</option>
+              <option value="always">Always Show</option>
+              <option value="hidden">Hide</option>
+            </select>
+          </div>
+        </div>
+
+        <button id="closeSettingsBtn" class="menu-btn primary-btn">DONE</button>
+      </div>
+    </div>
+
+    <!-- Instructions Modal -->
+    <div id="instructionsModal" class="overlay">
+      <div class="modal-card glass-panel">
+        <h2 class="modal-title">INSTRUCTIONS</h2>
+
+        <div class="instructions-content">
+          <p class="original-quote">
+            &ldquo;Hold to move the spaceship. Tap to fire. Use the buttons on the lower left to rotate the spaceship. Have fun!&rdquo;
+          </p>
+
+          <div class="controls-guide">
+            <div class="guide-col">
+              <h3>📱 Touch / Mobile</h3>
+              <ul>
+                <li><b>Buttons (Bottom Left):</b> Rotate ship</li>
+                <li><b>Hold Screen / Thrust Button:</b> Accelerate forward</li>
+                <li><b>Tap Screen / Fire Button:</b> Fire plasma cannons</li>
+                <li><b>Top Right (| |):</b> Pause / Resume</li>
+              </ul>
+            </div>
+            <div class="guide-col">
+              <h3>💻 Keyboard & Mouse</h3>
+              <ul>
+                <li><b>Left / Right or A / D:</b> Rotate ship</li>
+                <li><b>Up Arrow or W:</b> Thrust engine</li>
+                <li><b>Spacebar or Left Click:</b> Fire laser</li>
+                <li><b>P or Escape:</b> Pause game</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="scoring-tip">
+            💡 <b>Mission:</b> Destroy asteroids before they hit your ship. Asteroids wrap around screen edges!
+          </div>
+        </div>
+
+        <button id="closeInstructionsBtn" class="menu-btn primary-btn">GOT IT</button>
+      </div>
+    </div>
+
+    <!-- Credits Modal -->
+    <div id="creditsModal" class="overlay">
+      <div class="modal-card glass-panel">
+        <h2 class="modal-title">CREDITS</h2>
+
+        <div class="credits-content">
+          <div class="credit-badge">
+            <div class="credit-avatar">AJ</div>
+            <h3 class="author-name">Amit Joshi</h3>
+            <a href="https://github.com/amitjoshi2724" target="_blank" rel="noopener noreferrer" class="github-handle">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+              </svg>
+              @amitjoshi2724
+            </a>
+          </div>
+
+          <p class="history-note">
+            Originally created in <strong>2016</strong> as a high school programming project in Java (Swing desktop application) and ported to an Android mobile app.
+          </p>
+          <p class="history-subnote">
+            Modernized in 2026 into HTML5 / Canvas / Web Audio for present-day browser playability and hosted on GitHub Pages.
+          </p>
+        </div>
+
+        <button id="closeCreditsBtn" class="menu-btn primary-btn">BACK</button>
+      </div>
+    </div>
+
+    <!-- Pause & Reset Modal -->
+    <div id="pauseModal" class="overlay">
+      <div class="modal-card glass-panel">
+        <h2 class="modal-title">PAUSED</h2>
+        <nav class="menu-nav">
+          <button id="resumeBtn" class="menu-btn primary-btn">RESUME</button>
+          <button id="restartBtn" class="menu-btn secondary-btn">RESTART MISSION</button>
+          <button id="pauseSettingsBtn" class="menu-btn secondary-btn">SETTINGS</button>
+          <button id="quitBtn" class="menu-btn secondary-btn">MAIN MENU</button>
+        </nav>
+      </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="gameOverModal" class="overlay">
+      <div class="modal-card glass-panel game-over-card">
+        <h2 class="modal-title game-over-title">GAME OVER</h2>
+        
+        <div id="newHighScoreBanner" class="high-score-banner hidden">
+          ⭐ NEW HIGH SCORE! ⭐
+        </div>
+
+        <div class="results-stats">
+          <div class="result-box">
+            <span class="result-label">FINAL SCORE</span>
+            <span id="finalScoreVal" class="result-number">0</span>
+          </div>
+          <div class="result-box">
+            <span class="result-label">BEST RECORD</span>
+            <span id="bestScoreVal" class="result-number">0</span>
+          </div>
+        </div>
+
+        <nav class="menu-nav">
+          <button id="retryBtn" class="menu-btn primary-btn">PLAY AGAIN</button>
+          <button id="gameOverQuitBtn" class="menu-btn secondary-btn">MAIN MENU</button>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

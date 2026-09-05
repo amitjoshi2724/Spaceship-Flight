@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:id="@+id/relativeLayout"
+    tools:context="com.spaceshipflight.amitjoshi.spaceshipflight.asteroidsxml">
+
+    <Button
+        style="?android:attr/buttonStyleSmall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="| |"
+        android:textColor="#B3FAFA13"
+        android:id="@+id/pauseButton"
+        android:onClick="showSettings"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentEnd="true"
+        android:layout_margin="16dp" />
+
+    <Button
+        style="?android:attr/buttonStyleSmall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/leftButton"
+        android:padding="30dp"
+        android:layout_alignTop="@+id/rightButton"
+        android:layout_alignLeft="@+id/scoreLabel"
+        android:layout_alignStart="@+id/scoreLabel" />
+
+    <Button
+        style="?android:attr/buttonStyleSmall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/rightButton"
+        android:padding="@dimen/button_padding"
+        android:layout_marginLeft="35dp"
+        android:nestedScrollingEnabled="false"
+        android:layout_marginStart="35dp"
+        android:layout_alignParentBottom="true"
+        android:layout_toRightOf="@+id/leftButton"
+        android:layout_toEndOf="@+id/leftButton"
+        android:layout_margin="16dp" />
+
+    <com.spaceshipflight.amitjoshi.spaceshipflight.MyImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:id="@+id/imageView"
+        android:layout_centerVertical="true"
+        android:layout_centerHorizontal="true" />
+
+    <TextView
+        android:id="@+id/scoreLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Score: 0"
+        android:textColor="@color/blue"
+        android:textAppearance="@android:style/TextAppearance.Material.Large"
+        android:layout_alignTop="@+id/pauseButton"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:layout_marginLeft="23dp"
+        android:layout_marginStart="23dp" />
+
+
+</RelativeLayout>
