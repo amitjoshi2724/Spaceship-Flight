@@ -46,19 +46,29 @@ Enjoy a procedural multi-layered parallax starfield with gentle twinkling that r
 ### 4. Clean Plasma Laser Bullets
 In the original 2016 Android app, a blue dot had been placed in the center of bullets as a build test. In this version, bullets are pure, brilliant golden yellow bolts with vibrant outer bloom.
 
-### 5. Authentic 2016 Physics & Geometry
-- **5-Vertex Polygon Asteroids:** Preserves the exact 5-point polygon geometry from `RockMaker.java` (`xpoints = [0, 25, 15, -5, -8]`, `ypoints = [0, 5, 30, 25, 15]`).
+### 5. Authentic Physics & Dynamic Asteroid Variations
+- **5 Varied Asteroid Shapes:** In addition to Amit's original 2016 5-point polygon from `RockMaker.java` (`[0, 25, 15, -5, -8]`, `[0, 5, 30, 25, 15]`), asteroids now feature a handful of distinct space rock shapes (jagged crags, diamond asteroids, chunky meteorites, and elongated boulders) randomly chosen upon spawn.
 - **Ray-Casting Collision Algorithm:** Accurately ports the point-in-polygon ray-casting test from `Polygon.java` (`rayCastIntersect`).
-- **Inertial Flight Dynamics:** Authentic drift damping (`dx *= 0.992, dy *= 0.992`), velocity cap, and toroidal screen-edge wrapping.
+- **Inertial Flight Dynamics & Strict Cleanup:** Authentic drift damping (`dx *= 0.992, dy *= 0.992`), velocity cap, targeted trajectories toward the screen, and immediate memory cleanup of off-screen bullets and asteroids to guarantee zero lag.
 
-### 6. Procedural Synthesizer Audio
+### 6. Difficulty Modes
+Configure your challenge level directly in Settings:
+- **Easy (Casual):** Relaxed spawn rate, lower speed multiplier, max 8 concurrent asteroids.
+- **Medium (Standard):** Balanced arcade gameplay with up to 14 concurrent asteroids.
+- **Hard (Asteroid Storm):** Fast-paced spawn interval (~0.63s), 1.75x velocity boost, and up to 22 concurrent asteroids.
+
+### 7. Non-Obstructing Transparent Controls & Electric Blue Lives
+- **Clear Field of View:** Control buttons and HUD statistics float seamlessly above space with no opaque background bars, ensuring full visibility of approaching asteroids across the entire screen.
+- **Electric Blue Lives:** Crisp, glowing electric blue arrowheads represent remaining ship hulls in the HUD.
+
+### 8. Procedural Synthesizer Audio
 Built using the Web Audio API with zero external audio assets:
 - Laser cannon discharge with exponential pitch sweep
 - Low-frequency engine rumble during thrust
 - Filtered white-noise explosions upon destroying asteroids
 - Retro 8-bit descending arpeggio on game over
 
-### 7. Customization & Persistence
+### 9. Customization & Persistence
 - **Ship Skin Selection:** Choose between Classic Crimson (`newspaceship.png`) and Cobalt Blue (`bluenewspaceship.png`).
 - **High Score Tracking:** Automatically persists your personal best record in browser `localStorage`.
 - **Favicon:** Configured with the classic red spaceship icon.

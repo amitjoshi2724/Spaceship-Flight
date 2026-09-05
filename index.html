@@ -40,9 +40,9 @@
         <div class="hud-stat lives-container">
           <span class="hud-label">SHIPS</span>
           <div id="livesIcons" class="lives-icons">
-            <span class="life-icon active"></span>
-            <span class="life-icon active"></span>
-            <span class="life-icon active"></span>
+            <span class="life-icon active" title="Ship 1"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff"/></svg></span>
+            <span class="life-icon active" title="Ship 2"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff"/></svg></span>
+            <span class="life-icon active" title="Ship 3"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff"/></svg></span>
           </div>
         </div>
       </div>
@@ -144,6 +144,17 @@
           <div class="toggle-row">
             <label for="settingStars" class="setting-label">BACKGROUND STARS</label>
             <input type="checkbox" id="settingStars" checked class="custom-toggle">
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="toggle-row">
+            <label for="settingDifficulty" class="setting-label">DIFFICULTY</label>
+            <select id="settingDifficulty" class="custom-select">
+              <option value="easy">Easy (Casual)</option>
+              <option value="medium" selected>Medium (Standard)</option>
+              <option value="hard">Hard (Asteroid Storm)</option>
+            </select>
           </div>
         </div>
 

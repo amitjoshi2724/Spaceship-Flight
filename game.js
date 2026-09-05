@@ -285,8 +285,6 @@
       for (const p of this.particles) {
         ctx.globalAlpha = Math.max(0, p.life);
         ctx.fillStyle = p.color;
-        ctx.shadowColor = p.color;
-        ctx.shadowBlur = 8;
         ctx.beginPath();
         ctx.arc(p.x, p.y, Math.max(0.5, p.size), 0, Math.PI * 2);
         ctx.fill();
@@ -321,7 +319,7 @@
       this.x += this.dx;
       this.y += this.dy;
 
-      // Despawn when leaving screen
+      // Strict off-screen despawn to eliminate memory overhead
       if (
         this.x < -10 ||
         this.x > canvasWidth + 10 ||
@@ -356,57 +354,80 @@
 
   // ============================================================================
   // ROCK (ASTEROID) CLASS
-  // Preserves 5-point polygon geometry & rayCastIntersect from Polygon.java
+  // Features 5 distinct polygon shapes, accurate ray-cast collision & auto-cleanup
   // ============================================================================
   class Rock {
-    constructor(canvasWidth, canvasHeight) {
+    constructor(canvasWidth, canvasHeight, speedMultiplier = 1.0) {
       this.popped = false;
-      this.radius = 24 + Math.random() * 18;
+      this.radius = 22 + Math.random() * 20;
       this.scale = this.radius / 25;
       this.rotation = Math.random() * Math.PI * 2;
-      this.rotSpeed = (Math.random() - 0.5) * 0.03;
+      this.rotSpeed = (Math.random() - 0.5) * 0.04;
+      this.hasEntered = false;
+      this.age = 0;
 
       // Spawn location from screen perimeter
       const side = Math.random();
-      const maxSpeed = 1.2 + Math.random() * 2.2;
-      const angleToCenter = Math.random() * Math.PI * 2;
+      const maxSpeed = (1.4 + Math.random() * 2.0) * speedMultiplier;
+
+      // Target a point inside the playable screen to ensure it crosses through
+      const targetX = canvasWidth * (0.15 + Math.random() * 0.7);
+      const targetY = canvasHeight * (0.15 + Math.random() * 0.7);
 
       if (side < 0.25) {
-        this.x = -this.radius;
+        // From left edge
+        this.x = -this.radius - 10;
         this.y = Math.random() * canvasHeight;
-        this.dx = Math.abs(Math.cos(angleToCenter) * maxSpeed) + 0.5;
-        this.dy = Math.sin(angleToCenter) * maxSpeed;
       } else if (side < 0.5) {
+        // From top edge
         this.x = Math.random() * canvasWidth;
-        this.y = -this.radius;
-        this.dx = Math.cos(angleToCenter) * maxSpeed;
-        this.dy = Math.abs(Math.sin(angleToCenter) * maxSpeed) + 0.5;
+        this.y = -this.radius - 10;
       } else if (side < 0.75) {
-        this.x = canvasWidth + this.radius;
+        // From right edge
+        this.x = canvasWidth + this.radius + 10;
         this.y = Math.random() * canvasHeight;
-        this.dx = -Math.abs(Math.cos(angleToCenter) * maxSpeed) - 0.5;
-        this.dy = Math.sin(angleToCenter) * maxSpeed;
       } else {
+        // From bottom edge
         this.x = Math.random() * canvasWidth;
-        this.y = canvasHeight + this.radius;
-        this.dx = Math.cos(angleToCenter) * maxSpeed;
-        this.dy = -Math.abs(Math.sin(angleToCenter) * maxSpeed) - 0.5;
+        this.y = canvasHeight + this.radius + 10;
       }
 
-      // Original 5-vertex polygon offsets from RockMaker.java:
-      // xpoints = {0, 25, 15, -5, -8}
-      // ypoints = {0, 5, 30, 25, 15}
-      // Center them around (0,0) for clean rotation
-      const rawX = [0, 25, 15, -5, -8];
-      const rawY = [0, 5, 30, 25, 15];
-      const avgX = 5.4;
-      const avgY = 15;
+      // Calculate velocity vector towards target inside the screen
+      const angle = Math.atan2(targetY - this.y, targetX - this.x) + (Math.random() - 0.5) * 0.3;
+      this.dx = Math.cos(angle) * maxSpeed;
+      this.dy = Math.sin(angle) * maxSpeed;
+
+      // 5 Distinct Asteroid Shape Templates:
+      // Shape 0: Original 2016 5-point rock from RockMaker.java
+      // Shape 1: Jagged 6-point craggy rock
+      // Shape 2: Spiky 7-point diamond asteroid
+      // Shape 3: Chunky 8-point irregular meteorite
+      // Shape 4: Elongated 6-point space boulder
+      const shapes = [
+        { x: [0, 25, 15, -5, -8], y: [0, 5, 30, 25, 15] },
+        { x: [-18, 6, 26, 18, -8, -24], y: [-20, -26, -6, 22, 26, 6] },
+        { x: [0, 20, 28, 12, -10, -26, -16], y: [-28, -14, 8, 26, 22, 2, -18] },
+        { x: [-14, 10, 26, 20, 8, -14, -28, -20], y: [-24, -22, -4, 16, 28, 24, 6, -12] },
+        { x: [-10, 14, 30, 16, -14, -24], y: [-30, -26, 6, 28, 30, -6] }
+      ];
+
+      this.shapeIndex = Math.floor(Math.random() * shapes.length);
+      const chosen = shapes[this.shapeIndex];
+
+      // Calculate centroid to center points at (0,0)
+      let sumX = 0, sumY = 0;
+      for (let i = 0; i < chosen.x.length; i++) {
+        sumX += chosen.x[i];
+        sumY += chosen.y[i];
+      }
+      const avgX = sumX / chosen.x.length;
+      const avgY = sumY / chosen.y.length;
 
       this.localPoints = [];
-      for (let i = 0; i < rawX.length; i++) {
+      for (let i = 0; i < chosen.x.length; i++) {
         this.localPoints.push({
-          x: (rawX[i] - avgX) * this.scale * 1.5,
-          y: (rawY[i] - avgY) * this.scale * 1.5
+          x: (chosen.x[i] - avgX) * this.scale * 1.5,
+          y: (chosen.y[i] - avgY) * this.scale * 1.5
         });
       }
     }
@@ -424,17 +445,38 @@
       this.x += this.dx;
       this.y += this.dy;
       this.rotation += this.rotSpeed;
+      this.age++;
 
-      const pad = this.radius * 4;
-      // Wraparound or remove when way out of bounds
-      if (
-        this.x < -pad ||
-        this.x > canvasWidth + pad ||
-        this.y < -pad ||
-        this.y > canvasHeight + pad
-      ) {
-        return false; // ready for removal
+      // Check if entered screen
+      if (!this.hasEntered) {
+        if (
+          this.x >= -this.radius &&
+          this.x <= canvasWidth + this.radius &&
+          this.y >= -this.radius &&
+          this.y <= canvasHeight + this.radius
+        ) {
+          this.hasEntered = true;
+        }
       }
+
+      // Once it has entered the screen, if it exits the screen edges, clean it up immediately
+      const bound = this.radius * 2;
+      if (this.hasEntered) {
+        if (
+          this.x < -bound ||
+          this.x > canvasWidth + bound ||
+          this.y < -bound ||
+          this.y > canvasHeight + bound
+        ) {
+          return false;
+        }
+      }
+
+      // Max lifetime safety check (so rocks never linger indefinitely)
+      if (this.age > 2400) {
+        return false;
+      }
+
       return true;
     }
 
@@ -450,26 +492,22 @@
       }
       ctx.closePath();
 
-      // Metallic asteroid rock styling
+      // Space rock styling
       ctx.fillStyle = '#475569';
       ctx.strokeStyle = '#94a3b8';
       ctx.lineWidth = 2;
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-      ctx.shadowBlur = 8;
       ctx.fill();
       ctx.stroke();
 
-      // Subtle inner crater detail
-      ctx.fillStyle = 'rgba(30, 41, 59, 0.6)';
-      ctx.beginPath();
-      ctx.arc(
-        this.x + this.localPoints[1].x * 0.3,
-        this.y + this.localPoints[1].y * 0.3,
-        this.radius * 0.25,
-        0,
-        Math.PI * 2
-      );
-      ctx.fill();
+      // Facet detail line
+      if (pts.length >= 4) {
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        ctx.lineTo(pts[2].x, pts[2].y);
+        ctx.stroke();
+      }
 
       ctx.restore();
     }
@@ -708,6 +746,9 @@
       this.screenShake = 0;
 
       this.showStars = localStorage.getItem('spaceship_flight_show_stars') !== 'false';
+      this.difficulty = localStorage.getItem('spaceship_flight_difficulty') || 'medium';
+      this.applyDifficultySettings();
+
       this.soundFx = new SoundFX();
       this.particles = new ParticleSystem();
       this.starfield = new Starfield(this.canvas);
@@ -716,7 +757,6 @@
       this.bullets = [];
       this.rocks = [];
       this.rockSpawnTimer = 0;
-      this.rockSpawnInterval = 110; // ~1.8 seconds at 60fps
 
       // Input State
       this.keys = {
@@ -770,6 +810,7 @@
         settingShipSize: document.getElementById('settingShipSize'),
         shipSizeVal: document.getElementById('shipSizeVal'),
         settingStars: document.getElementById('settingStars'),
+        settingDifficulty: document.getElementById('settingDifficulty'),
         settingSound: document.getElementById('settingSound'),
         settingTouchControls: document.getElementById('settingTouchControls'),
         menuShipPreview: document.getElementById('menuShipPreview'),
@@ -781,6 +822,31 @@
       };
 
       this.init();
+    }
+
+    applyDifficultySettings() {
+      if (this.difficulty === 'easy') {
+        this.rockSpawnInterval = 110; // ~1.8s
+        this.maxRocks = 8;
+        this.rockSpeedMultiplier = 1.0;
+      } else if (this.difficulty === 'hard') {
+        this.rockSpawnInterval = 38;  // ~0.63s
+        this.maxRocks = 22;
+        this.rockSpeedMultiplier = 1.75;
+      } else {
+        // medium (standard)
+        this.rockSpawnInterval = 68;  // ~1.1s
+        this.maxRocks = 14;
+        this.rockSpeedMultiplier = 1.35;
+      }
+    }
+
+    setDifficulty(level) {
+      this.difficulty = level;
+      this.applyDifficultySettings();
+      try {
+        localStorage.setItem('spaceship_flight_difficulty', level);
+      } catch (e) {}
     }
 
     init() {
@@ -1001,6 +1067,14 @@
         });
       }
 
+      // Difficulty setting
+      if (this.domElements.settingDifficulty) {
+        this.domElements.settingDifficulty.value = this.difficulty;
+        this.domElements.settingDifficulty.addEventListener('change', (e) => {
+          this.setDifficulty(e.target.value);
+        });
+      }
+
       // Touch controls visibility setting
       this.domElements.settingTouchControls.addEventListener('change', (e) => {
         const val = e.target.value;
@@ -1047,9 +1121,10 @@
       this.ship.reset(true);
       this.updateLivesDisplay();
 
-      // Initial rocks spawn
-      for (let i = 0; i < 4; i++) {
-        this.rocks.push(new Rock(this.canvas.width, this.canvas.height));
+      // Initial rocks spawn based on difficulty
+      const initialCount = this.difficulty === 'easy' ? 3 : this.difficulty === 'hard' ? 7 : 5;
+      for (let i = 0; i < initialCount; i++) {
+        this.rocks.push(new Rock(this.canvas.width, this.canvas.height, this.rockSpeedMultiplier));
       }
 
       this.state = 'PLAYING';
@@ -1094,10 +1169,13 @@
 
     updateLivesDisplay() {
       this.domElements.livesIcons.forEach((icon, idx) => {
+        const poly = icon.querySelector('polygon');
         if (idx < this.ship.lives) {
           icon.classList.add('active');
+          if (poly) poly.setAttribute('fill', '#00f0ff');
         } else {
           icon.classList.remove('active');
+          if (poly) poly.setAttribute('fill', '#334155');
         }
       });
     }
@@ -1148,12 +1226,12 @@
         // Ship update
         this.ship.update();
 
-        // Asteroid Spawning
+        // Asteroid Spawning based on difficulty limits
         this.rockSpawnTimer++;
         if (this.rockSpawnTimer > this.rockSpawnInterval) {
           this.rockSpawnTimer = 0;
-          if (this.rocks.length < 12) {
-            this.rocks.push(new Rock(this.canvas.width, this.canvas.height));
+          if (this.rocks.length < this.maxRocks) {
+            this.rocks.push(new Rock(this.canvas.width, this.canvas.height, this.rockSpeedMultiplier));
           }
         }
 
