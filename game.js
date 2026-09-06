@@ -561,9 +561,8 @@
       this.thrusting = false;
       this.lives = 3;
       this.invincible = false;
-      const savedSize = parseInt(localStorage.getItem('spaceship_flight_ship_size') || '54', 10);
-      this.width = Math.max(36, Math.min(76, savedSize));
-      this.height = this.width;
+      this.scalePercent = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
+      this.recalculateSize();
       this.selectedSkin = 'red'; // 'red' or 'blue'
 
       this.flameFrame = 0;
@@ -584,11 +583,26 @@
       this.sprites.blueMoving.src = 'bluenewspaceshipmoving2.png';
     }
 
-    setSize(size) {
-      this.width = Math.max(36, Math.min(76, size));
+    recalculateSize() {
+      // Adaptive Ship Sizing:
+      // Uses the actual playable game arena height (canvas.height) so neither desktop
+      // nor tall vertical phones with letterbox padding distort the proportion.
+      const isPortrait = this.canvas.height < 320;
+      // In 16:9 vertical portrait (where canvas.height is ~233px), ratio is ~11.5% (27px).
+      // In landscape (where canvas.height is 414px - 1080px), ratio is ~7.5% - 6.5% (32px - 64px).
+      const baseRatio = isPortrait ? 0.115 : Math.max(0.062, Math.min(0.082, 34 / Math.max(400, this.canvas.height)));
+      const basePx = this.canvas.height * baseRatio;
+
+      const userScale = (this.scalePercent || 100) / 100;
+      this.width = Math.round(basePx * userScale);
       this.height = this.width;
+    }
+
+    setScalePercent(percent) {
+      this.scalePercent = Math.max(70, Math.min(130, percent));
+      this.recalculateSize();
       try {
-        localStorage.setItem('spaceship_flight_ship_size', this.width.toString());
+        localStorage.setItem('spaceship_flight_ship_scale', this.scalePercent.toString());
       } catch (e) {}
     }
 
@@ -914,6 +928,10 @@
         this.canvas.height = Math.floor(screenH);
       }
 
+      if (this.ship) {
+        this.ship.recalculateSize();
+      }
+
       if (this.starfield) this.starfield.resize();
     }
 
@@ -1083,15 +1101,15 @@
 
       // Ship size slider
       if (this.domElements.settingShipSize) {
-        this.domElements.settingShipSize.value = this.ship.width;
+        this.domElements.settingShipSize.value = this.ship.scalePercent;
         if (this.domElements.shipSizeVal) {
-          this.domElements.shipSizeVal.textContent = `${this.ship.width}px`;
+          this.domElements.shipSizeVal.textContent = `${this.ship.scalePercent}%`;
         }
         this.domElements.settingShipSize.addEventListener('input', (e) => {
           const val = parseInt(e.target.value, 10);
-          this.ship.setSize(val);
+          this.ship.setScalePercent(val);
           if (this.domElements.shipSizeVal) {
-            this.domElements.shipSizeVal.textContent = `${val}px`;
+            this.domElements.shipSizeVal.textContent = `${val}%`;
           }
         });
       }
