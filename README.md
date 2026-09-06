@@ -32,6 +32,26 @@ The game includes seamless dual-input support for both desktop keyboards/mice an
 
 ---
 
+## 📲 Install as an App (iOS & Android)
+
+You can install **Spaceship Flight** directly onto your smartphone's home screen as a standalone, fullscreen web application with zero App Store friction:
+
+### 🍏 iPhone / iPad (iOS Safari)
+1. Open [https://amitjoshi2724.github.io/Spaceship-Flight/](https://amitjoshi2724.github.io/Spaceship-Flight/) in **Safari**.
+2. Tap the **Share** icon at the bottom of the screen (the square with an arrow pointing up).
+3. Scroll down and select **"Add to Home Screen"**.
+4. Tap **Add** in the top-right corner. A dedicated red spaceship app icon will appear on your home screen and launch fullscreen with zero browser address bar!
+
+> **💡 iOS Tip:** To lock the game into widescreen landscape, rotate your phone horizontally and tap the **Portrait Orientation Lock** toggle in your iPhone's Control Center (swipe down from top-right corner).
+
+### 🤖 Android (Chrome)
+1. Open [https://amitjoshi2724.github.io/Spaceship-Flight/](https://amitjoshi2724.github.io/Spaceship-Flight/) in **Google Chrome**.
+2. Tap the **three dots menu (⋮)** in the top-right corner.
+3. Tap **"Install app"** (or **"Add to Home screen"**).
+4. Tap **Install**. The game will install directly to your app drawer and home screen.
+
+---
+
 ## ✨ Features & Enhancements
 
 ### 1. Animated Thruster Fire
@@ -102,6 +122,7 @@ Spaceship-Flight/
 ## 👨‍💻 Author & Credits
 
 - **Developer:** Amit Joshi ([@amitjoshi2724](https://github.com/amitjoshi2724))
+- **Support on Ko-fi:** [![Support on Ko-fi](https://img.shields.io/badge/Support_on-Ko--fi-ff5e5b?style=flat-square&logo=kofi&logoColor=white)](https://ko-fi.com/I2I81CDN0L)
 - **Original Release:** 2016 (Java Swing Desktop & Android App)
 - **Web Modernization:** 2026 (HTML5 / Canvas / Web Audio / GitHub Pages)
 

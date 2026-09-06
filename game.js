@@ -587,10 +587,9 @@
       // Adaptive Ship Sizing:
       // Uses the actual playable game arena height (canvas.height) so neither desktop
       // nor tall vertical phones with letterbox padding distort the proportion.
+      // Scaled up by 1.3x so the standard (100%) default matches the former 130% size.
       const isPortrait = this.canvas.height < 320;
-      // In 16:9 vertical portrait (where canvas.height is ~233px), ratio is ~11.5% (27px).
-      // In landscape (where canvas.height is 414px - 1080px), ratio is ~7.5% - 6.5% (32px - 64px).
-      const baseRatio = isPortrait ? 0.115 : Math.max(0.062, Math.min(0.082, 34 / Math.max(400, this.canvas.height)));
+      const baseRatio = isPortrait ? 0.15 : Math.max(0.08, Math.min(0.106, 44 / Math.max(400, this.canvas.height)));
       const basePx = this.canvas.height * baseRatio;
 
       const userScale = (this.scalePercent || 100) / 100;
