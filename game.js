@@ -1189,6 +1189,11 @@
       if (this.state === 'PLAYING') {
         this.state = 'PAUSED';
         this.ship.setThrust(false);
+        if (this.domElements.pauseBtn) {
+          this.domElements.pauseBtn.textContent = '▶';
+          this.domElements.pauseBtn.setAttribute('title', 'Resume Game');
+          this.domElements.pauseBtn.setAttribute('aria-label', 'Resume Game');
+        }
         this.showModal('pause');
       } else if (this.state === 'PAUSED') {
         this.resumeGame();
@@ -1198,9 +1203,19 @@
     resumeGame() {
       this.hideModals();
       this.state = 'PLAYING';
+      if (this.domElements.pauseBtn) {
+        this.domElements.pauseBtn.textContent = '| |';
+        this.domElements.pauseBtn.setAttribute('title', 'Pause Game');
+        this.domElements.pauseBtn.setAttribute('aria-label', 'Pause Game');
+      }
     }
 
     restartGame() {
+      if (this.domElements.pauseBtn) {
+        this.domElements.pauseBtn.textContent = '| |';
+        this.domElements.pauseBtn.setAttribute('title', 'Pause Game');
+        this.domElements.pauseBtn.setAttribute('aria-label', 'Pause Game');
+      }
       this.startGame();
     }
 
@@ -1208,6 +1223,11 @@
       this.hideModals();
       this.ship.setThrust(false);
       this.state = 'START';
+      if (this.domElements.pauseBtn) {
+        this.domElements.pauseBtn.textContent = '| |';
+        this.domElements.pauseBtn.setAttribute('title', 'Pause Game');
+        this.domElements.pauseBtn.setAttribute('aria-label', 'Pause Game');
+      }
       this.domElements.startScreen.classList.add('active');
     }
 
