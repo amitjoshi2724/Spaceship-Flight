@@ -61,6 +61,41 @@ html, body {
   height: 100dvh;
   overflow: hidden;
   background-color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* When played vertically (portrait), enforce horizontal 16:9 arcade aspect ratio with letterbox padding */
+@media (orientation: portrait) {
+  #gameContainer {
+    background: radial-gradient(circle at center, #020617 0%, #000000 100%);
+  }
+
+  #gameCanvas {
+    position: relative !important;
+    max-width: 100vw !important;
+    max-height: calc(100vw * 9 / 16) !important;
+    border-top: 2px solid rgba(56, 189, 248, 0.4) !important;
+    border-bottom: 2px solid rgba(56, 189, 248, 0.4) !important;
+    box-shadow: 0 0 35px rgba(0, 0, 0, 0.95), 0 0 20px rgba(56, 189, 248, 0.2) !important;
+  }
+
+  /* Keep HUD anchored to the top of the screen */
+  #hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  /* Keep touch controls anchored at the bottom of the screen */
+  #touchControls {
+    position: absolute;
+    bottom: 24px;
+    left: 0;
+    width: 100%;
+  }
 }
 
 /* ==========================================================================
@@ -239,12 +274,16 @@ html, body {
   pointer-events: auto;
 }
 
+:root {
+  --ctrl-btn-size: 72px;
+}
+
 .ctrl-btn {
-  width: 66px;
-  height: 66px;
+  width: var(--ctrl-btn-size);
+  height: var(--ctrl-btn-size);
   border-radius: 50%;
-  background: rgba(15, 23, 42, 0.25);
-  border: 2px solid rgba(56, 189, 248, 0.4);
+  background: rgba(15, 23, 42, 0.28);
+  border: 2px solid rgba(56, 189, 248, 0.45);
   color: var(--neon-cyan);
   display: flex;
   flex-direction: column;
@@ -256,6 +295,7 @@ html, body {
   touch-action: manipulation;
   transition: all 0.15s ease;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  position: relative;
 }
 
 .ctrl-btn:active, .ctrl-btn.pressed {
@@ -267,9 +307,15 @@ html, body {
 }
 
 .ctrl-btn.action-btn {
-  width: 72px;
-  height: 72px;
-  border-radius: 18px;
+  width: calc(var(--ctrl-btn-size) * 1.06);
+  height: calc(var(--ctrl-btn-size) * 1.06);
+  border-radius: calc(var(--ctrl-btn-size) * 0.26);
+}
+
+.loop-arrow-svg {
+  width: 70%;
+  height: 70%;
+  display: block;
 }
 
 .ctrl-btn.fire-btn {
@@ -850,13 +896,17 @@ html, body {
     gap: 10px;
   }
   .ctrl-btn {
-    width: 56px;
-    height: 56px;
+    width: var(--ctrl-btn-size);
+    height: var(--ctrl-btn-size);
+    max-width: 82px;
+    max-height: 82px;
   }
   .ctrl-btn.action-btn {
-    width: 58px;
-    height: 58px;
-    border-radius: 14px;
+    width: calc(var(--ctrl-btn-size) * 1.05);
+    height: calc(var(--ctrl-btn-size) * 1.05);
+    max-width: 86px;
+    max-height: 86px;
+    border-radius: 16px;
   }
   .btn-subtext {
     font-size: 8px;

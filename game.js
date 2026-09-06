@@ -359,8 +359,14 @@
   class Rock {
     constructor(canvasWidth, canvasHeight, speedMultiplier = 1.0) {
       this.popped = false;
-      this.radius = 22 + Math.random() * 20;
-      this.scale = this.radius / 25;
+      
+      // Responsive scale based on screen dimension (pro game dev formula)
+      // On standard 1920x1080, baseUnit is ~1080. On mobile screen, baseUnit is ~450.
+      const baseDimension = Math.min(canvasWidth, Math.max(450, canvasHeight * 1.6));
+      const sizeFactor = baseDimension / 1000;
+
+      this.radius = (18 + Math.random() * 18) * sizeFactor;
+      this.scale = (this.radius / 25);
       this.rotation = Math.random() * Math.PI * 2;
       this.rotSpeed = (Math.random() - 0.5) * 0.04;
       this.hasEntered = false;
@@ -368,7 +374,7 @@
 
       // Spawn location from screen perimeter
       const side = Math.random();
-      const maxSpeed = (1.4 + Math.random() * 2.0) * speedMultiplier;
+      const maxSpeed = (1.2 + Math.random() * 1.8) * speedMultiplier * Math.max(0.75, Math.min(1.25, sizeFactor * 1.1));
 
       // Target a point inside the playable screen to ensure it crosses through
       const targetX = canvasWidth * (0.15 + Math.random() * 0.7);
@@ -809,6 +815,8 @@
         selectBlueShip: document.getElementById('selectBlueShip'),
         settingShipSize: document.getElementById('settingShipSize'),
         shipSizeVal: document.getElementById('shipSizeVal'),
+        settingBtnSize: document.getElementById('settingBtnSize'),
+        btnSizeVal: document.getElementById('btnSizeVal'),
         settingStars: document.getElementById('settingStars'),
         settingDifficulty: document.getElementById('settingDifficulty'),
         settingSound: document.getElementById('settingSound'),
@@ -821,7 +829,18 @@
         newHighScoreBanner: document.getElementById('newHighScoreBanner')
       };
 
+      this.btnSize = parseInt(localStorage.getItem('spaceship_flight_btn_size') || '72', 10);
+      this.applyBtnSize(this.btnSize);
+
       this.init();
+    }
+
+    applyBtnSize(size) {
+      this.btnSize = Math.max(54, Math.min(96, size));
+      document.documentElement.style.setProperty('--ctrl-btn-size', `${this.btnSize}px`);
+      try {
+        localStorage.setItem('spaceship_flight_btn_size', this.btnSize.toString());
+      } catch (e) {}
     }
 
     applyDifficultySettings() {
@@ -878,10 +897,23 @@
     }
 
     resizeCanvas() {
-      const width = window.visualViewport ? window.visualViewport.width : window.innerWidth;
-      const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-      this.canvas.width = Math.floor(width);
-      this.canvas.height = Math.floor(height);
+      const screenW = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+      const screenH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      
+      const isPortrait = screenH > screenW;
+
+      if (isPortrait) {
+        // Enforce 16:9 widescreen canvas horizontally with letterbox padding
+        const targetW = screenW;
+        const targetH = Math.floor(screenW * (9 / 16));
+        this.canvas.width = targetW;
+        this.canvas.height = targetH;
+      } else {
+        // Fullscreen widescreen in landscape / desktop
+        this.canvas.width = Math.floor(screenW);
+        this.canvas.height = Math.floor(screenH);
+      }
+
       if (this.starfield) this.starfield.resize();
     }
 
@@ -1060,6 +1092,21 @@
           this.ship.setSize(val);
           if (this.domElements.shipSizeVal) {
             this.domElements.shipSizeVal.textContent = `${val}px`;
+          }
+        });
+      }
+
+      // Button size slider
+      if (this.domElements.settingBtnSize) {
+        this.domElements.settingBtnSize.value = this.btnSize;
+        if (this.domElements.btnSizeVal) {
+          this.domElements.btnSizeVal.textContent = `${this.btnSize}px`;
+        }
+        this.domElements.settingBtnSize.addEventListener('input', (e) => {
+          const val = parseInt(e.target.value, 10);
+          this.applyBtnSize(val);
+          if (this.domElements.btnSizeVal) {
+            this.domElements.btnSizeVal.textContent = `${val}px`;
           }
         });
       }

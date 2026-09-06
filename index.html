@@ -1,26 +1,32 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="description" content="Spaceship Flight - Classic retro arcade space game created by Amit Joshi (@amitjoshi2724). Pilot your spaceship, dodge asteroids, and shoot for the high score!">
+  <meta name="description"
+    content="Spaceship Flight - Classic retro arcade space game created by Amit Joshi (@amitjoshi2724). Pilot your spaceship, dodge asteroids, and shoot for the high score!">
   <meta name="author" content="Amit Joshi (@amitjoshi2724)">
   <meta name="theme-color" content="#030712">
   <title>Spaceship Flight | Classic Arcade Game</title>
-  
+
   <!-- Modern Retro Sci-Fi Typography -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-  
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
+    rel="stylesheet">
+
   <link rel="stylesheet" href="style.css">
   <link rel="icon" type="image/png" sizes="64x64" href="newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="newspaceship.png">
   <link rel="apple-touch-icon" href="newspaceship.png">
 </head>
+
 <body>
   <div id="gameContainer">
     <!-- Game Canvas -->
@@ -46,9 +52,15 @@
         <div class="hud-stat lives-container">
           <span class="hud-label">SHIPS</span>
           <div id="livesIcons" class="lives-icons">
-            <span class="life-icon active" title="Ship 1"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff"/></svg></span>
-            <span class="life-icon active" title="Ship 2"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff"/></svg></span>
-            <span class="life-icon active" title="Ship 3"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff"/></svg></span>
+            <span class="life-icon active" title="Ship 1"><svg viewBox="0 0 16 20">
+                <polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" />
+              </svg></span>
+            <span class="life-icon active" title="Ship 2"><svg viewBox="0 0 16 20">
+                <polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" />
+              </svg></span>
+            <span class="life-icon active" title="Ship 3"><svg viewBox="0 0 16 20">
+                <polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" />
+              </svg></span>
           </div>
         </div>
       </div>
@@ -62,28 +74,38 @@
     <!-- On-screen Controls for Touch & Mobile -->
     <div id="touchControls">
       <div class="touch-group-left">
-        <button id="btnLeft" class="ctrl-btn" aria-label="Rotate Counter-Clockwise">
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-            <path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/>
+        <button id="btnLeft" class="ctrl-btn loop-btn" aria-label="Rotate Counter-Clockwise">
+          <!-- Counter-Clockwise Looped Arrow with < inside -->
+          <svg viewBox="0 0 40 40" class="loop-arrow-svg">
+            <!-- Counter-clockwise arc arrow -->
+            <path d="M 20 5 A 15 15 0 1 0 35 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+            <polygon points="17,1 25,5 19,10" fill="currentColor" />
+            <!-- Centered < text -->
+            <text x="20" y="25" text-anchor="middle" font-family="'Orbitron', monospace" font-size="14" font-weight="900" fill="currentColor">&lt;</text>
           </svg>
         </button>
-        <button id="btnRight" class="ctrl-btn" aria-label="Rotate Clockwise">
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-            <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
+        <button id="btnRight" class="ctrl-btn loop-btn" aria-label="Rotate Clockwise">
+          <!-- Clockwise Looped Arrow with > inside -->
+          <svg viewBox="0 0 40 40" class="loop-arrow-svg">
+            <!-- Clockwise arc arrow -->
+            <path d="M 20 5 A 15 15 0 1 1 5 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+            <polygon points="23,1 15,5 21,10" fill="currentColor" />
+            <!-- Centered > text -->
+            <text x="20" y="25" text-anchor="middle" font-family="'Orbitron', monospace" font-size="14" font-weight="900" fill="currentColor">&gt;</text>
           </svg>
         </button>
       </div>
       <div class="touch-group-right">
         <button id="btnThrust" class="ctrl-btn action-btn" aria-label="Thrust Boost">
           <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-            <path d="M12 2.5L5 16.5l3.5-1.5L12 21.5l3.5-6.5 3.5 1.5L12 2.5z"/>
+            <path d="M12 2.5L5 16.5l3.5-1.5L12 21.5l3.5-6.5 3.5 1.5L12 2.5z" />
           </svg>
           <span class="btn-subtext">THRUST</span>
         </button>
         <button id="btnFire" class="ctrl-btn action-btn fire-btn" aria-label="Fire Lasers">
           <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-            <circle cx="12" cy="12" r="4"/>
-            <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
           </svg>
           <span class="btn-subtext">FIRE</span>
         </button>
@@ -98,7 +120,8 @@
             <img id="menuShipPreview" src="newspaceship.png" alt="Spaceship Preview" class="floating-ship">
           </div>
           <h1 class="game-title">SPACESHIP FLIGHT</h1>
-          <p class="game-subtitle">2016 Classic Arcade by Amit Joshi <a href="https://github.com/amitjoshi2724" target="_blank" rel="noopener noreferrer" class="menu-github-link">(@amitjoshi2724)</a></p>
+          <p class="game-subtitle">2016 Classic Arcade by Amit Joshi <a href="https://github.com/amitjoshi2724"
+              target="_blank" rel="noopener noreferrer" class="menu-github-link">(@amitjoshi2724)</a></p>
         </div>
 
         <nav class="menu-nav">
@@ -109,7 +132,8 @@
         </nav>
 
         <div class="desktop-hints">
-          <span>⌨️ Desktop: <b>[← / →]</b> or <b>[A / D]</b> Rotate &bull; <b>[↑ / W]</b> Thrust &bull; <b>[SPACE]</b> Fire &bull; <b>[P]</b> Pause</span>
+          <span>⌨️ Desktop: <b>[← / →]</b> or <b>[A / D]</b> Rotate &bull; <b>[↑ / W]</b> Thrust &bull; <b>[SPACE]</b>
+            Fire &bull; <b>[P]</b> Pause</span>
         </div>
       </div>
     </div>
@@ -124,7 +148,7 @@
           <div class="ship-selector">
             <button id="selectRedShip" class="ship-option active" data-ship="red">
               <img src="newspaceship.png" alt="Red & White Spaceship">
-              <span>Classic Crimson</span>
+              <span>Classic Crimson Red</span>
             </button>
             <button id="selectBlueShip" class="ship-option" data-ship="blue">
               <img src="bluenewspaceship.png" alt="Blue Spaceship">
@@ -182,6 +206,19 @@
           </div>
         </div>
 
+        <div class="setting-group" id="btnSizeSettingGroup">
+          <div class="slider-header">
+            <label for="settingBtnSize" class="setting-label">BUTTON SIZE</label>
+            <span id="btnSizeVal" class="setting-value">72px</span>
+          </div>
+          <input type="range" id="settingBtnSize" min="54" max="96" value="72" step="2" class="custom-slider">
+          <div class="slider-labels">
+            <span>Compact (54px)</span>
+            <span>Default (72px)</span>
+            <span>Large (96px)</span>
+          </div>
+        </div>
+
         <button id="closeSettingsBtn" class="menu-btn primary-btn">DONE</button>
       </div>
     </div>
@@ -193,7 +230,8 @@
 
         <div class="instructions-content">
           <p class="original-quote">
-            &ldquo;Hold to move the spaceship. Tap to fire. Use the buttons on the lower left to rotate the spaceship. Have fun!&rdquo;
+            &ldquo;Hold to move the spaceship. Tap to fire. Use the buttons on the lower left to rotate the spaceship.
+            Have fun!&rdquo;
           </p>
 
           <div class="controls-guide">
@@ -233,21 +271,25 @@
 
         <div class="credits-content">
           <div class="credit-badge">
-            <img src="amitjoshi2724_pfp.png" alt="Amit Joshi (@amitjoshi2724)" class="credit-avatar" onerror="this.src='https://github.com/amitjoshi2724.png'" />
+            <img src="amitjoshi2724_pfp.png" alt="Amit Joshi (@amitjoshi2724)" class="credit-avatar"
+              onerror="this.src='https://github.com/amitjoshi2724.png'" />
             <h3 class="author-name">Amit Joshi</h3>
             <a href="https://github.com/amitjoshi2724" target="_blank" rel="noopener noreferrer" class="github-handle">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                <path
+                  d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
               </svg>
               @amitjoshi2724
             </a>
           </div>
 
           <p class="history-note">
-            Originally created in <strong>2016</strong> as a high school programming project in Java (Swing desktop application) and ported to an Android mobile app.
+            Originally created in <strong>2016</strong> as a high school programming project in Java (Swing desktop
+            application) and ported to an Android mobile app.
           </p>
           <p class="history-subnote">
-            Modernized in 2026 into HTML5 / Canvas / Web Audio for present-day browser playability and hosted on GitHub Pages.
+            Modernized in 2026 into HTML5 / Canvas / Web Audio for present-day browser playability and hosted on GitHub
+            Pages.
           </p>
         </div>
 
@@ -272,7 +314,7 @@
     <div id="gameOverModal" class="overlay">
       <div class="modal-card glass-panel game-over-card">
         <h2 class="modal-title game-over-title">GAME OVER</h2>
-        
+
         <div id="newHighScoreBanner" class="high-score-banner hidden">
           ⭐ NEW HIGH SCORE! ⭐
         </div>
@@ -298,4 +340,5 @@
 
   <script src="game.js"></script>
 </body>
+
 </html>
