@@ -518,6 +518,18 @@
       ctx.restore();
     }
 
+    // Shortest distance squared from point (px, py) to line segment (x1, y1) -> (x2, y2)
+    distToSegmentSquared(px, py, x1, y1, x2, y2) {
+      const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+      if (l2 === 0) return (px - x1) ** 2 + (py - y1) ** 2;
+
+      // Vector projection scalar clamped to segment [0, 1]
+      const t = Math.max(0, Math.min(1, ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2));
+      const projX = x1 + t * (x2 - x1);
+      const projY = y1 + t * (y2 - y1);
+      return (px - projX) ** 2 + (py - projY) ** 2;
+    }
+
     // Ray-casting point-in-polygon from Polygon.java (contains method)
     containsPoint(px, py) {
       // Quick radius test first
@@ -538,8 +550,41 @@
       return inside;
     }
 
+    // Mathematically exact Circle vs Polygon collision:
+    // Returns true if bullet center is inside polygon OR if bullet radius touches any polygon edge
     containsBullet(bullet) {
-      return this.containsPoint(bullet.x, bullet.y);
+      const bRadius = bullet.radius || 3;
+
+      // Quick bounding radius cull (including bullet radius threshold)
+      const distSq = (bullet.x - this.x) ** 2 + (bullet.y - this.y) ** 2;
+      const maxDist = this.radius * 1.6 + bRadius;
+      if (distSq > maxDist * maxDist) return false;
+
+      // 1. If bullet center is directly inside the polygon, it's a confirmed hit
+      if (this.containsPoint(bullet.x, bullet.y)) {
+        return true;
+      }
+
+      // 2. Exact Circle vs Edge Distance Test:
+      // Checks if the bullet's circular body grazes or touches any polygon segment
+      const pts = this.getTransformedPoints();
+      const rSq = bRadius * bRadius;
+
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const edgeDistSq = this.distToSegmentSquared(
+          bullet.x,
+          bullet.y,
+          pts[j].x,
+          pts[j].y,
+          pts[i].x,
+          pts[i].y
+        );
+        if (edgeDistSq <= rSq) {
+          return true; // Tangential or grazing collision detected!
+        }
+      }
+
+      return false;
     }
   }
 

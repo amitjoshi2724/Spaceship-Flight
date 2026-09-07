@@ -32,13 +32,47 @@ public class Polygon {
     }
 
     public boolean contains(Bullet b){
+        // 1. Raycast check for bullet center inside polygon
         int intersectCount = 0;
-        for (int j = 0; j < npoints - 1; j++) { //take out -1 if it doesn't work
-            if (rayCastIntersect(b, new Point(xpoints[j], ypoints[j]), new Point(xpoints[j+1], ypoints[j+1]))) {
+        for (int j = 0; j < npoints; j++) {
+            int next = (j + 1) % npoints;
+            if (rayCastIntersect(b, new Point(xpoints[j], ypoints[j]), new Point(xpoints[next], ypoints[next]))) {
                 intersectCount++;
             }
         }
-        return ((intersectCount % 2) == 1); // odd = inside, even = outside;
+        if ((intersectCount % 2) == 1) { // odd = inside, even = outside
+            return true;
+        }
+
+        // 2. Exact Circle vs Edge Distance Test (Option 2)
+        double bx = b.getX() + b.radius;
+        double by = b.getY() + b.radius;
+        double rSq = (double)b.radius * b.radius;
+
+        for (int i = 0; i < npoints; i++) {
+            int next = (i + 1) % npoints;
+            double x1 = xpoints[i];
+            double y1 = ypoints[i];
+            double x2 = xpoints[next];
+            double y2 = ypoints[next];
+
+            double l2 = Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2);
+            double distSq;
+            if (l2 == 0) {
+                distSq = Math.pow(bx - x1, 2) + Math.pow(by - y1, 2);
+            } else {
+                double t = Math.max(0.0, Math.min(1.0, ((bx - x1) * (x2 - x1) + (by - y1) * (y2 - y1)) / l2));
+                double projX = x1 + t * (x2 - x1);
+                double projY = y1 + t * (y2 - y1);
+                distSq = Math.pow(bx - projX, 2) + Math.pow(by - projY, 2);
+            }
+
+            if (distSq <= rSq) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private boolean rayCastIntersect(Bullet b, Point vertA, Point vertB){

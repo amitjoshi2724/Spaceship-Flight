@@ -468,20 +468,39 @@ class Rock implements Runnable{
       return p.contains((int)x, (int)y);
    }
    public boolean contains(Bullet b){
-      ArrayList<Double> list = new ArrayList<Double>(10);
+      double bx = b.getX() + b.getRadius();
+      double by = b.getY() + b.getRadius();
+      double bRadius = b.getRadius();
+
+      // 1. Check if center is inside polygon
+      if(p.contains((int)bx, (int)by)){
+         return true;
+      }
+
+      // 2. Exact Circle vs Edge Distance Test
+      double rSq = bRadius * bRadius;
       for(int i = 0; i < p.npoints; i++){
-         double a = Math.sqrt(Math.pow(b.getX() - 4 - p.xpoints[0], 2) + Math.pow(b.getY() - 4 - p.ypoints[0], 2));
-         if(a < b.getRadius()){
+         int next = (i + 1) % p.npoints;
+         double x1 = p.xpoints[i];
+         double y1 = p.ypoints[i];
+         double x2 = p.xpoints[next];
+         double y2 = p.ypoints[next];
+
+         double l2 = Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2);
+         double distSq;
+         if(l2 == 0){
+            distSq = Math.pow(bx - x1, 2) + Math.pow(by - y1, 2);
+         } else {
+            double t = Math.max(0, Math.min(1, ((bx - x1) * (x2 - x1) + (by - y1) * (y2 - y1)) / l2));
+            double projX = x1 + t * (x2 - x1);
+            double projY = y1 + t * (y2 - y1);
+            distSq = Math.pow(bx - projX, 2) + Math.pow(by - projY, 2);
+         }
+
+         if(distSq <= rSq){
             return true;
          }
-         list.add(a);
       }
-      double total = 0;
-      for(int i = 0; i < list.size(); i++){
-         total += list.get(i);
-      }
-      if((total/list.size()) < getRadius())  
-         return true;
       return false;
       
       /*for(double i = b.getX(); i < b.getX() + b.getDiameter(); i++){
