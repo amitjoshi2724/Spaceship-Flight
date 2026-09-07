@@ -25,30 +25,34 @@ The game includes seamless dual-input support for both desktop keyboards/mice an
 | **Pause / Resume** | `P` or `Escape` | Toggles the pause and settings menu |
 
 ### 📱 Mobile & Touch Controls
-- **Steering:** Use the on-screen **[◀]** and **[▶]** buttons in the lower-left corner (matching the original 2016 Android layout).
-- **Thrust:** Tap & hold the on-screen **[THRUST]** button, or touch & hold anywhere on screen.
+- **Steering:** Tap the on-screen counter-clockwise **[ ↺ < ]** and clockwise **[ ↻ > ]** looped arrow buttons in the lower-left corner.
+- **Thrust:** Tap & hold the on-screen **[THRUST]** button, or touch & hold anywhere on the canvas.
 - **Fire:** Tap the on-screen **[FIRE]** button, or tap anywhere on the playfield.
-- **Pause:** Tap **[ \| \| ]** in the top-right corner.
+- **Pause / Play:** Tap **[ \| \| ]** in the top-right corner to pause (switches dynamically to **[ ▶ ]** when paused).
 
 ---
 
-## 📲 Install as an App (iOS & Android)
+## 📲 Install as an App & Play Offline (iOS & Android)
 
-You can install **Spaceship Flight** directly onto your smartphone's home screen as a standalone, fullscreen web application with zero App Store friction:
+**Spaceship Flight** is built as a full **Progressive Web App (PWA)** powered by a dedicated **Service Worker (`sw.js`)** and Web App Manifest (`manifest.json`). 
 
-### 🍏 iPhone / iPad (iOS Safari)
-1. Open [https://amitjoshi2724.github.io/Spaceship-Flight/](https://amitjoshi2724.github.io/Spaceship-Flight/) in **Safari**.
-2. Tap the **Share** icon at the bottom of the screen (the square with an arrow pointing up).
-3. Scroll down and select **"Add to Home Screen"**.
-4. Tap **Add** in the top-right corner. A dedicated red spaceship app icon will appear on your home screen and launch fullscreen with zero browser address bar!
+Once installed to your smartphone's home screen:
+- ✈️ **100% Offline Playable:** All game logic, physics, procedural Web Audio synthesizers, and ship sprites are pre-cached directly to persistent device storage via the **Cache Storage API**. You can play in Airplane Mode with zero Wi-Fi or cellular data anytime, anywhere.
+- 📱 **Native Fullscreen Experience:** Launches in standalone mode without browser address bars, URL fields, or tabs.
+- 🔄 **Zero-Hassle Background Updates:** When you connect to Wi-Fi, the Service Worker automatically fetches and updates any new changes pushed to GitHub.
 
-> **💡 iOS Tip:** To lock the game into widescreen landscape, rotate your phone horizontally and tap the **Portrait Orientation Lock** toggle in your iPhone's Control Center (swipe down from top-right corner).
+### 🍏 iPhone & iPad (iOS Safari)
+1. Open **[https://amitjoshi2724.github.io/Spaceship-Flight/](https://amitjoshi2724.github.io/Spaceship-Flight/)** in **Safari**.
+2. Tap the **Share** button at the bottom of the screen (the square with an arrow pointing upward).
+3. Scroll down the share sheet and tap **"Add to Home Screen"**.
+4. Tap **Add** in the top-right corner. A dedicated red spaceship icon will appear on your home screen.
+5. Tap the new icon once while online to let the Service Worker cache all assets—after that, it is permanently playable offline!
 
-### 🤖 Android (Chrome)
-1. Open [https://amitjoshi2724.github.io/Spaceship-Flight/](https://amitjoshi2724.github.io/Spaceship-Flight/) in **Google Chrome**.
-2. Tap the **three dots menu (⋮)** in the top-right corner.
+### 🤖 Android (Google Chrome)
+1. Open **[https://amitjoshi2724.github.io/Spaceship-Flight/](https://amitjoshi2724.github.io/Spaceship-Flight/)** in **Google Chrome**.
+2. Tap the **three-dots menu (⋮)** in the top-right corner.
 3. Tap **"Install app"** (or **"Add to Home screen"**).
-4. Tap **Install**. The game will install directly to your app drawer and home screen.
+4. Tap **Install** on the prompt. The game will install directly to your home screen and app drawer as an offline-ready arcade app.
 
 ---
 
@@ -57,8 +61,9 @@ You can install **Spaceship Flight** directly onto your smartphone's home screen
 ### 1. Animated Thruster Fire
 When accelerating (gas is pressed), the spaceship automatically renders animated exhaust flames underneath the ship, alternating between the original 2016 sprites `newspaceshipmoving.png` and `newspaceshipmoving2.png` for an authentic rocket plume effect, accompanied by dynamic particle exhaust.
 
-### 2. Customizable Spaceship Size
-Adjust the spaceship's dimensions to your preference in the **Settings** menu using the sizing slider (ranging from **36px** up to **76px**, with a default size of **54px**). Collision boundaries and exhaust offsets dynamically scale with the ship.
+### 2. Adaptive Spaceship & Controls Sizing
+- **Adaptive Screen-Height Ratio:** Spaceship dimensions scale dynamically based on the actual playable game arena height rather than rigid static pixels, keeping game proportions balanced on desktop displays, iPads, and iPhones alike.
+- **Customizable Sizing Sliders:** Fine-tune your ship size from **70% to 130%** (default 100%) and on-screen button sizes from **54px to 96px** (default 72px) in the Settings modal to match your personal ergonomic preferences.
 
 ### 3. Background Starfield Toggle
 Enjoy a procedural multi-layered parallax starfield with gentle twinkling that responds to your ship's velocity, with the option to turn stars off in Settings for a pure, deep-space void.
@@ -102,6 +107,8 @@ Spaceship-Flight/
 ├── index.html                   # Modern HTML5 game canvas and glassmorphic UI
 ├── style.css                    # Retro sci-fi theme stylesheet and responsive HUD
 ├── game.js                      # Core game loop, physics engine, audio synth, & controls
+├── sw.js                        # Offline-first Service Worker cache engine
+├── manifest.json                # PWA web app manifest for home screen install
 ├── README.md                    # Project documentation & guides
 ├── .gitignore                   # Git configuration excluding OS and build caches
 │
