@@ -940,13 +940,28 @@
       this.bindInputs();
       this.bindUI();
 
-      // Main Loop
+      // Main Loop with Fixed Timestep Accumulator (Decoupled 60 FPS Physics)
       let lastTime = performance.now();
+      let accumulator = 0;
+      const FIXED_TIMESTEP = 1000 / 60; // 16.667ms per physics tick (matching original 60Hz physics clock)
+
       const loop = (currentTime) => {
-        const delta = Math.min(100, currentTime - lastTime);
+        let frameTime = currentTime - lastTime;
         lastTime = currentTime;
 
-        this.update(delta);
+        // Spiral of death prevention: cap frameTime to at most 100ms (e.g. background tab or major hitch)
+        if (frameTime > 100) frameTime = 100;
+        if (frameTime < 0) frameTime = 0;
+
+        accumulator += frameTime;
+
+        // Run fixed 60Hz physics updates
+        while (accumulator >= FIXED_TIMESTEP) {
+          this.update();
+          accumulator -= FIXED_TIMESTEP;
+        }
+
+        // Render at screen refresh rate
         this.render();
 
         requestAnimationFrame(loop);
@@ -1349,7 +1364,7 @@
       this.showModal('gameover');
     }
 
-    update(delta) {
+    update() {
       if (this.screenShake > 0) {
         this.screenShake *= 0.9;
         if (this.screenShake < 0.5) this.screenShake = 0;
