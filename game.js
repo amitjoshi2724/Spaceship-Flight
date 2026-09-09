@@ -752,25 +752,22 @@
         return false;
       }
 
-      const SHIELD_COST = 100;
-      const MIN_ENERGY = -100;
-
       if (this.powerMode === 'dual' || this.powerMode === 'shield_only') {
         // Dedicated shield capacitor: must be 100% charged, no debt allowed
+        const SHIELD_COST = 100;
         if (this.shieldEnergy < SHIELD_COST) {
           this.soundFx.playEmptyBattery();
           return false;
         }
         this.shieldEnergy = 0;
       } else {
-        // Standard Shared Reactor mode:
-        // Emergency shield costs 100 energy, can overdraft down to -100%,
-        // but cannot be activated while already in debt (energy <= 0)
-        if (this.energy <= 0) {
+        // Shared Reactor mode: shield costs 50% energy (strict zero debt, requires >= 50%)
+        const SHIELD_COST = 50;
+        if (this.energy < SHIELD_COST) {
           this.soundFx.playEmptyBattery();
           return false;
         }
-        this.energy = Math.max(MIN_ENERGY, this.energy - SHIELD_COST);
+        this.energy -= SHIELD_COST;
       }
 
       this.invincible = true;
@@ -846,14 +843,14 @@
         // 2. Shield Capacitor recharging (for dual and shield_only modes)
         if (this.powerMode === 'dual') {
           if (this.shieldEnergy < this.maxShieldEnergy) {
-            // Slower than battery (6/s ≈ 16.6s full charge), no kinetic dynamo speedup
-            const shieldRechargeRate = 6;
+            // Dual capacitors shield recharge: 5%/s (20s full charge), no kinetic dynamo speedup
+            const shieldRechargeRate = 5;
             this.shieldEnergy = Math.min(this.maxShieldEnergy, this.shieldEnergy + shieldRechargeRate * dtSeconds);
           }
         } else if (this.powerMode === 'shield_only') {
           if (this.shieldEnergy < this.maxShieldEnergy) {
-            // Passive shield charger (4/s ≈ 25s full charge), no kinetic dynamo speedup
-            const shieldRechargeRate = 4;
+            // Passive shield charger: 2%/s (50s full charge), no kinetic dynamo speedup
+            const shieldRechargeRate = 2;
             this.shieldEnergy = Math.min(this.maxShieldEnergy, this.shieldEnergy + shieldRechargeRate * dtSeconds);
           }
         }
@@ -1722,15 +1719,15 @@
 
     applyCombatSiphon() {
       if (this.powerMode === 'shared') {
-        // Shared Reactor: +6% to shared battery (can siphon out of debt)
+        // Shared Reactor: +6% to shared battery per rock destroyed
         this.ship.energy = Math.min(this.ship.maxEnergy, this.ship.energy + 6);
       } else if (this.powerMode === 'dual') {
         // Dual Capacitors: +3% to ammo battery AND +3% to shield capacitor
         this.ship.energy = Math.min(this.ship.maxEnergy, this.ship.energy + 3);
         this.ship.shieldEnergy = Math.min(this.ship.maxShieldEnergy, this.ship.shieldEnergy + 3);
       } else if (this.powerMode === 'shield_only') {
-        // Shield Charger: +6% to shield capacitor (ammo is unlimited)
-        this.ship.shieldEnergy = Math.min(this.ship.maxShieldEnergy, this.ship.shieldEnergy + 6);
+        // Shield Charger: +3% to shield capacitor (ammo is unlimited)
+        this.ship.shieldEnergy = Math.min(this.ship.maxShieldEnergy, this.ship.shieldEnergy + 3);
       }
       this.updateEnergyDisplay();
     }
@@ -1844,10 +1841,10 @@
           }
         }
       } else {
-        // Standard SHARED REACTOR mode (ENERGY, with overdraft debt allowed)
+        // Standard SHARED REACTOR mode: 1 unified battery for weapons & shields
+        // Shield costs 50% energy, requiring at least 50% charge (strict zero debt)
         const energyVal = Math.round(this.ship.energy);
-        const isDebt = energyVal < 0;
-        const fillPct = isDebt ? Math.min(100, Math.abs(energyVal)) : Math.max(0, Math.min(100, energyVal));
+        const fillPct = Math.max(0, Math.min(100, energyVal));
 
         if (this.domElements.energyLabel) this.domElements.energyLabel.textContent = 'ENERGY';
         this.domElements.energyHud.classList.remove('shield-mode');
@@ -1855,8 +1852,7 @@
         if (this.domElements.energyVal) {
           this.domElements.energyVal.textContent = `${energyVal}%`;
           let valClass = 'energy-percent';
-          if (isDebt) valClass += ' in-debt';
-          else if (energyVal < 15) valClass += ' depleted';
+          if (energyVal < 15) valClass += ' depleted';
           else if (energyVal < 40) valClass += ' warning';
           this.domElements.energyVal.className = valClass;
         }
@@ -1864,8 +1860,7 @@
         const track = this.domElements.energyHud.querySelector('.energy-bar-track');
         if (track) {
           let trackClass = 'energy-bar-track';
-          if (isDebt) trackClass += ' in-debt';
-          else if (energyVal < 15) trackClass += ' depleted';
+          if (energyVal < 15) trackClass += ' depleted';
           else if (energyVal < 40) trackClass += ' warning';
           track.className = trackClass;
         }
@@ -1873,16 +1868,15 @@
         if (this.domElements.energyBarFill) {
           this.domElements.energyBarFill.style.width = `${fillPct}%`;
           let fillClass = 'energy-bar-fill';
-          if (isDebt) fillClass += ' in-debt';
-          else if (energyVal < 15) fillClass += ' depleted';
+          if (energyVal < 15) fillClass += ' depleted';
           else if (energyVal < 40) fillClass += ' warning';
           this.domElements.energyBarFill.className = fillClass;
         }
 
         if (this.domElements.btnEmergencyShield) {
-          if (this.ship.energy <= 0 || this.ship.invincible) {
-            this.domElements.btnEmergencyShield.classList.add('in-debt');
-            this.domElements.btnEmergencyShield.classList.remove('uncharged');
+          if (this.ship.energy < 50 || this.ship.invincible) {
+            this.domElements.btnEmergencyShield.classList.add('uncharged');
+            this.domElements.btnEmergencyShield.classList.remove('in-debt');
           } else {
             this.domElements.btnEmergencyShield.classList.remove('in-debt', 'uncharged');
           }

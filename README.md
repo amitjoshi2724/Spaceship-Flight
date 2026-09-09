@@ -81,17 +81,17 @@ Tailor your arcade combat experience with three distinct energy management syste
 
 | Game Mode | Ammo Battery | Shield Capacitor | Debt Allowed? | Combat Siphon (Per Rock Destroyed) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Shared Reactor** *(Default)* | 100% max (15/shot) | Shares main battery (100% cost) | **Yes** (down to -100%) | **+6%** to shared battery (can siphon out of debt) |
-| **Dual Capacitors** | 100% max (15/shot) | Dedicated 100% capacitor | **No** (requires 100% full charge) | **+3%** to ammo battery **AND** **+3%** to shield |
-| **Shield Charger** | **Unlimited** (free lasers) | Dedicated 100% capacitor | **No** (requires 100% full charge) | **+6%** to shield capacitor |
+| **Shared Reactor** *(Default)* | 100% max (15/shot) | Shares main battery (50% cost) | **No** (requires ≥50% charge) | **+6%** to shared battery |
+| **Dual Capacitors** | 100% max (15/shot) | Dedicated 100% capacitor (5%/s) | **No** (requires 100% full charge) | **+3%** to ammo battery **AND** **+3%** to shield |
+| **Shield Charger** | **Unlimited** (free lasers) | Dedicated 100% capacitor (2%/s) | **No** (requires 100% full charge) | **+3%** to shield capacitor |
 
 #### Mode Breakdown & Combat Siphon:
-- **Shared Reactor (High Risk & High Reward):**
-  A single power plant routes power to both laser cannons and the emergency invulnerability shield. Features **Kinetic Dynamo** recharging (15%/sec idle, accelerating to 30%/sec while thrusting). Overdrafting allows you to deploy the emergency shield even if you have less than 100% energy, dropping your reactor into negative debt (down to -100%). While in debt, weapon systems and subsequent shields are locked. Destroying asteroids siphons **+6% energy** back to the reactor, rewarding aggressive marksmanship to claw your way out of debt!
+- **Shared Reactor (Tactical Resource Trade-Off):**
+  A single power plant routes power to both laser cannons and the emergency invulnerability shield. Features **Kinetic Dynamo** recharging (15%/sec idle, accelerating to 30%/sec while thrusting). Deploying the emergency shield consumes **50% energy** and strictly requires at least 50% charge to activate (no negative debt). Shielding at full battery leaves 50% energy (3 laser shots ready) so you are never left defenseless. Destroying asteroids siphons **+6% energy** back to the reactor.
 - **Dual Capacitors (Tactical Weapon & Defense Separation):**
-  Splits power into independent **Ammo Battery** and **Shield Capacitor** gauges displayed side-by-side on the HUD. Weapons recharge quickly via the Kinetic Dynamo, while the shield recharges at a steady 6%/second (~16.6s full charge). The emergency shield cannot be used while uncharged (no debt allowed). Destroying asteroids rewards tactical play by siphoning **+3% to ammo AND +3% to shield** simultaneously.
+  Splits power into independent **Ammo Battery** and **Shield Capacitor** gauges displayed side-by-side on the HUD. Weapons recharge quickly via the Kinetic Dynamo, while the shield recharges passively at **5%/second** (20s full charge). The emergency shield requires a full 100% charge to deploy (no debt). Destroying asteroids rewards tactical play by siphoning **+3% to ammo AND +3% to shield** simultaneously.
 - **Shield Charger (Casual / Unlimited Ammo):**
-  Plasma laser cannons fire freely with infinite ammo. The shield capacitor recharges passively at 4%/second (~25s full charge) with recharging paused during active shield protection. Destroying asteroids awards **+6% shield energy** per rock, rewarding sharpshooters with rapid shield deployment.
+  Plasma laser cannons fire freely with infinite ammo. The shield capacitor recharges passively at **2%/second** (50s full charge) with recharging paused during active shield protection. Destroying asteroids awards **+3% shield energy** per rock, rewarding sharpshooters with faster defense recovery while preventing spam exploits.
 
 ### 7. Difficulty Modes
 Configure your challenge level directly in Settings:
