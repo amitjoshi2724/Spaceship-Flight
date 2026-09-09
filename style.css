@@ -509,7 +509,7 @@ html, body {
 }
 
 .ctrl-btn.shield-btn {
-  width: calc(100% - 14px);
+  width: 90%;
   max-width: 100%;
   min-width: 0;
   height: 46px;
@@ -1208,7 +1208,7 @@ html, body {
     max-height: 82px;
   }
   .ctrl-btn.shield-btn {
-    width: calc(100% - 12px);
+    width: 90%;
     max-width: 100%;
     min-width: 0;
     height: 40px;

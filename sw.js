@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spaceship-flight-v5';
+const CACHE_NAME = 'spaceship-flight-1.0.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
