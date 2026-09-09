@@ -667,7 +667,7 @@
       this.shieldEnergy = 100;
       this.maxShieldEnergy = 100;
       this.powerMode = 'shared'; // 'shared', 'dual', 'shield_only'
-      this.showStatusBars = true;
+      this.showStatusBars = false;
       this.scalePercent = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
       this.recalculateSize();
       this.selectedSkin = 'red'; // 'red' or 'blue'
@@ -899,23 +899,23 @@
     }
 
     drawStatusBars(ctx) {
-      // Proportional bar sizing based on spaceship dimensions
-      const barW = Math.max(3, Math.min(5, Math.round(this.width * 0.08)));
-      const barH = Math.max(20, Math.min(32, Math.round(this.height * 0.58)));
-      const offsetX = Math.round(this.width * 0.58);
+      const showAmmo = (this.powerMode === 'shared' || this.powerMode === 'dual');
+      const showShield = (this.powerMode === 'dual' || this.powerMode === 'shield_only');
+
+      // Proportional bar sizing hugging tightly next to the spaceship
+      const barW = Math.max(3, Math.min(5, Math.round(this.width * 0.075)));
+      const barH = Math.max(18, Math.min(30, Math.round(this.height * 0.54)));
+      const offsetX = Math.round(this.width * 0.52);
       const topY = Math.round(-barH / 2);
       const radius = 2;
 
-      // 1. AMMO / ENERGY BAR (Screen-left of ship)
-      const leftX = -offsetX - barW;
-      let ammoPct = 0;
-      let isDebt = false;
-      let ammoColor = '#4ade80';
+      // 1. AMMO / BATTERY BAR (Screen-left of ship) - Only shown in Shared & Dual modes
+      if (showAmmo) {
+        const leftX = -offsetX - barW;
+        let ammoPct = 0;
+        let isDebt = false;
+        let ammoColor = '#4ade80';
 
-      if (this.powerMode === 'shield_only') {
-        ammoPct = 1.0;
-        ammoColor = '#facc15'; // Golden yellow indicating infinite ammo
-      } else {
         if (this.energy < 0) {
           isDebt = true;
           ammoPct = Math.min(1, Math.abs(this.energy) / 100);
@@ -926,62 +926,53 @@
           else if (this.energy < 40) ammoColor = '#facc15';
           else ammoColor = '#4ade80';
         }
-      }
 
-      // Draw Ammo Track
-      ctx.fillStyle = 'rgba(10, 15, 30, 0.75)';
-      ctx.strokeStyle = isDebt ? 'rgba(255, 0, 85, 0.8)' : 'rgba(148, 163, 184, 0.4)';
-      ctx.lineWidth = 1;
-      this.drawRoundedRect(ctx, leftX, topY, barW, barH, radius, true, true);
+        // Draw Ammo Track
+        ctx.fillStyle = 'rgba(10, 15, 30, 0.75)';
+        ctx.strokeStyle = isDebt ? 'rgba(255, 0, 85, 0.8)' : 'rgba(148, 163, 184, 0.4)';
+        ctx.lineWidth = 1;
+        this.drawRoundedRect(ctx, leftX, topY, barW, barH, radius, true, true);
 
-      // Draw Ammo Fill (from bottom up)
-      if (ammoPct > 0) {
-        const fillH = Math.max(2, Math.round(barH * ammoPct));
-        const fillY = topY + barH - fillH;
-        ctx.fillStyle = ammoColor;
-        if (isDebt || this.energy > 80) {
-          ctx.shadowColor = ammoColor;
-          ctx.shadowBlur = 4;
+        // Draw Ammo Fill (from bottom up)
+        if (ammoPct > 0) {
+          const fillH = Math.max(2, Math.round(barH * ammoPct));
+          const fillY = topY + barH - fillH;
+          ctx.fillStyle = ammoColor;
+          if (isDebt || this.energy > 80) {
+            ctx.shadowColor = ammoColor;
+            ctx.shadowBlur = 4;
+          }
+          this.drawRoundedRect(ctx, leftX, fillY, barW, fillH, 1.5, true, false);
+          ctx.shadowBlur = 0;
         }
-        this.drawRoundedRect(ctx, leftX, fillY, barW, fillH, 1.5, true, false);
-        ctx.shadowBlur = 0;
       }
 
-      // 2. SHIELD BAR (Screen-right of ship)
-      const rightX = offsetX;
-      let shieldPct = 0;
-      const isShieldActive = this.invincible && !this.unlimitedShield;
+      // 2. SHIELD BAR (Screen-right of ship) - Only shown in Dual & Shield Only modes
+      if (showShield) {
+        const rightX = offsetX;
+        // Directly reflects top HUD shield percentage (0% to 100%)
+        const shieldPct = Math.max(0, Math.min(1, this.shieldEnergy / 100));
+        const isShieldFull = shieldPct >= 0.99;
+        const shieldColor = isShieldFull ? '#00f0ff' : '#38bdf8';
 
-      if (isShieldActive) {
-        // While emergency shield is active, bar displays countdown of shield time remaining!
-        shieldPct = Math.max(0, Math.min(1, this.invincibleTimer / 150));
-      } else if (this.powerMode === 'dual' || this.powerMode === 'shield_only') {
-        shieldPct = Math.max(0, Math.min(1, this.shieldEnergy / 100));
-      } else {
-        // Shared mode: readiness towards 100 energy
-        shieldPct = Math.max(0, Math.min(1, Math.max(0, this.energy) / 100));
-      }
+        // Draw Shield Track
+        ctx.fillStyle = 'rgba(10, 15, 30, 0.75)';
+        ctx.strokeStyle = isShieldFull ? 'rgba(0, 240, 255, 0.85)' : 'rgba(148, 163, 184, 0.4)';
+        ctx.lineWidth = 1;
+        this.drawRoundedRect(ctx, rightX, topY, barW, barH, radius, true, true);
 
-      const isShieldFull = shieldPct >= 0.99;
-      const shieldColor = (isShieldActive || isShieldFull) ? '#00f0ff' : '#38bdf8';
-
-      // Draw Shield Track
-      ctx.fillStyle = 'rgba(10, 15, 30, 0.75)';
-      ctx.strokeStyle = (isShieldActive || isShieldFull) ? 'rgba(0, 240, 255, 0.85)' : 'rgba(148, 163, 184, 0.4)';
-      ctx.lineWidth = 1;
-      this.drawRoundedRect(ctx, rightX, topY, barW, barH, radius, true, true);
-
-      // Draw Shield Fill (from bottom up)
-      if (shieldPct > 0) {
-        const fillH = Math.max(2, Math.round(barH * shieldPct));
-        const fillY = topY + barH - fillH;
-        ctx.fillStyle = shieldColor;
-        if (isShieldActive || isShieldFull) {
-          ctx.shadowColor = shieldColor;
-          ctx.shadowBlur = 6;
+        // Draw Shield Fill (from bottom up)
+        if (shieldPct > 0) {
+          const fillH = Math.max(2, Math.round(barH * shieldPct));
+          const fillY = topY + barH - fillH;
+          ctx.fillStyle = shieldColor;
+          if (isShieldFull) {
+            ctx.shadowColor = shieldColor;
+            ctx.shadowBlur = 6;
+          }
+          this.drawRoundedRect(ctx, rightX, fillY, barW, fillH, 1.5, true, false);
+          ctx.shadowBlur = 0;
         }
-        this.drawRoundedRect(ctx, rightX, fillY, barW, fillH, 1.5, true, false);
-        ctx.shadowBlur = 0;
       }
     }
 
@@ -1185,7 +1176,7 @@
       this.powerMode = savedPowerMode;
       this.ship.powerMode = this.powerMode;
 
-      this.showStatusBars = localStorage.getItem('spaceship_flight_show_status_bars') !== 'false';
+      this.showStatusBars = localStorage.getItem('spaceship_flight_show_status_bars') === 'true';
       this.ship.showStatusBars = this.showStatusBars;
 
       this.unlimitedShield = localStorage.getItem('spaceship_flight_unlimited_shield') === 'true';
