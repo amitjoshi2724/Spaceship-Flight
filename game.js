@@ -834,7 +834,7 @@
           // Unlimited Ammo / Shield mode:
           // Slowly charges to 100 (slower than battery, e.g. 8 energy/sec),
           // NO kinetic dynamo speedup (constant rate whether thrusting or idle)
-          const shieldRechargeRate = 8;
+          const shieldRechargeRate = 4;
           const rechargeAmount = shieldRechargeRate * dtSeconds;
           this.energy = Math.min(this.maxEnergy, this.energy + rechargeAmount);
         } else {
