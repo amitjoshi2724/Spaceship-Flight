@@ -63,6 +63,60 @@
       osc.stop(now + 0.15);
     }
 
+    playEmptyBattery() {
+      if (!this.enabled) return;
+      this.init();
+      this.resume();
+      if (!this.ctx) return;
+
+      try {
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.linearRampToValueAtTime(80, now + 0.08);
+
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.08);
+      } catch (e) { }
+    }
+
+    playShieldSound() {
+      if (!this.enabled) return;
+      this.init();
+      this.resume();
+      if (!this.ctx) return;
+
+      try {
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.exponentialRampToValueAtTime(660, now + 0.25);
+        osc.frequency.linearRampToValueAtTime(330, now + 0.45);
+
+        gain.gain.setValueAtTime(0.01, now);
+        gain.gain.linearRampToValueAtTime(0.25, now + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.45);
+      } catch (e) { }
+    }
+
     startThrust() {
       if (!this.enabled || this.isThrustingSound) return;
       this.init();
@@ -85,7 +139,7 @@
 
         this.thrustOsc.start(now);
         this.isThrustingSound = true;
-      } catch (e) {}
+      } catch (e) { }
     }
 
     stopThrust() {
@@ -96,7 +150,7 @@
         if (this.thrustOsc) {
           this.thrustOsc.stop(now + 0.1);
         }
-      } catch (e) {}
+      } catch (e) { }
       this.isThrustingSound = false;
     }
 
@@ -134,7 +188,7 @@
         gain.connect(this.ctx.destination);
 
         noise.start(now);
-      } catch (e) {}
+      } catch (e) { }
     }
 
     playGameOver() {
@@ -359,7 +413,7 @@
   class Rock {
     constructor(canvasWidth, canvasHeight, speedMultiplier = 1.0) {
       this.popped = false;
-      
+
       // Responsive scale based on screen dimension (pro game dev formula)
       // On standard 1920x1080, baseUnit is ~1080. On mobile screen, baseUnit is ~450.
       const baseDimension = Math.min(canvasWidth, Math.max(450, canvasHeight * 1.6));
@@ -606,6 +660,10 @@
       this.thrusting = false;
       this.lives = 3;
       this.invincible = false;
+      this.unlimitedShield = false;
+      this.unlimitedAmmo = false;
+      this.energy = 100;
+      this.maxEnergy = 100;
       this.scalePercent = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
       this.recalculateSize();
       this.selectedSkin = 'red'; // 'red' or 'blue'
@@ -647,7 +705,7 @@
       this.recalculateSize();
       try {
         localStorage.setItem('spaceship_flight_ship_scale', this.scalePercent.toString());
-      } catch (e) {}
+      } catch (e) { }
     }
 
     reset(full = false) {
@@ -659,6 +717,7 @@
       this.thrusting = false;
       this.invincible = true;
       this.invincibleTimer = 150; // ~2.5 seconds at 60fps
+      this.energy = this.maxEnergy;
       if (full) {
         this.lives = 3;
       }
@@ -681,7 +740,40 @@
       this.thrusting = active;
     }
 
+    triggerEmergencyShield() {
+      // Emergency shield costs 100 energy, can overdraft down to -100%,
+      // but cannot be activated while already in debt (energy <= 0)
+      const SHIELD_COST = 100;
+      const MIN_ENERGY = -100;
+
+      if (!this.unlimitedAmmo && this.energy <= 0) {
+        this.soundFx.playEmptyBattery();
+        return false;
+      }
+
+      if (!this.unlimitedAmmo) {
+        this.energy = Math.max(MIN_ENERGY, this.energy - SHIELD_COST);
+      }
+
+      this.invincible = true;
+      this.invincibleTimer = 150; // Full 2.5 second shield duration
+      this.soundFx.playShieldSound();
+      return true;
+    }
+
     fire(bullets) {
+      const COST_PER_SHOT = 15;
+
+      // If unlimited ammo is not enabled, check battery
+      if (!this.unlimitedAmmo) {
+        if (this.energy < COST_PER_SHOT) {
+          // Battery empty click sound
+          this.soundFx.playEmptyBattery();
+          return false;
+        }
+        this.energy -= COST_PER_SHOT;
+      }
+
       const rad = ((this.angle - 90) * Math.PI) / 180;
       const noseDist = this.height * 0.55;
       const bx = this.x + Math.cos(rad) * noseDist;
@@ -689,9 +781,10 @@
 
       bullets.push(new Bullet(bx, by, this.angle, this.dx, this.dy));
       this.soundFx.playLaser();
+      return true;
     }
 
-    update() {
+    update(dtSeconds = 1 / 60) {
       // Thrust physics matching original Java code
       if (this.thrusting) {
         const rad = ((this.angle - 90) * Math.PI) / 180;
@@ -721,6 +814,18 @@
       this.dx *= 0.992;
       this.dy *= 0.992;
 
+      // Battery Recharge Logic (Kinetic Dynamo):
+      // Baseline idle: 15 energy per second
+      // Thrusting / kinetic motion: 2x faster (30 energy per second)
+      // Scaled dynamically by dtSeconds (fixed timestep or variable frame delta)
+      // Supports recharging up out of negative energy debt (-100% -> 100%)
+      // Paused while shield is active (forces post-shield recovery phase)
+      if (!this.unlimitedAmmo && !this.invincible && this.energy < this.maxEnergy) {
+        const energyPerSecond = this.thrusting ? 30 : 15;
+        const rechargeAmount = energyPerSecond * dtSeconds;
+        this.energy = Math.min(this.maxEnergy, this.energy + rechargeAmount);
+      }
+
       // Screen wrapping
       const halfW = this.width / 2;
       const halfH = this.height / 2;
@@ -729,8 +834,10 @@
       if (this.y > this.canvas.height + halfH) this.y = -halfH;
       else if (this.y < -halfH) this.y = this.canvas.height + halfH;
 
-      // Invincibility countdown
-      if (this.invincible) {
+      // Invincibility countdown (unless Unlimited Shield is toggled on)
+      if (this.unlimitedShield) {
+        this.invincible = true;
+      } else if (this.invincible) {
         this.invincibleTimer--;
         if (this.invincibleTimer <= 0) {
           this.invincible = false;
@@ -745,7 +852,7 @@
 
       // Invincibility shield flicker effect
       if (this.invincible) {
-        if (Math.floor(this.invincibleTimer / 6) % 2 === 0) {
+        if (!this.unlimitedShield && Math.floor(this.invincibleTimer / 6) % 2 === 0) {
           ctx.globalAlpha = 0.4;
         }
         ctx.strokeStyle = '#38bdf8';
@@ -838,11 +945,16 @@
         soundToggleBtn: document.getElementById('soundToggleBtn'),
         touchControls: document.getElementById('touchControls'),
 
+        energyHud: document.getElementById('energyHud'),
+        energyVal: document.getElementById('energyVal'),
+        energyBarFill: document.getElementById('energyBarFill'),
+
         // Buttons
         btnLeft: document.getElementById('btnLeft'),
         btnRight: document.getElementById('btnRight'),
         btnThrust: document.getElementById('btnThrust'),
         btnFire: document.getElementById('btnFire'),
+        btnEmergencyShield: document.getElementById('btnEmergencyShield'),
 
         // Modals
         startScreen: document.getElementById('startScreen'),
@@ -877,6 +989,8 @@
         btnSizeVal: document.getElementById('btnSizeVal'),
         settingStars: document.getElementById('settingStars'),
         settingDifficulty: document.getElementById('settingDifficulty'),
+        settingUnlimitedAmmo: document.getElementById('settingUnlimitedAmmo'),
+        settingUnlimitedShield: document.getElementById('settingUnlimitedShield'),
         settingSound: document.getElementById('settingSound'),
         settingTouchControls: document.getElementById('settingTouchControls'),
         menuShipPreview: document.getElementById('menuShipPreview'),
@@ -886,6 +1000,11 @@
         bestScoreVal: document.getElementById('bestScoreVal'),
         newHighScoreBanner: document.getElementById('newHighScoreBanner')
       };
+
+      this.unlimitedAmmo = localStorage.getItem('spaceship_flight_unlimited_ammo') === 'true';
+      this.unlimitedShield = localStorage.getItem('spaceship_flight_unlimited_shield') === 'true';
+      this.ship.unlimitedAmmo = this.unlimitedAmmo;
+      this.ship.unlimitedShield = this.unlimitedShield;
 
       this.btnSize = parseInt(localStorage.getItem('spaceship_flight_btn_size') || '72', 10);
       this.applyBtnSize(this.btnSize);
@@ -898,7 +1017,7 @@
       document.documentElement.style.setProperty('--ctrl-btn-size', `${this.btnSize}px`);
       try {
         localStorage.setItem('spaceship_flight_btn_size', this.btnSize.toString());
-      } catch (e) {}
+      } catch (e) { }
     }
 
     applyDifficultySettings() {
@@ -923,7 +1042,7 @@
       this.applyDifficultySettings();
       try {
         localStorage.setItem('spaceship_flight_difficulty', level);
-      } catch (e) {}
+      } catch (e) { }
     }
 
     init() {
@@ -956,8 +1075,9 @@
         accumulator += frameTime;
 
         // Run fixed 60Hz physics updates
+        const dtSeconds = FIXED_TIMESTEP / 1000; // Exact seconds per physics step (e.g. 0.016667s)
         while (accumulator >= FIXED_TIMESTEP) {
-          this.update();
+          this.update(dtSeconds);
           accumulator -= FIXED_TIMESTEP;
         }
 
@@ -972,7 +1092,7 @@
     resizeCanvas() {
       const screenW = window.visualViewport ? window.visualViewport.width : window.innerWidth;
       const screenH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-      
+
       const isPortrait = screenH > screenW;
 
       if (isPortrait) {
@@ -997,7 +1117,7 @@
     bindInputs() {
       // Keyboard input
       window.addEventListener('keydown', (e) => {
-        if (e.repeat && e.code === 'Space') return; // prevent key spam
+        if (e.repeat && (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight')) return;
 
         if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.keys.left = true;
         if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keys.right = true;
@@ -1008,6 +1128,13 @@
         if (e.code === 'Space' || e.code === 'KeyL') {
           this.keys.fire = true;
           if (this.state === 'PLAYING') this.ship.fire(this.bullets);
+        }
+        // Emergency Shield activation: Shift, KeyS, KeyE, or ArrowDown
+        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyS' || e.code === 'KeyE' || e.code === 'ArrowDown') {
+          if (this.state === 'PLAYING') {
+            this.ship.triggerEmergencyShield();
+            this.updateEnergyDisplay();
+          }
         }
         if (e.code === 'KeyP' || e.code === 'Escape') {
           this.togglePause();
@@ -1055,6 +1182,17 @@
       );
 
       bindTouchBtn(
+        this.domElements.btnEmergencyShield,
+        () => {
+          if (this.state === 'PLAYING') {
+            this.ship.triggerEmergencyShield();
+            this.updateEnergyDisplay();
+          }
+        },
+        () => { }
+      );
+
+      bindTouchBtn(
         this.domElements.btnThrust,
         () => {
           this.keys.up = true;
@@ -1071,7 +1209,7 @@
         () => {
           if (this.state === 'PLAYING') this.ship.fire(this.bullets);
         },
-        () => {}
+        () => { }
       );
 
       // Direct canvas interactions (Tap = fire, Hold = thrust)
@@ -1195,7 +1333,7 @@
           this.showStars = e.target.checked;
           try {
             localStorage.setItem('spaceship_flight_show_stars', this.showStars.toString());
-          } catch (err) {}
+          } catch (err) { }
         });
       }
 
@@ -1204,6 +1342,34 @@
         this.domElements.settingDifficulty.value = this.difficulty;
         this.domElements.settingDifficulty.addEventListener('change', (e) => {
           this.setDifficulty(e.target.value);
+        });
+      }
+
+      // Unlimited Ammo setting
+      if (this.domElements.settingUnlimitedAmmo) {
+        this.domElements.settingUnlimitedAmmo.checked = this.unlimitedAmmo;
+        this.domElements.settingUnlimitedAmmo.addEventListener('change', (e) => {
+          this.unlimitedAmmo = e.target.checked;
+          this.ship.unlimitedAmmo = this.unlimitedAmmo;
+          this.updateEnergyDisplay();
+          try {
+            localStorage.setItem('spaceship_flight_unlimited_ammo', this.unlimitedAmmo.toString());
+          } catch (err) { }
+        });
+      }
+
+      // Unlimited Shield setting
+      if (this.domElements.settingUnlimitedShield) {
+        this.domElements.settingUnlimitedShield.checked = this.unlimitedShield;
+        this.domElements.settingUnlimitedShield.addEventListener('change', (e) => {
+          this.unlimitedShield = e.target.checked;
+          this.ship.unlimitedShield = this.unlimitedShield;
+          if (this.unlimitedShield) {
+            this.ship.invincible = true;
+          }
+          try {
+            localStorage.setItem('spaceship_flight_unlimited_shield', this.unlimitedShield.toString());
+          } catch (err) { }
         });
       }
 
@@ -1252,6 +1418,7 @@
       this.particles.clear();
       this.ship.reset(true);
       this.updateLivesDisplay();
+      this.updateEnergyDisplay();
 
       // Initial rocks spawn based on difficulty
       const initialCount = this.difficulty === 'easy' ? 3 : this.difficulty === 'hard' ? 7 : 5;
@@ -1332,6 +1499,66 @@
       });
     }
 
+    updateEnergyDisplay() {
+      if (!this.domElements.energyHud) return;
+
+      if (this.unlimitedAmmo) {
+        this.domElements.energyHud.classList.add('hidden');
+        return;
+      }
+
+      this.domElements.energyHud.classList.remove('hidden');
+
+      const energyVal = Math.round(this.ship.energy);
+      const isDebt = energyVal < 0;
+      const fillPct = isDebt ? Math.min(100, Math.abs(energyVal)) : Math.max(0, Math.min(100, energyVal));
+
+      if (this.domElements.energyVal) {
+        this.domElements.energyVal.textContent = isDebt ? `${energyVal}%` : `${energyVal}%`;
+        this.domElements.energyVal.classList.remove('warning', 'depleted', 'in-debt');
+        if (isDebt) {
+          this.domElements.energyVal.classList.add('in-debt');
+        } else if (energyVal < 15) {
+          this.domElements.energyVal.classList.add('depleted');
+        } else if (energyVal < 40) {
+          this.domElements.energyVal.classList.add('warning');
+        }
+      }
+
+      const track = this.domElements.energyHud.querySelector('.energy-bar-track');
+      if (track) {
+        track.classList.remove('warning', 'depleted', 'in-debt');
+        if (isDebt) {
+          track.classList.add('in-debt');
+        } else if (energyVal < 15) {
+          track.classList.add('depleted');
+        } else if (energyVal < 40) {
+          track.classList.add('warning');
+        }
+      }
+
+      if (this.domElements.energyBarFill) {
+        this.domElements.energyBarFill.style.width = isDebt ? `${fillPct}%` : `${fillPct}%`;
+
+        this.domElements.energyBarFill.classList.remove('warning', 'depleted', 'in-debt');
+        if (isDebt) {
+          this.domElements.energyBarFill.classList.add('in-debt');
+        } else if (energyVal < 15) {
+          this.domElements.energyBarFill.classList.add('depleted');
+        } else if (energyVal < 40) {
+          this.domElements.energyBarFill.classList.add('warning');
+        }
+      }
+
+      if (this.domElements.btnEmergencyShield) {
+        if (isDebt) {
+          this.domElements.btnEmergencyShield.classList.add('in-debt');
+        } else {
+          this.domElements.btnEmergencyShield.classList.remove('in-debt');
+        }
+      }
+    }
+
     handlePlayerHit() {
       this.soundFx.playExplosion(true);
       this.screenShake = 16;
@@ -1364,7 +1591,7 @@
       this.showModal('gameover');
     }
 
-    update() {
+    update(dtSeconds = 1 / 60) {
       if (this.screenShake > 0) {
         this.screenShake *= 0.9;
         if (this.screenShake < 0.5) this.screenShake = 0;
@@ -1375,8 +1602,9 @@
         if (this.keys.left) this.ship.rotateLeft();
         if (this.keys.right) this.ship.rotateRight();
 
-        // Ship update
-        this.ship.update();
+        // Ship update (movement, thrust, kinetic battery recharge with dynamic dt)
+        this.ship.update(dtSeconds);
+        this.updateEnergyDisplay();
 
         // Asteroid Spawning based on difficulty limits
         this.rockSpawnTimer++;

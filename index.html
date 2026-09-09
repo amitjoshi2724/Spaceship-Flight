@@ -64,6 +64,16 @@
               </svg></span>
           </div>
         </div>
+
+        <div id="energyHud" class="hud-stat energy-container">
+          <div class="energy-header">
+            <span class="hud-label">ENERGY</span>
+            <span id="energyVal" class="energy-percent">100%</span>
+          </div>
+          <div class="energy-bar-track">
+            <div id="energyBarFill" class="energy-bar-fill"></div>
+          </div>
+        </div>
       </div>
 
       <div class="hud-right">
@@ -75,26 +85,36 @@
     <!-- On-screen Controls for Touch & Mobile -->
     <div id="touchControls">
       <div class="touch-group-left">
-        <button id="btnLeft" class="ctrl-btn loop-btn" aria-label="Rotate Counter-Clockwise">
-          <!-- Counter-Clockwise Looped Arrow with < inside -->
-          <svg viewBox="0 0 40 40" class="loop-arrow-svg">
-            <!-- Counter-clockwise arc arrow -->
-            <path d="M 20 5 A 15 15 0 1 0 35 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
-            <polygon points="17,1 25,5 19,10" fill="currentColor" />
-            <!-- Centered < text -->
-            <text x="20" y="25" text-anchor="middle" font-family="'Orbitron', monospace" font-size="14" font-weight="900" fill="currentColor">&lt;</text>
-          </svg>
+        <button id="btnEmergencyShield" class="ctrl-btn shield-btn" aria-label="Emergency Shield">
+          <div class="shield-btn-content">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            <span class="btn-subtext">EMERGENCY SHIELD</span>
+          </div>
         </button>
-        <button id="btnRight" class="ctrl-btn loop-btn" aria-label="Rotate Clockwise">
-          <!-- Clockwise Looped Arrow with > inside -->
-          <svg viewBox="0 0 40 40" class="loop-arrow-svg">
-            <!-- Clockwise arc arrow -->
-            <path d="M 20 5 A 15 15 0 1 1 5 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
-            <polygon points="23,1 15,5 21,10" fill="currentColor" />
-            <!-- Centered > text -->
-            <text x="20" y="25" text-anchor="middle" font-family="'Orbitron', monospace" font-size="14" font-weight="900" fill="currentColor">&gt;</text>
-          </svg>
-        </button>
+        <div class="touch-rot-row">
+          <button id="btnLeft" class="ctrl-btn loop-btn" aria-label="Rotate Counter-Clockwise">
+            <!-- Counter-Clockwise Looped Arrow with < inside -->
+            <svg viewBox="0 0 40 40" class="loop-arrow-svg">
+              <!-- Counter-clockwise arc arrow -->
+              <path d="M 20 5 A 15 15 0 1 0 35 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+              <polygon points="17,1 25,5 19,10" fill="currentColor" />
+              <!-- Centered < text -->
+              <text x="20" y="25" text-anchor="middle" font-family="'Orbitron', monospace" font-size="14" font-weight="900" fill="currentColor">&lt;</text>
+            </svg>
+          </button>
+          <button id="btnRight" class="ctrl-btn loop-btn" aria-label="Rotate Clockwise">
+            <!-- Clockwise Looped Arrow with > inside -->
+            <svg viewBox="0 0 40 40" class="loop-arrow-svg">
+              <!-- Clockwise arc arrow -->
+              <path d="M 20 5 A 15 15 0 1 1 5 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+              <polygon points="23,1 15,5 21,10" fill="currentColor" />
+              <!-- Centered > text -->
+              <text x="20" y="25" text-anchor="middle" font-family="'Orbitron', monospace" font-size="14" font-weight="900" fill="currentColor">&gt;</text>
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="touch-group-right">
         <button id="btnThrust" class="ctrl-btn action-btn" aria-label="Thrust Boost">
@@ -191,6 +211,20 @@
 
         <div class="setting-group">
           <div class="toggle-row">
+            <label for="settingUnlimitedAmmo" class="setting-label">UNLIMITED AMMO (NO BATTERY)</label>
+            <input type="checkbox" id="settingUnlimitedAmmo" class="custom-toggle">
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="toggle-row">
+            <label for="settingUnlimitedShield" class="setting-label">UNLIMITED SHIELD (GOD MODE)</label>
+            <input type="checkbox" id="settingUnlimitedShield" class="custom-toggle">
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="toggle-row">
             <label for="settingSound" class="setting-label">SOUND EFFECTS</label>
             <input type="checkbox" id="settingSound" checked class="custom-toggle">
           </div>
@@ -239,9 +273,10 @@
             <div class="guide-col">
               <h3>📱 Touch / Mobile</h3>
               <ul>
-                <li><b>Buttons (Bottom Left):</b> Rotate ship</li>
-                <li><b>Hold Screen / Thrust Button:</b> Accelerate forward</li>
-                <li><b>Tap Screen / Fire Button:</b> Fire plasma cannons</li>
+                <li><b>Left / Right (Bottom Left):</b> Rotate ship</li>
+                <li><b>Shield Button (Above Rotators):</b> Emergency Shield</li>
+                <li><b>Hold Screen / Thrust:</b> Accelerate forward</li>
+                <li><b>Tap Screen / Fire:</b> Fire plasma cannons</li>
                 <li><b>Top Right (| |):</b> Pause / Resume</li>
               </ul>
             </div>
@@ -251,13 +286,14 @@
                 <li><b>Left / Right or A / D:</b> Rotate ship</li>
                 <li><b>Up Arrow or W:</b> Thrust engine</li>
                 <li><b>Spacebar or Left Click:</b> Fire laser</li>
+                <li><b>Shift / S / Down:</b> Emergency Shield</li>
                 <li><b>P or Escape:</b> Pause game</li>
               </ul>
             </div>
           </div>
 
           <div class="scoring-tip">
-            💡 <b>Mission:</b> Destroy asteroids before they hit your ship. Asteroids wrap around screen edges!
+            ⚡ <b>Tactical Reactor:</b> Lasers consume energy. Emergency Shield costs 100% and allows debt (down to -100%). Thrusters recharge the battery 2x faster (Kinetic Dynamo)!
           </div>
         </div>
 
