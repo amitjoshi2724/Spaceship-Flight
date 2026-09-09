@@ -381,7 +381,7 @@ html, body {
   to { opacity: 1; }
 }
 
-.energy-container.hidden {
+.energy-container.hidden, .shield-container.hidden {
   display: none !important;
 }
 
@@ -561,6 +561,12 @@ html, body {
   border-color: rgba(239, 68, 68, 0.5);
   color: #ef4444;
   opacity: 0.6;
+}
+
+.ctrl-btn.shield-btn.uncharged {
+  border-color: rgba(148, 163, 184, 0.35);
+  color: rgba(148, 163, 184, 0.6);
+  opacity: 0.55;
 }
 
 .loop-arrow-svg {
@@ -826,6 +832,89 @@ html, body {
   border-color: var(--neon-cyan);
   background: rgba(56, 189, 248, 0.15);
   box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+}
+
+.power-mode-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.power-mode-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.power-mode-card:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(30, 41, 59, 0.7);
+  transform: translateY(-1px);
+}
+
+.power-mode-card.active {
+  border-color: var(--neon-cyan);
+  background: rgba(56, 189, 248, 0.14);
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
+}
+
+.power-mode-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.power-mode-title {
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #fff;
+}
+
+.power-mode-card.active .power-mode-title {
+  color: var(--neon-cyan-bright);
+}
+
+.power-mode-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 12px;
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  letter-spacing: 0.5px;
+}
+
+.power-mode-badge.dual {
+  background: rgba(0, 240, 255, 0.15);
+  color: #00f0ff;
+  border-color: rgba(0, 240, 255, 0.35);
+}
+
+.power-mode-badge.shield {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.power-mode-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .toggle-row {
@@ -1245,5 +1334,25 @@ html, body {
   }
   .game-title {
     font-size: 20px;
+  }
+}
+
+@media (max-width: 400px) {
+  .hud-center {
+    gap: 4px;
+  }
+  .energy-container {
+    max-width: 82px;
+    padding: 2px 4px;
+  }
+  .energy-percent {
+    font-size: 10px;
+  }
+  .power-mode-title {
+    font-size: 10.5px;
+  }
+  .power-mode-badge {
+    font-size: 9px;
+    padding: 1px 5px;
   }
 }

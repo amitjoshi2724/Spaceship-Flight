@@ -74,6 +74,16 @@
             <div id="energyBarFill" class="energy-bar-fill"></div>
           </div>
         </div>
+
+        <div id="shieldHud" class="hud-stat energy-container shield-container hidden">
+          <div class="energy-header">
+            <span id="shieldLabel" class="hud-label">SHIELD</span>
+            <span id="shieldVal" class="energy-percent shield-mode">100%</span>
+          </div>
+          <div class="energy-bar-track shield-mode">
+            <div id="shieldBarFill" class="energy-bar-fill shield-mode"></div>
+          </div>
+        </div>
       </div>
 
       <div class="hud-right">
@@ -210,9 +220,29 @@
         </div>
 
         <div class="setting-group">
-          <div class="toggle-row">
-            <label for="settingUnlimitedAmmo" class="setting-label">UNLIMITED AMMO (SHIELD CHARGER)</label>
-            <input type="checkbox" id="settingUnlimitedAmmo" class="custom-toggle">
+          <span class="setting-label">POWER & SHIELD SYSTEM</span>
+          <div class="power-mode-selector" id="powerModeSelector">
+            <button type="button" class="power-mode-card active" data-mode="shared">
+              <div class="power-mode-header">
+                <span class="power-mode-title">SHARED REACTOR</span>
+                <span class="power-mode-badge">+6% SIPHON</span>
+              </div>
+              <p class="power-mode-desc">1 battery for ammo & emergency shield. Overdraft debt allowed. High risk & reward.</p>
+            </button>
+            <button type="button" class="power-mode-card" data-mode="dual">
+              <div class="power-mode-header">
+                <span class="power-mode-title">DUAL CAPACITORS</span>
+                <span class="power-mode-badge dual">+3% / +3%</span>
+              </div>
+              <p class="power-mode-desc">Dedicated ammo battery & shield capacitor. No debt. Destroying rocks recharges both.</p>
+            </button>
+            <button type="button" class="power-mode-card" data-mode="shield_only">
+              <div class="power-mode-header">
+                <span class="power-mode-title">SHIELD CHARGER</span>
+                <span class="power-mode-badge shield">+6% SIPHON</span>
+              </div>
+              <p class="power-mode-desc">Infinite ammo. Slow passive shield recharge boosted by accurate rock destruction.</p>
+            </button>
           </div>
         </div>
 

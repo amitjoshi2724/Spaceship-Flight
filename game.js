@@ -664,6 +664,9 @@
       this.unlimitedAmmo = false;
       this.energy = 100;
       this.maxEnergy = 100;
+      this.shieldEnergy = 100;
+      this.maxShieldEnergy = 100;
+      this.powerMode = 'shared'; // 'shared', 'dual', 'shield_only'
       this.scalePercent = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
       this.recalculateSize();
       this.selectedSkin = 'red'; // 'red' or 'blue'
@@ -718,6 +721,7 @@
       this.invincible = true;
       this.invincibleTimer = 150; // ~2.5 seconds at 60fps
       this.energy = this.maxEnergy;
+      this.shieldEnergy = this.maxShieldEnergy;
       if (full) {
         this.lives = 3;
       }
@@ -750,15 +754,15 @@
       const SHIELD_COST = 100;
       const MIN_ENERGY = -100;
 
-      if (this.unlimitedAmmo) {
-        // Shield mode: must be 100% charged, no debt allowed
-        if (this.energy < SHIELD_COST) {
+      if (this.powerMode === 'dual' || this.powerMode === 'shield_only') {
+        // Dedicated shield capacitor: must be 100% charged, no debt allowed
+        if (this.shieldEnergy < SHIELD_COST) {
           this.soundFx.playEmptyBattery();
           return false;
         }
-        this.energy = 0;
+        this.shieldEnergy = 0;
       } else {
-        // Standard Reactor mode:
+        // Standard Shared Reactor mode:
         // Emergency shield costs 100 energy, can overdraft down to -100%,
         // but cannot be activated while already in debt (energy <= 0)
         if (this.energy <= 0) {
@@ -777,10 +781,9 @@
     fire(bullets) {
       const COST_PER_SHOT = 15;
 
-      // If unlimited ammo is not enabled, check battery
-      if (!this.unlimitedAmmo) {
+      // In shield_only mode, ammo is free/unlimited
+      if (this.powerMode !== 'shield_only') {
         if (this.energy < COST_PER_SHOT) {
-          // Battery empty click sound
           this.soundFx.playEmptyBattery();
           return false;
         }
@@ -829,22 +832,29 @@
 
       // Battery & Shield Recharge Logic:
       // Paused while shield is active (forces post-shield recovery phase)
-      if (!this.invincible && this.energy < this.maxEnergy) {
-        if (this.unlimitedAmmo) {
-          // Unlimited Ammo / Shield mode:
-          // Slowly charges to 100 (slower than battery, e.g. 8 energy/sec),
-          // NO kinetic dynamo speedup (constant rate whether thrusting or idle)
-          const shieldRechargeRate = 4;
-          const rechargeAmount = shieldRechargeRate * dtSeconds;
-          this.energy = Math.min(this.maxEnergy, this.energy + rechargeAmount);
-        } else {
-          // Standard Battery (Kinetic Dynamo):
-          // Baseline idle: 15 energy per second
-          // Thrusting / kinetic motion: 2x faster (30 energy per second)
-          // Supports recharging up out of negative energy debt (-100% -> 100%)
-          const energyPerSecond = this.thrusting ? 30 : 15;
-          const rechargeAmount = energyPerSecond * dtSeconds;
-          this.energy = Math.min(this.maxEnergy, this.energy + rechargeAmount);
+      if (!this.invincible) {
+        // 1. Ammo Battery recharging (for shared and dual modes)
+        if (this.powerMode === 'shared' || this.powerMode === 'dual') {
+          if (this.energy < this.maxEnergy) {
+            const energyPerSecond = this.thrusting ? 30 : 15;
+            const rechargeAmount = energyPerSecond * dtSeconds;
+            this.energy = Math.min(this.maxEnergy, this.energy + rechargeAmount);
+          }
+        }
+
+        // 2. Shield Capacitor recharging (for dual and shield_only modes)
+        if (this.powerMode === 'dual') {
+          if (this.shieldEnergy < this.maxShieldEnergy) {
+            // Slower than battery (6/s ≈ 16.6s full charge), no kinetic dynamo speedup
+            const shieldRechargeRate = 6;
+            this.shieldEnergy = Math.min(this.maxShieldEnergy, this.shieldEnergy + shieldRechargeRate * dtSeconds);
+          }
+        } else if (this.powerMode === 'shield_only') {
+          if (this.shieldEnergy < this.maxShieldEnergy) {
+            // Passive shield charger (4/s ≈ 25s full charge), no kinetic dynamo speedup
+            const shieldRechargeRate = 4;
+            this.shieldEnergy = Math.min(this.maxShieldEnergy, this.shieldEnergy + shieldRechargeRate * dtSeconds);
+          }
         }
       }
 
@@ -972,6 +982,11 @@
         energyVal: document.getElementById('energyVal'),
         energyBarFill: document.getElementById('energyBarFill'),
 
+        shieldHud: document.getElementById('shieldHud'),
+        shieldLabel: document.getElementById('shieldLabel') || document.querySelector('#shieldHud .hud-label'),
+        shieldVal: document.getElementById('shieldVal'),
+        shieldBarFill: document.getElementById('shieldBarFill'),
+
         // Buttons
         btnLeft: document.getElementById('btnLeft'),
         btnRight: document.getElementById('btnRight'),
@@ -1012,7 +1027,7 @@
         btnSizeVal: document.getElementById('btnSizeVal'),
         settingStars: document.getElementById('settingStars'),
         settingDifficulty: document.getElementById('settingDifficulty'),
-        settingUnlimitedAmmo: document.getElementById('settingUnlimitedAmmo'),
+        powerModeSelector: document.getElementById('powerModeSelector'),
         settingUnlimitedShield: document.getElementById('settingUnlimitedShield'),
         settingSound: document.getElementById('settingSound'),
         settingTouchControls: document.getElementById('settingTouchControls'),
@@ -1024,9 +1039,18 @@
         newHighScoreBanner: document.getElementById('newHighScoreBanner')
       };
 
-      this.unlimitedAmmo = localStorage.getItem('spaceship_flight_unlimited_ammo') === 'true';
+      let savedPowerMode = localStorage.getItem('spaceship_flight_power_mode');
+      if (!savedPowerMode) {
+        if (localStorage.getItem('spaceship_flight_unlimited_ammo') === 'true') {
+          savedPowerMode = 'shield_only';
+        } else {
+          savedPowerMode = 'shared';
+        }
+      }
+      this.powerMode = savedPowerMode;
+      this.ship.powerMode = this.powerMode;
+
       this.unlimitedShield = localStorage.getItem('spaceship_flight_unlimited_shield') === 'true';
-      this.ship.unlimitedAmmo = this.unlimitedAmmo;
       this.ship.unlimitedShield = this.unlimitedShield;
 
       this.btnSize = parseInt(localStorage.getItem('spaceship_flight_btn_size') || '72', 10);
@@ -1066,6 +1090,19 @@
       try {
         localStorage.setItem('spaceship_flight_difficulty', level);
       } catch (e) { }
+    }
+
+    setPowerMode(mode) {
+      this.powerMode = mode;
+      this.ship.powerMode = mode;
+      if (mode === 'shield_only' || mode === 'dual') {
+        if (this.ship.energy < 0) this.ship.energy = 0;
+      }
+      this.updateEnergyDisplay();
+      try {
+        localStorage.setItem('spaceship_flight_power_mode', mode);
+        localStorage.setItem('spaceship_flight_unlimited_ammo', (mode === 'shield_only').toString());
+      } catch (err) { }
     }
 
     init() {
@@ -1368,19 +1405,21 @@
         });
       }
 
-      // Unlimited Ammo setting
-      if (this.domElements.settingUnlimitedAmmo) {
-        this.domElements.settingUnlimitedAmmo.checked = this.unlimitedAmmo;
-        this.domElements.settingUnlimitedAmmo.addEventListener('change', (e) => {
-          this.unlimitedAmmo = e.target.checked;
-          this.ship.unlimitedAmmo = this.unlimitedAmmo;
-          if (this.unlimitedAmmo && this.ship.energy < 0) {
-            this.ship.energy = 0;
+      // Power Mode / Energy System Selector
+      if (this.domElements.powerModeSelector) {
+        const cards = this.domElements.powerModeSelector.querySelectorAll('.power-mode-card');
+        cards.forEach((card) => {
+          if (card.dataset.mode === this.powerMode) {
+            card.classList.add('active');
+          } else {
+            card.classList.remove('active');
           }
-          this.updateEnergyDisplay();
-          try {
-            localStorage.setItem('spaceship_flight_unlimited_ammo', this.unlimitedAmmo.toString());
-          } catch (err) { }
+
+          card.addEventListener('click', () => {
+            cards.forEach((c) => c.classList.remove('active'));
+            card.classList.add('active');
+            this.setPowerMode(card.dataset.mode);
+          });
         });
       }
 
@@ -1413,7 +1452,19 @@
 
     showModal(modalName) {
       this.hideModals();
-      if (modalName === 'settings') this.domElements.settingsModal.classList.add('active');
+      if (modalName === 'settings') {
+        this.domElements.settingsModal.classList.add('active');
+        if (this.domElements.powerModeSelector) {
+          const cards = this.domElements.powerModeSelector.querySelectorAll('.power-mode-card');
+          cards.forEach((c) => {
+            if (c.dataset.mode === this.powerMode) {
+              c.classList.add('active');
+            } else {
+              c.classList.remove('active');
+            }
+          });
+        }
+      }
       if (modalName === 'instructions') this.domElements.instructionsModal.classList.add('active');
       if (modalName === 'credits') this.domElements.creditsModal.classList.add('active');
       if (modalName === 'pause') this.domElements.pauseModal.classList.add('active');
@@ -1525,94 +1576,172 @@
       });
     }
 
+    applyCombatSiphon() {
+      if (this.powerMode === 'shared') {
+        // Shared Reactor: +6% to shared battery (can siphon out of debt)
+        this.ship.energy = Math.min(this.ship.maxEnergy, this.ship.energy + 6);
+      } else if (this.powerMode === 'dual') {
+        // Dual Capacitors: +3% to ammo battery AND +3% to shield capacitor
+        this.ship.energy = Math.min(this.ship.maxEnergy, this.ship.energy + 3);
+        this.ship.shieldEnergy = Math.min(this.ship.maxShieldEnergy, this.ship.shieldEnergy + 3);
+      } else if (this.powerMode === 'shield_only') {
+        // Shield Charger: +6% to shield capacitor (ammo is unlimited)
+        this.ship.shieldEnergy = Math.min(this.ship.maxShieldEnergy, this.ship.shieldEnergy + 6);
+      }
+      this.updateEnergyDisplay();
+    }
+
     updateEnergyDisplay() {
       if (!this.domElements.energyHud) return;
 
+      const isDual = this.powerMode === 'dual';
+      const isShieldOnly = this.powerMode === 'shield_only';
+
+      // Visibility of primary and secondary HUD gauges
       this.domElements.energyHud.classList.remove('hidden');
-
-      const isShieldMode = !!this.ship.unlimitedAmmo;
-      const energyVal = Math.round(this.ship.energy);
-      const isDebt = !isShieldMode && energyVal < 0;
-      const isShieldReady = isShieldMode && energyVal >= 100;
-      const fillPct = isDebt ? Math.min(100, Math.abs(energyVal)) : Math.max(0, Math.min(100, energyVal));
-
-      // Update Label (ENERGY vs SHIELD)
-      const label = this.domElements.energyLabel || document.querySelector('#energyHud .hud-label');
-      if (label) {
-        label.textContent = isShieldMode ? 'SHIELD' : 'ENERGY';
+      if (this.domElements.shieldHud) {
+        if (isDual) {
+          this.domElements.shieldHud.classList.remove('hidden');
+        } else {
+          this.domElements.shieldHud.classList.add('hidden');
+        }
       }
 
-      // Update Container styling
-      if (isShieldMode) {
+      // --- PRIMARY GAUGE (#energyHud) ---
+      if (isShieldOnly) {
+        // Displays SHIELD in cyan
+        const shieldVal = Math.round(this.ship.shieldEnergy);
+        const isReady = shieldVal >= 100;
+        const fillPct = Math.max(0, Math.min(100, shieldVal));
+
+        if (this.domElements.energyLabel) this.domElements.energyLabel.textContent = 'SHIELD';
         this.domElements.energyHud.classList.add('shield-mode');
-      } else {
+
+        if (this.domElements.energyVal) {
+          this.domElements.energyVal.textContent = `${shieldVal}%`;
+          this.domElements.energyVal.className = 'energy-percent shield-mode' + (isReady ? ' ready' : '');
+        }
+
+        const track = this.domElements.energyHud.querySelector('.energy-bar-track');
+        if (track) track.className = 'energy-bar-track shield-mode';
+
+        if (this.domElements.energyBarFill) {
+          this.domElements.energyBarFill.style.width = `${fillPct}%`;
+          this.domElements.energyBarFill.className = 'energy-bar-fill shield-mode' + (isReady ? ' ready' : '');
+        }
+
+        if (this.domElements.btnEmergencyShield) {
+          if (!isReady || this.ship.invincible) {
+            this.domElements.btnEmergencyShield.classList.add('uncharged');
+            this.domElements.btnEmergencyShield.classList.remove('in-debt');
+          } else {
+            this.domElements.btnEmergencyShield.classList.remove('uncharged', 'in-debt');
+          }
+        }
+      } else if (isDual) {
+        // Displays AMMO in green/yellow/red (no debt in dual mode)
+        const ammoVal = Math.round(this.ship.energy);
+        const fillPct = Math.max(0, Math.min(100, ammoVal));
+
+        if (this.domElements.energyLabel) this.domElements.energyLabel.textContent = 'AMMO';
         this.domElements.energyHud.classList.remove('shield-mode');
-      }
 
-      // Update Percent readout
-      if (this.domElements.energyVal) {
-        this.domElements.energyVal.textContent = `${energyVal}%`;
-        this.domElements.energyVal.classList.remove('warning', 'depleted', 'in-debt', 'shield-mode', 'ready');
-        if (isShieldMode) {
-          this.domElements.energyVal.classList.add('shield-mode');
-          if (isShieldReady) {
-            this.domElements.energyVal.classList.add('ready');
+        if (this.domElements.energyVal) {
+          this.domElements.energyVal.textContent = `${ammoVal}%`;
+          let valClass = 'energy-percent';
+          if (ammoVal < 15) valClass += ' depleted';
+          else if (ammoVal < 40) valClass += ' warning';
+          this.domElements.energyVal.className = valClass;
+        }
+
+        const track = this.domElements.energyHud.querySelector('.energy-bar-track');
+        if (track) {
+          let trackClass = 'energy-bar-track';
+          if (ammoVal < 15) trackClass += ' depleted';
+          else if (ammoVal < 40) trackClass += ' warning';
+          track.className = trackClass;
+        }
+
+        if (this.domElements.energyBarFill) {
+          this.domElements.energyBarFill.style.width = `${fillPct}%`;
+          let fillClass = 'energy-bar-fill';
+          if (ammoVal < 15) fillClass += ' depleted';
+          else if (ammoVal < 40) fillClass += ' warning';
+          this.domElements.energyBarFill.className = fillClass;
+        }
+
+        // --- SECONDARY GAUGE (#shieldHud for Dual Mode) ---
+        if (this.domElements.shieldHud) {
+          const shieldVal = Math.round(this.ship.shieldEnergy);
+          const isReady = shieldVal >= 100;
+          const shieldFillPct = Math.max(0, Math.min(100, shieldVal));
+
+          if (this.domElements.shieldLabel) this.domElements.shieldLabel.textContent = 'SHIELD';
+          if (this.domElements.shieldVal) {
+            this.domElements.shieldVal.textContent = `${shieldVal}%`;
+            this.domElements.shieldVal.className = 'energy-percent shield-mode' + (isReady ? ' ready' : '');
           }
-        } else {
-          if (isDebt) {
-            this.domElements.energyVal.classList.add('in-debt');
-          } else if (energyVal < 15) {
-            this.domElements.energyVal.classList.add('depleted');
-          } else if (energyVal < 40) {
-            this.domElements.energyVal.classList.add('warning');
+
+          const shieldTrack = this.domElements.shieldHud.querySelector('.energy-bar-track');
+          if (shieldTrack) shieldTrack.className = 'energy-bar-track shield-mode';
+
+          if (this.domElements.shieldBarFill) {
+            this.domElements.shieldBarFill.style.width = `${shieldFillPct}%`;
+            this.domElements.shieldBarFill.className = 'energy-bar-fill shield-mode' + (isReady ? ' ready' : '');
+          }
+
+          if (this.domElements.btnEmergencyShield) {
+            if (!isReady || this.ship.invincible) {
+              this.domElements.btnEmergencyShield.classList.add('uncharged');
+              this.domElements.btnEmergencyShield.classList.remove('in-debt');
+            } else {
+              this.domElements.btnEmergencyShield.classList.remove('uncharged', 'in-debt');
+            }
           }
         }
-      }
+      } else {
+        // Standard SHARED REACTOR mode (ENERGY, with overdraft debt allowed)
+        const energyVal = Math.round(this.ship.energy);
+        const isDebt = energyVal < 0;
+        const fillPct = isDebt ? Math.min(100, Math.abs(energyVal)) : Math.max(0, Math.min(100, energyVal));
 
-      // Update Track styling
-      const track = this.domElements.energyHud.querySelector('.energy-bar-track');
-      if (track) {
-        track.classList.remove('warning', 'depleted', 'in-debt', 'shield-mode');
-        if (isShieldMode) {
-          track.classList.add('shield-mode');
-        } else {
-          if (isDebt) {
-            track.classList.add('in-debt');
-          } else if (energyVal < 15) {
-            track.classList.add('depleted');
-          } else if (energyVal < 40) {
-            track.classList.add('warning');
-          }
+        if (this.domElements.energyLabel) this.domElements.energyLabel.textContent = 'ENERGY';
+        this.domElements.energyHud.classList.remove('shield-mode');
+
+        if (this.domElements.energyVal) {
+          this.domElements.energyVal.textContent = `${energyVal}%`;
+          let valClass = 'energy-percent';
+          if (isDebt) valClass += ' in-debt';
+          else if (energyVal < 15) valClass += ' depleted';
+          else if (energyVal < 40) valClass += ' warning';
+          this.domElements.energyVal.className = valClass;
         }
-      }
 
-      // Update Bar Fill styling & width
-      if (this.domElements.energyBarFill) {
-        this.domElements.energyBarFill.style.width = `${fillPct}%`;
-        this.domElements.energyBarFill.classList.remove('warning', 'depleted', 'in-debt', 'shield-mode', 'ready');
-        if (isShieldMode) {
-          this.domElements.energyBarFill.classList.add('shield-mode');
-          if (isShieldReady) {
-            this.domElements.energyBarFill.classList.add('ready');
-          }
-        } else {
-          if (isDebt) {
-            this.domElements.energyBarFill.classList.add('in-debt');
-          } else if (energyVal < 15) {
-            this.domElements.energyBarFill.classList.add('depleted');
-          } else if (energyVal < 40) {
-            this.domElements.energyBarFill.classList.add('warning');
-          }
+        const track = this.domElements.energyHud.querySelector('.energy-bar-track');
+        if (track) {
+          let trackClass = 'energy-bar-track';
+          if (isDebt) trackClass += ' in-debt';
+          else if (energyVal < 15) trackClass += ' depleted';
+          else if (energyVal < 40) trackClass += ' warning';
+          track.className = trackClass;
         }
-      }
 
-      // Update Touch Shield Button enabled/disabled state:
-      if (this.domElements.btnEmergencyShield) {
-        const isButtonDisabled = isShieldMode ? energyVal < 100 : isDebt;
-        if (isButtonDisabled) {
-          this.domElements.btnEmergencyShield.classList.add('in-debt');
-        } else {
-          this.domElements.btnEmergencyShield.classList.remove('in-debt');
+        if (this.domElements.energyBarFill) {
+          this.domElements.energyBarFill.style.width = `${fillPct}%`;
+          let fillClass = 'energy-bar-fill';
+          if (isDebt) fillClass += ' in-debt';
+          else if (energyVal < 15) fillClass += ' depleted';
+          else if (energyVal < 40) fillClass += ' warning';
+          this.domElements.energyBarFill.className = fillClass;
+        }
+
+        if (this.domElements.btnEmergencyShield) {
+          if (this.ship.energy <= 0 || this.ship.invincible) {
+            this.domElements.btnEmergencyShield.classList.add('in-debt');
+            this.domElements.btnEmergencyShield.classList.remove('uncharged');
+          } else {
+            this.domElements.btnEmergencyShield.classList.remove('in-debt', 'uncharged');
+          }
         }
       }
     }
@@ -1630,6 +1759,7 @@
       } else {
         this.ship.reset(false);
         this.ship.energy = this.ship.maxEnergy; // Guarantee fresh 100% on respawn
+        this.ship.shieldEnergy = this.ship.maxShieldEnergy; // Guarantee fresh 100% on respawn
         this.updateEnergyDisplay();
       }
     }
@@ -1695,6 +1825,7 @@
               this.soundFx.playExplosion(false);
               this.particles.addExplosion(r.x, r.y, '#38bdf8', 20);
               this.updateScore(this.score + 1);
+              this.applyCombatSiphon();
 
               this.rocks.splice(j, 1);
               break;
