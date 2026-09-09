@@ -1604,6 +1604,9 @@
       this.hideModals();
       if (modalName === 'settings') {
         this.domElements.settingsModal.classList.add('active');
+        if (this.domElements.settingStatusBars) {
+          this.domElements.settingStatusBars.checked = this.showStatusBars;
+        }
         if (this.domElements.powerModeSelector) {
           const cards = this.domElements.powerModeSelector.querySelectorAll('.power-mode-card');
           cards.forEach((c) => {

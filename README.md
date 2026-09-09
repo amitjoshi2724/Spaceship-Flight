@@ -112,6 +112,7 @@ Built using the Web Audio API with zero external audio assets:
 
 ### 10. Customization & Persistence
 - **Ship Skin Selection:** Choose between Classic Crimson (`newspaceship.png`) and Cobalt Blue (`bluenewspaceship.png`).
+- **On-Ship Status Bars Toggle:** Toggle real-time vertical ammo and shield status bars flanking your ship on or off.
 - **High Score Tracking:** Automatically persists your personal best record in browser `localStorage`.
 - **Favicon:** Configured with the classic red spaceship icon.
 
