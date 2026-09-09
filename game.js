@@ -667,6 +667,7 @@
       this.shieldEnergy = 100;
       this.maxShieldEnergy = 100;
       this.powerMode = 'shared'; // 'shared', 'dual', 'shield_only'
+      this.showStatusBars = true;
       this.scalePercent = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
       this.recalculateSize();
       this.selectedSkin = 'red'; // 'red' or 'blue'
@@ -877,24 +878,157 @@
       }
     }
 
+    drawRoundedRect(ctx, x, y, w, h, r, fill = true, stroke = false) {
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(x, y, w, h, r);
+      } else {
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+      }
+      ctx.closePath();
+      if (fill) ctx.fill();
+      if (stroke) ctx.stroke();
+    }
+
+    drawStatusBars(ctx) {
+      // Proportional bar sizing based on spaceship dimensions
+      const barW = Math.max(3, Math.min(5, Math.round(this.width * 0.08)));
+      const barH = Math.max(20, Math.min(32, Math.round(this.height * 0.58)));
+      const offsetX = Math.round(this.width * 0.58);
+      const topY = Math.round(-barH / 2);
+      const radius = 2;
+
+      // 1. AMMO / ENERGY BAR (Screen-left of ship)
+      const leftX = -offsetX - barW;
+      let ammoPct = 0;
+      let isDebt = false;
+      let ammoColor = '#4ade80';
+
+      if (this.powerMode === 'shield_only') {
+        ammoPct = 1.0;
+        ammoColor = '#facc15'; // Golden yellow indicating infinite ammo
+      } else {
+        if (this.energy < 0) {
+          isDebt = true;
+          ammoPct = Math.min(1, Math.abs(this.energy) / 100);
+          ammoColor = '#ff0055'; // Pulsing red-pink for debt
+        } else {
+          ammoPct = Math.max(0, Math.min(1, this.energy / 100));
+          if (this.energy < 15) ammoColor = '#ef4444';
+          else if (this.energy < 40) ammoColor = '#facc15';
+          else ammoColor = '#4ade80';
+        }
+      }
+
+      // Draw Ammo Track
+      ctx.fillStyle = 'rgba(10, 15, 30, 0.75)';
+      ctx.strokeStyle = isDebt ? 'rgba(255, 0, 85, 0.8)' : 'rgba(148, 163, 184, 0.4)';
+      ctx.lineWidth = 1;
+      this.drawRoundedRect(ctx, leftX, topY, barW, barH, radius, true, true);
+
+      // Draw Ammo Fill (from bottom up)
+      if (ammoPct > 0) {
+        const fillH = Math.max(2, Math.round(barH * ammoPct));
+        const fillY = topY + barH - fillH;
+        ctx.fillStyle = ammoColor;
+        if (isDebt || this.energy > 80) {
+          ctx.shadowColor = ammoColor;
+          ctx.shadowBlur = 4;
+        }
+        this.drawRoundedRect(ctx, leftX, fillY, barW, fillH, 1.5, true, false);
+        ctx.shadowBlur = 0;
+      }
+
+      // 2. SHIELD BAR (Screen-right of ship)
+      const rightX = offsetX;
+      let shieldPct = 0;
+      const isShieldActive = this.invincible && !this.unlimitedShield;
+
+      if (isShieldActive) {
+        // While emergency shield is active, bar displays countdown of shield time remaining!
+        shieldPct = Math.max(0, Math.min(1, this.invincibleTimer / 150));
+      } else if (this.powerMode === 'dual' || this.powerMode === 'shield_only') {
+        shieldPct = Math.max(0, Math.min(1, this.shieldEnergy / 100));
+      } else {
+        // Shared mode: readiness towards 100 energy
+        shieldPct = Math.max(0, Math.min(1, Math.max(0, this.energy) / 100));
+      }
+
+      const isShieldFull = shieldPct >= 0.99;
+      const shieldColor = (isShieldActive || isShieldFull) ? '#00f0ff' : '#38bdf8';
+
+      // Draw Shield Track
+      ctx.fillStyle = 'rgba(10, 15, 30, 0.75)';
+      ctx.strokeStyle = (isShieldActive || isShieldFull) ? 'rgba(0, 240, 255, 0.85)' : 'rgba(148, 163, 184, 0.4)';
+      ctx.lineWidth = 1;
+      this.drawRoundedRect(ctx, rightX, topY, barW, barH, radius, true, true);
+
+      // Draw Shield Fill (from bottom up)
+      if (shieldPct > 0) {
+        const fillH = Math.max(2, Math.round(barH * shieldPct));
+        const fillY = topY + barH - fillH;
+        ctx.fillStyle = shieldColor;
+        if (isShieldActive || isShieldFull) {
+          ctx.shadowColor = shieldColor;
+          ctx.shadowBlur = 6;
+        }
+        this.drawRoundedRect(ctx, rightX, fillY, barW, fillH, 1.5, true, false);
+        ctx.shadowBlur = 0;
+      }
+    }
+
     draw(ctx) {
       ctx.save();
       ctx.translate(this.x, this.y);
-      ctx.rotate((this.angle * Math.PI) / 180);
 
-      // Invincibility shield flicker effect
+      // 1. Invincibility forcefield bubble (Encompasses spaceship AND vertical status bars INSIDE)
       if (this.invincible) {
-        if (!this.unlimitedShield && Math.floor(this.invincibleTimer / 6) % 2 === 0) {
-          ctx.globalAlpha = 0.4;
-        }
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 1.5;
+        ctx.save();
+        const bubbleRadius = Math.round(this.width * 0.86);
+
+        // Forcefield aura fill
+        ctx.fillStyle = 'rgba(0, 240, 255, 0.13)';
         ctx.beginPath();
-        ctx.arc(0, 0, this.width * 0.75, 0, Math.PI * 2);
+        ctx.arc(0, 0, bubbleRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Glowing outer electric ring
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(0, 0, bubbleRadius, 0, Math.PI * 2);
         ctx.stroke();
+
+        // Faint concentric interior resonance ring
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+        ctx.lineWidth = 1;
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(0, 0, bubbleRadius * 0.92, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
       }
 
-      // Select sprite: use moving versions showing fire underneath when gas is pressed
+      // 2. On-Ship Status Bars (drawn screen-vertical INSIDE the shield bubble)
+      if (this.showStatusBars) {
+        this.drawStatusBars(ctx);
+      }
+
+      // 3. Rotate coordinate system for the spaceship sprite and thruster plumes
+      ctx.rotate((this.angle * Math.PI) / 180);
+
+      // 4. Select sprite: use moving versions showing fire underneath when gas is pressed
       let sprite;
       if (this.selectedSkin === 'blue') {
         sprite = this.thrusting ? this.sprites.blueMoving : this.sprites.blueNormal;
@@ -1028,6 +1162,7 @@
         settingStars: document.getElementById('settingStars'),
         settingDifficulty: document.getElementById('settingDifficulty'),
         powerModeSelector: document.getElementById('powerModeSelector'),
+        settingStatusBars: document.getElementById('settingStatusBars'),
         settingUnlimitedShield: document.getElementById('settingUnlimitedShield'),
         settingSound: document.getElementById('settingSound'),
         settingTouchControls: document.getElementById('settingTouchControls'),
@@ -1049,6 +1184,9 @@
       }
       this.powerMode = savedPowerMode;
       this.ship.powerMode = this.powerMode;
+
+      this.showStatusBars = localStorage.getItem('spaceship_flight_show_status_bars') !== 'false';
+      this.ship.showStatusBars = this.showStatusBars;
 
       this.unlimitedShield = localStorage.getItem('spaceship_flight_unlimited_shield') === 'true';
       this.ship.unlimitedShield = this.unlimitedShield;
@@ -1420,6 +1558,18 @@
             card.classList.add('active');
             this.setPowerMode(card.dataset.mode);
           });
+        });
+      }
+
+      // On-ship status bars setting
+      if (this.domElements.settingStatusBars) {
+        this.domElements.settingStatusBars.checked = this.showStatusBars;
+        this.domElements.settingStatusBars.addEventListener('change', (e) => {
+          this.showStatusBars = e.target.checked;
+          this.ship.showStatusBars = this.showStatusBars;
+          try {
+            localStorage.setItem('spaceship_flight_show_status_bars', this.showStatusBars.toString());
+          } catch (err) { }
         });
       }
 
