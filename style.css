@@ -118,19 +118,40 @@ html, body {
   position: absolute;
   top: 0;
   left: 0;
+  right: 0;
   width: 100%;
-  padding: 16px 24px;
+  max-width: 100vw;
+  box-sizing: border-box;
+  padding: max(10px, env(safe-area-inset-top, 10px)) max(12px, env(safe-area-inset-right, 12px)) 6px max(12px, env(safe-area-inset-left, 12px));
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: clamp(4px, 1.2vw, 14px);
   z-index: 10;
   pointer-events: none;
 }
 
-.hud-left, .hud-center, .hud-right {
+.hud-left {
   display: flex;
   align-items: center;
-  gap: 20px;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.hud-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 1.5vw, 16px);
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.hud-right {
+  display: flex;
+  align-items: center;
+  gap: clamp(4px, 1vw, 10px);
+  flex-shrink: 0;
 }
 
 .hud-stat {
@@ -139,17 +160,18 @@ html, body {
   background: rgba(10, 15, 30, 0.45);
   border: 1px solid rgba(56, 189, 248, 0.35);
   border-radius: var(--radius-sm);
-  padding: 6px 14px;
+  padding: 4px clamp(6px, 1.2vw, 12px);
   box-shadow: 0 0 12px rgba(0, 0, 0, 0.5), inset 0 0 8px rgba(56, 189, 248, 0.08);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  box-sizing: border-box;
 }
 
 .score-container {
   flex-direction: row;
   align-items: center;
-  gap: 16px;
-  padding: 6px 16px;
+  gap: clamp(6px, 1.2vw, 14px);
+  padding: 4px clamp(6px, 1.5vw, 14px);
 }
 
 .score-substat {
@@ -159,44 +181,48 @@ html, body {
 
 .score-divider {
   width: 1px;
-  height: 28px;
+  height: 24px;
   background: rgba(56, 189, 248, 0.25);
 }
 
 .hud-label {
-  font-size: 11px;
+  font-size: clamp(8px, 1.8vw, 11px);
   font-weight: 800;
-  letter-spacing: 1.5px;
+  letter-spacing: 1px;
   color: var(--text-muted);
   font-family: var(--font-display);
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
 }
 
 .hud-value {
-  font-size: 22px;
+  font-size: clamp(15px, 3vw, 22px);
   font-weight: 800;
   color: var(--neon-yellow);
   font-family: var(--font-mono);
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   text-shadow: 0 0 10px rgba(250, 204, 21, 0.6), 0 2px 4px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
 }
 
 .lives-container {
   align-items: center;
   justify-content: center;
-  min-width: 90px;
+  min-width: 0;
+  flex-shrink: 0;
+  padding: 4px clamp(5px, 1vw, 10px);
 }
 
 .lives-icons {
   display: flex;
-  gap: 8px;
-  margin-top: 4px;
+  gap: clamp(4px, 1vw, 8px);
+  margin-top: 2px;
 }
 
 .life-icon {
   display: inline-block;
-  width: 16px;
-  height: 20px;
+  width: clamp(12px, 2.5vw, 16px);
+  height: clamp(15px, 3vw, 20px);
   filter: drop-shadow(0 0 6px #00f0ff);
   transition: opacity 0.2s ease, transform 0.2s ease;
   vertical-align: middle;
@@ -223,30 +249,39 @@ html, body {
 }
 
 /* ==========================================================================
-   ENERGY / BATTERY HUD
+   ENERGY / BATTERY / SHIELD HUD
    ========================================================================== */
 .energy-container {
-  min-width: 150px;
+  min-width: 0;
+  max-width: 150px;
+  flex: 1 1 auto;
   justify-content: center;
-  gap: 5px;
-  padding: 6px 14px;
+  gap: 3px;
+  padding: 4px clamp(6px, 1.5vw, 12px);
+}
+
+.energy-container.shield-mode {
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.2), inset 0 0 8px rgba(56, 189, 248, 0.1);
 }
 
 .energy-header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 10px;
+  gap: 6px;
+  width: 100%;
 }
 
 .energy-percent {
-  font-size: 15px;
+  font-size: clamp(11px, 2.2vw, 15px);
   font-weight: 900;
   font-family: var(--font-mono);
   color: #4ade80;
   letter-spacing: 0.5px;
   text-shadow: 0 0 8px rgba(74, 222, 128, 0.7), 0 2px 4px rgba(0, 0, 0, 0.9);
   transition: color 0.2s ease, text-shadow 0.2s ease;
+  white-space: nowrap;
 }
 
 .energy-percent.warning {
@@ -265,9 +300,19 @@ html, body {
   animation: energyBlink 0.25s infinite alternate;
 }
 
+.energy-percent.shield-mode {
+  color: #38bdf8;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.8), 0 2px 4px rgba(0, 0, 0, 0.9);
+}
+
+.energy-percent.shield-mode.ready {
+  color: #00f0ff;
+  text-shadow: 0 0 12px rgba(0, 240, 255, 1), 0 2px 4px rgba(0, 0, 0, 0.9);
+}
+
 .energy-bar-track {
   width: 100%;
-  height: 9px;
+  height: 8px;
   background: rgba(15, 23, 42, 0.85);
   border: 1px solid rgba(74, 222, 128, 0.5);
   border-radius: 4px;
@@ -288,6 +333,11 @@ html, body {
 .energy-bar-track.in-debt {
   border-color: rgba(255, 0, 85, 0.8);
   box-shadow: 0 0 8px rgba(255, 0, 85, 0.4), inset 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+.energy-bar-track.shield-mode {
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.3), inset 0 1px 4px rgba(0, 0, 0, 0.7);
 }
 
 .energy-bar-fill {
@@ -316,6 +366,16 @@ html, body {
   animation: energyBlink 0.2s infinite alternate;
 }
 
+.energy-bar-fill.shield-mode {
+  background: linear-gradient(90deg, #0284c7, #0ea5e9, #38bdf8);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.9);
+}
+
+.energy-bar-fill.shield-mode.ready {
+  background: linear-gradient(90deg, #0ea5e9, #38bdf8, #00f0ff);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 1);
+}
+
 @keyframes energyBlink {
   from { opacity: 0.35; }
   to { opacity: 1; }
@@ -331,15 +391,17 @@ html, body {
   border: 1px solid rgba(56, 189, 248, 0.4);
   color: var(--neon-yellow);
   font-family: var(--font-mono);
-  font-size: 16px;
+  font-size: clamp(12px, 2.5vw, 16px);
   font-weight: bold;
-  padding: 8px 14px;
+  padding: 6px clamp(8px, 1.5vw, 14px);
   border-radius: var(--radius-sm);
   cursor: pointer;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   transition: all 0.2s ease;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .hud-btn:hover {
@@ -447,20 +509,20 @@ html, body {
 }
 
 .ctrl-btn.shield-btn {
-  width: 100%;
+  width: calc(100% - 14px);
   max-width: 100%;
   min-width: 0;
-  height: 38px;
-  border-radius: 8px;
+  height: 46px;
+  border-radius: 9px;
   border-color: rgba(56, 189, 248, 0.6);
   color: #38bdf8;
   background: rgba(15, 23, 42, 0.45);
   box-shadow: 0 0 12px rgba(56, 189, 248, 0.25), 0 2px 6px rgba(0, 0, 0, 0.4);
   padding: 0 10px;
-  align-self: stretch;
+  align-self: center;
   overflow: hidden;
   box-sizing: border-box;
-  margin: 0;
+  margin: 0 auto;
 }
 
 .shield-btn-content {
@@ -1079,46 +1141,51 @@ html, body {
 
 @media (max-width: 600px) {
   #hud {
-    padding: max(8px, env(safe-area-inset-top, 8px)) max(10px, env(safe-area-inset-right, 10px)) 6px max(10px, env(safe-area-inset-left, 10px));
+    padding: max(6px, env(safe-area-inset-top, 6px)) max(8px, env(safe-area-inset-right, 8px)) 4px max(8px, env(safe-area-inset-left, 8px));
+    gap: 4px;
   }
   .hud-stat {
-    padding: 4px 8px;
+    padding: 3px 6px;
   }
   .score-container {
-    gap: 10px;
-    padding: 4px 10px;
+    gap: 6px;
+    padding: 3px 6px;
   }
   .score-divider {
-    height: 22px;
+    height: 18px;
   }
   .hud-label {
-    font-size: 9px;
-    letter-spacing: 1px;
+    font-size: 8px;
+    letter-spacing: 0.5px;
   }
   .hud-value {
-    font-size: 16px;
+    font-size: 14px;
   }
   .lives-container {
-    min-width: 76px;
-    padding: 4px 8px;
+    min-width: 0;
+    padding: 3px 5px;
   }
   .energy-container {
-    min-width: 110px;
-    padding: 4px 10px;
+    min-width: 0;
+    max-width: 95px;
+    padding: 3px 6px;
   }
   .energy-percent {
-    font-size: 13px;
+    font-size: 11px;
   }
   .energy-bar-track {
-    height: 7px;
+    height: 6px;
   }
   .life-icon {
-    width: 14px;
-    height: 17px;
+    width: 12px;
+    height: 15px;
   }
   .hud-btn {
-    padding: 6px 10px;
-    font-size: 13px;
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+  .hud-right {
+    gap: 4px;
   }
   #touchControls {
     bottom: max(12px, env(safe-area-inset-bottom, 12px));
@@ -1129,7 +1196,7 @@ html, body {
   }
   .touch-group-left {
     gap: 8px;
-    align-items: stretch;
+    align-items: center;
   }
   .touch-rot-row, .touch-group-right {
     gap: 8px;
@@ -1141,13 +1208,14 @@ html, body {
     max-height: 82px;
   }
   .ctrl-btn.shield-btn {
-    width: 100%;
+    width: calc(100% - 12px);
     max-width: 100%;
     min-width: 0;
-    height: 34px;
+    height: 40px;
     border-radius: 8px;
     padding: 0 6px;
-    align-self: stretch;
+    align-self: center;
+    margin: 0 auto;
   }
   .shield-btn-content {
     gap: 5px;

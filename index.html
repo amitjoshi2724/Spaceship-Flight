@@ -21,7 +21,7 @@
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
     rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="64x64" href="newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="newspaceship.png">
@@ -67,7 +67,7 @@
 
         <div id="energyHud" class="hud-stat energy-container">
           <div class="energy-header">
-            <span class="hud-label">ENERGY</span>
+            <span id="energyLabel" class="hud-label">ENERGY</span>
             <span id="energyVal" class="energy-percent">100%</span>
           </div>
           <div class="energy-bar-track">
@@ -211,7 +211,7 @@
 
         <div class="setting-group">
           <div class="toggle-row">
-            <label for="settingUnlimitedAmmo" class="setting-label">UNLIMITED AMMO (NO BATTERY)</label>
+            <label for="settingUnlimitedAmmo" class="setting-label">UNLIMITED AMMO (SHIELD CHARGER)</label>
             <input type="checkbox" id="settingUnlimitedAmmo" class="custom-toggle">
           </div>
         </div>
@@ -293,7 +293,7 @@
           </div>
 
           <div class="scoring-tip">
-            ⚡ <b>Tactical Reactor:</b> Lasers consume energy. Emergency Shield costs 100% and allows debt (down to -100%). Thrusters recharge the battery 2x faster (Kinetic Dynamo)!
+            ⚡ <b>Tactical Reactor:</b> Lasers consume energy. Emergency Shield costs 100% and allows debt (down to -100%). Thrusters recharge 2x faster (Kinetic Dynamo)! In Unlimited Ammo mode, the reactor converts to a steady Shield Charger.
           </div>
         </div>
 
@@ -386,7 +386,7 @@
     </div>
   </div>
 
-  <script src="game.js?v=4"></script>
+  <script src="game.js?v=5"></script>
 </body>
 
 </html>

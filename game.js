@@ -741,17 +741,30 @@
     }
 
     triggerEmergencyShield() {
-      // Emergency shield costs 100 energy, can overdraft down to -100%,
-      // but cannot be activated while already in debt (energy <= 0)
-      const SHIELD_COST = 100;
-      const MIN_ENERGY = -100;
-
-      if (!this.unlimitedAmmo && this.energy <= 0) {
-        this.soundFx.playEmptyBattery();
+      // If ship already has active shield / invincibility (e.g. from respawn or active shield),
+      // do NOT activate emergency shield or waste energy!
+      if (this.invincible) {
         return false;
       }
 
-      if (!this.unlimitedAmmo) {
+      const SHIELD_COST = 100;
+      const MIN_ENERGY = -100;
+
+      if (this.unlimitedAmmo) {
+        // Shield mode: must be 100% charged, no debt allowed
+        if (this.energy < SHIELD_COST) {
+          this.soundFx.playEmptyBattery();
+          return false;
+        }
+        this.energy = 0;
+      } else {
+        // Standard Reactor mode:
+        // Emergency shield costs 100 energy, can overdraft down to -100%,
+        // but cannot be activated while already in debt (energy <= 0)
+        if (this.energy <= 0) {
+          this.soundFx.playEmptyBattery();
+          return false;
+        }
         this.energy = Math.max(MIN_ENERGY, this.energy - SHIELD_COST);
       }
 
@@ -814,16 +827,25 @@
       this.dx *= 0.992;
       this.dy *= 0.992;
 
-      // Battery Recharge Logic (Kinetic Dynamo):
-      // Baseline idle: 15 energy per second
-      // Thrusting / kinetic motion: 2x faster (30 energy per second)
-      // Scaled dynamically by dtSeconds (fixed timestep or variable frame delta)
-      // Supports recharging up out of negative energy debt (-100% -> 100%)
+      // Battery & Shield Recharge Logic:
       // Paused while shield is active (forces post-shield recovery phase)
-      if (!this.unlimitedAmmo && !this.invincible && this.energy < this.maxEnergy) {
-        const energyPerSecond = this.thrusting ? 30 : 15;
-        const rechargeAmount = energyPerSecond * dtSeconds;
-        this.energy = Math.min(this.maxEnergy, this.energy + rechargeAmount);
+      if (!this.invincible && this.energy < this.maxEnergy) {
+        if (this.unlimitedAmmo) {
+          // Unlimited Ammo / Shield mode:
+          // Slowly charges to 100 (slower than battery, e.g. 8 energy/sec),
+          // NO kinetic dynamo speedup (constant rate whether thrusting or idle)
+          const shieldRechargeRate = 8;
+          const rechargeAmount = shieldRechargeRate * dtSeconds;
+          this.energy = Math.min(this.maxEnergy, this.energy + rechargeAmount);
+        } else {
+          // Standard Battery (Kinetic Dynamo):
+          // Baseline idle: 15 energy per second
+          // Thrusting / kinetic motion: 2x faster (30 energy per second)
+          // Supports recharging up out of negative energy debt (-100% -> 100%)
+          const energyPerSecond = this.thrusting ? 30 : 15;
+          const rechargeAmount = energyPerSecond * dtSeconds;
+          this.energy = Math.min(this.maxEnergy, this.energy + rechargeAmount);
+        }
       }
 
       // Screen wrapping
@@ -946,6 +968,7 @@
         touchControls: document.getElementById('touchControls'),
 
         energyHud: document.getElementById('energyHud'),
+        energyLabel: document.getElementById('energyLabel') || document.querySelector('#energyHud .hud-label'),
         energyVal: document.getElementById('energyVal'),
         energyBarFill: document.getElementById('energyBarFill'),
 
@@ -1351,6 +1374,9 @@
         this.domElements.settingUnlimitedAmmo.addEventListener('change', (e) => {
           this.unlimitedAmmo = e.target.checked;
           this.ship.unlimitedAmmo = this.unlimitedAmmo;
+          if (this.unlimitedAmmo && this.ship.energy < 0) {
+            this.ship.energy = 0;
+          }
           this.updateEnergyDisplay();
           try {
             localStorage.setItem('spaceship_flight_unlimited_ammo', this.unlimitedAmmo.toString());
@@ -1502,56 +1528,88 @@
     updateEnergyDisplay() {
       if (!this.domElements.energyHud) return;
 
-      if (this.unlimitedAmmo) {
-        this.domElements.energyHud.classList.add('hidden');
-        return;
-      }
-
       this.domElements.energyHud.classList.remove('hidden');
 
+      const isShieldMode = !!this.ship.unlimitedAmmo;
       const energyVal = Math.round(this.ship.energy);
-      const isDebt = energyVal < 0;
+      const isDebt = !isShieldMode && energyVal < 0;
+      const isShieldReady = isShieldMode && energyVal >= 100;
       const fillPct = isDebt ? Math.min(100, Math.abs(energyVal)) : Math.max(0, Math.min(100, energyVal));
 
+      // Update Label (ENERGY vs SHIELD)
+      const label = this.domElements.energyLabel || document.querySelector('#energyHud .hud-label');
+      if (label) {
+        label.textContent = isShieldMode ? 'SHIELD' : 'ENERGY';
+      }
+
+      // Update Container styling
+      if (isShieldMode) {
+        this.domElements.energyHud.classList.add('shield-mode');
+      } else {
+        this.domElements.energyHud.classList.remove('shield-mode');
+      }
+
+      // Update Percent readout
       if (this.domElements.energyVal) {
-        this.domElements.energyVal.textContent = isDebt ? `${energyVal}%` : `${energyVal}%`;
-        this.domElements.energyVal.classList.remove('warning', 'depleted', 'in-debt');
-        if (isDebt) {
-          this.domElements.energyVal.classList.add('in-debt');
-        } else if (energyVal < 15) {
-          this.domElements.energyVal.classList.add('depleted');
-        } else if (energyVal < 40) {
-          this.domElements.energyVal.classList.add('warning');
+        this.domElements.energyVal.textContent = `${energyVal}%`;
+        this.domElements.energyVal.classList.remove('warning', 'depleted', 'in-debt', 'shield-mode', 'ready');
+        if (isShieldMode) {
+          this.domElements.energyVal.classList.add('shield-mode');
+          if (isShieldReady) {
+            this.domElements.energyVal.classList.add('ready');
+          }
+        } else {
+          if (isDebt) {
+            this.domElements.energyVal.classList.add('in-debt');
+          } else if (energyVal < 15) {
+            this.domElements.energyVal.classList.add('depleted');
+          } else if (energyVal < 40) {
+            this.domElements.energyVal.classList.add('warning');
+          }
         }
       }
 
+      // Update Track styling
       const track = this.domElements.energyHud.querySelector('.energy-bar-track');
       if (track) {
-        track.classList.remove('warning', 'depleted', 'in-debt');
-        if (isDebt) {
-          track.classList.add('in-debt');
-        } else if (energyVal < 15) {
-          track.classList.add('depleted');
-        } else if (energyVal < 40) {
-          track.classList.add('warning');
+        track.classList.remove('warning', 'depleted', 'in-debt', 'shield-mode');
+        if (isShieldMode) {
+          track.classList.add('shield-mode');
+        } else {
+          if (isDebt) {
+            track.classList.add('in-debt');
+          } else if (energyVal < 15) {
+            track.classList.add('depleted');
+          } else if (energyVal < 40) {
+            track.classList.add('warning');
+          }
         }
       }
 
+      // Update Bar Fill styling & width
       if (this.domElements.energyBarFill) {
-        this.domElements.energyBarFill.style.width = isDebt ? `${fillPct}%` : `${fillPct}%`;
-
-        this.domElements.energyBarFill.classList.remove('warning', 'depleted', 'in-debt');
-        if (isDebt) {
-          this.domElements.energyBarFill.classList.add('in-debt');
-        } else if (energyVal < 15) {
-          this.domElements.energyBarFill.classList.add('depleted');
-        } else if (energyVal < 40) {
-          this.domElements.energyBarFill.classList.add('warning');
+        this.domElements.energyBarFill.style.width = `${fillPct}%`;
+        this.domElements.energyBarFill.classList.remove('warning', 'depleted', 'in-debt', 'shield-mode', 'ready');
+        if (isShieldMode) {
+          this.domElements.energyBarFill.classList.add('shield-mode');
+          if (isShieldReady) {
+            this.domElements.energyBarFill.classList.add('ready');
+          }
+        } else {
+          if (isDebt) {
+            this.domElements.energyBarFill.classList.add('in-debt');
+          } else if (energyVal < 15) {
+            this.domElements.energyBarFill.classList.add('depleted');
+          } else if (energyVal < 40) {
+            this.domElements.energyBarFill.classList.add('warning');
+          }
         }
       }
 
+      // Update Touch Shield Button enabled/disabled state:
       if (this.domElements.btnEmergencyShield) {
-        if (isDebt) {
+        const isButtonDisabled = isShieldMode ? energyVal < 100 : isDebt;
+        if (isButtonDisabled) {
           this.domElements.btnEmergencyShield.classList.add('in-debt');
         } else {
           this.domElements.btnEmergencyShield.classList.remove('in-debt');
@@ -1571,6 +1629,8 @@
         this.gameOver();
       } else {
         this.ship.reset(false);
+        this.ship.energy = this.ship.maxEnergy; // Guarantee fresh 100% on respawn
+        this.updateEnergyDisplay();
       }
     }
 
