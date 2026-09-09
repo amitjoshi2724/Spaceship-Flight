@@ -322,6 +322,18 @@ html, body {
   transition: border-color 0.2s ease;
 }
 
+.energy-bar-track::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+  z-index: 2;
+}
+
 .energy-bar-track.warning {
   border-color: rgba(250, 204, 21, 0.6);
 }

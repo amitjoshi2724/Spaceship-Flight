@@ -831,10 +831,11 @@
       // Battery & Shield Recharge Logic:
       // Paused while shield is active (forces post-shield recovery phase)
       if (!this.invincible) {
-        // 1. Ammo Battery recharging (for shared and dual modes)
+        // 1. Ammo Battery recharging (for shared and dual modes via Kinetic Dynamo)
         if (this.powerMode === 'shared' || this.powerMode === 'dual') {
           if (this.energy < this.maxEnergy) {
-            const energyPerSecond = this.thrusting ? 30 : 15;
+            // Kinetic Dynamo: 12.5%/s idle, accelerating by 1.6x to 20%/s while thrusting
+            const energyPerSecond = this.thrusting ? 20 : 12.5;
             const rechargeAmount = energyPerSecond * dtSeconds;
             this.energy = Math.min(this.maxEnergy, this.energy + rechargeAmount);
           }
@@ -909,24 +910,18 @@
       // 1. AMMO / BATTERY BAR (Screen-left of ship) - Only shown in Shared & Dual modes
       if (showAmmo) {
         const leftX = -offsetX - barW;
-        let ammoPct = 0;
-        let isDebt = false;
-        let ammoColor = '#4ade80';
+        const clampedEnergy = Math.max(0, Math.min(100, this.energy));
+        const ammoPct = clampedEnergy / 100;
 
-        if (this.energy < 0) {
-          isDebt = true;
-          ammoPct = Math.min(1, Math.abs(this.energy) / 100);
-          ammoColor = '#ff0055'; // Pulsing red-pink for debt
-        } else {
-          ammoPct = Math.max(0, Math.min(1, this.energy / 100));
-          if (this.energy < 15) ammoColor = '#ef4444';
-          else if (this.energy < 40) ammoColor = '#facc15';
-          else ammoColor = '#4ade80';
-        }
+        // Smooth gradient: Green (135°) at 100% -> Yellow (60°) at 50% -> Orange/Red (0°) at 0%
+        const hue = clampedEnergy >= 50
+          ? 60 + (clampedEnergy - 50) * 1.5
+          : clampedEnergy * 1.2;
+        const ammoColor = `hsl(${Math.round(hue)}, 92%, 52%)`;
 
         // Draw Ammo Track
         ctx.fillStyle = 'rgba(10, 15, 30, 0.75)';
-        ctx.strokeStyle = isDebt ? 'rgba(255, 0, 85, 0.8)' : 'rgba(148, 163, 184, 0.4)';
+        ctx.strokeStyle = `hsla(${Math.round(hue)}, 90%, 55%, 0.45)`;
         ctx.lineWidth = 1;
         this.drawRoundedRect(ctx, leftX, topY, barW, barH, radius, true, true);
 
@@ -935,7 +930,7 @@
           const fillH = Math.max(2, Math.round(barH * ammoPct));
           const fillY = topY + barH - fillH;
           ctx.fillStyle = ammoColor;
-          if (isDebt || this.energy > 80) {
+          if (clampedEnergy < 15 || clampedEnergy > 80) {
             ctx.shadowColor = ammoColor;
             ctx.shadowBlur = 4;
           }
@@ -1760,14 +1755,21 @@
 
         if (this.domElements.energyVal) {
           this.domElements.energyVal.textContent = `${shieldVal}%`;
+          this.domElements.energyVal.style.color = '';
+          this.domElements.energyVal.style.textShadow = '';
           this.domElements.energyVal.className = 'energy-percent shield-mode' + (isReady ? ' ready' : '');
         }
 
         const track = this.domElements.energyHud.querySelector('.energy-bar-track');
-        if (track) track.className = 'energy-bar-track shield-mode';
+        if (track) {
+          track.style.borderColor = '';
+          track.className = 'energy-bar-track shield-mode';
+        }
 
         if (this.domElements.energyBarFill) {
           this.domElements.energyBarFill.style.width = `${fillPct}%`;
+          this.domElements.energyBarFill.style.background = '';
+          this.domElements.energyBarFill.style.boxShadow = '';
           this.domElements.energyBarFill.className = 'energy-bar-fill shield-mode' + (isReady ? ' ready' : '');
         }
 
@@ -1780,35 +1782,34 @@
           }
         }
       } else if (isDual) {
-        // Displays AMMO in green/yellow/red (no debt in dual mode)
+        // Displays AMMO with smooth Green -> Yellow -> Red gradient
         const ammoVal = Math.round(this.ship.energy);
         const fillPct = Math.max(0, Math.min(100, ammoVal));
+        const hue = fillPct >= 50 ? 60 + (fillPct - 50) * 1.5 : fillPct * 1.2;
+        const colorHsl = `hsl(${Math.round(hue)}, 92%, 52%)`;
+        const shadowHsl = `hsla(${Math.round(hue)}, 95%, 55%, 0.85)`;
 
         if (this.domElements.energyLabel) this.domElements.energyLabel.textContent = 'AMMO';
         this.domElements.energyHud.classList.remove('shield-mode');
 
         if (this.domElements.energyVal) {
           this.domElements.energyVal.textContent = `${ammoVal}%`;
-          let valClass = 'energy-percent';
-          if (ammoVal < 15) valClass += ' depleted';
-          else if (ammoVal < 40) valClass += ' warning';
-          this.domElements.energyVal.className = valClass;
+          this.domElements.energyVal.style.color = colorHsl;
+          this.domElements.energyVal.style.textShadow = `0 0 8px ${shadowHsl}, 0 2px 4px rgba(0, 0, 0, 0.9)`;
+          this.domElements.energyVal.className = 'energy-percent' + (ammoVal < 15 ? ' depleted' : '');
         }
 
         const track = this.domElements.energyHud.querySelector('.energy-bar-track');
         if (track) {
-          let trackClass = 'energy-bar-track';
-          if (ammoVal < 15) trackClass += ' depleted';
-          else if (ammoVal < 40) trackClass += ' warning';
-          track.className = trackClass;
+          track.style.borderColor = `hsla(${Math.round(hue)}, 90%, 55%, 0.55)`;
+          track.className = 'energy-bar-track' + (ammoVal < 15 ? ' depleted' : '');
         }
 
         if (this.domElements.energyBarFill) {
           this.domElements.energyBarFill.style.width = `${fillPct}%`;
-          let fillClass = 'energy-bar-fill';
-          if (ammoVal < 15) fillClass += ' depleted';
-          else if (ammoVal < 40) fillClass += ' warning';
-          this.domElements.energyBarFill.className = fillClass;
+          this.domElements.energyBarFill.style.background = `linear-gradient(90deg, hsl(${Math.round(hue)}, 85%, 35%), hsl(${Math.round(hue)}, 90%, 50%), hsl(${Math.round(hue)}, 95%, 60%))`;
+          this.domElements.energyBarFill.style.boxShadow = `0 0 10px ${shadowHsl}`;
+          this.domElements.energyBarFill.className = 'energy-bar-fill' + (ammoVal < 15 ? ' depleted' : '');
         }
 
         // --- SECONDARY GAUGE (#shieldHud for Dual Mode) ---
@@ -1845,32 +1846,31 @@
         // Shield costs 50% energy, requiring at least 50% charge (strict zero debt)
         const energyVal = Math.round(this.ship.energy);
         const fillPct = Math.max(0, Math.min(100, energyVal));
+        const hue = fillPct >= 50 ? 60 + (fillPct - 50) * 1.5 : fillPct * 1.2;
+        const colorHsl = `hsl(${Math.round(hue)}, 92%, 52%)`;
+        const shadowHsl = `hsla(${Math.round(hue)}, 95%, 55%, 0.85)`;
 
         if (this.domElements.energyLabel) this.domElements.energyLabel.textContent = 'ENERGY';
         this.domElements.energyHud.classList.remove('shield-mode');
 
         if (this.domElements.energyVal) {
           this.domElements.energyVal.textContent = `${energyVal}%`;
-          let valClass = 'energy-percent';
-          if (energyVal < 15) valClass += ' depleted';
-          else if (energyVal < 40) valClass += ' warning';
-          this.domElements.energyVal.className = valClass;
+          this.domElements.energyVal.style.color = colorHsl;
+          this.domElements.energyVal.style.textShadow = `0 0 8px ${shadowHsl}, 0 2px 4px rgba(0, 0, 0, 0.9)`;
+          this.domElements.energyVal.className = 'energy-percent' + (energyVal < 15 ? ' depleted' : '');
         }
 
         const track = this.domElements.energyHud.querySelector('.energy-bar-track');
         if (track) {
-          let trackClass = 'energy-bar-track';
-          if (energyVal < 15) trackClass += ' depleted';
-          else if (energyVal < 40) trackClass += ' warning';
-          track.className = trackClass;
+          track.style.borderColor = `hsla(${Math.round(hue)}, 90%, 55%, 0.55)`;
+          track.className = 'energy-bar-track' + (energyVal < 15 ? ' depleted' : '');
         }
 
         if (this.domElements.energyBarFill) {
           this.domElements.energyBarFill.style.width = `${fillPct}%`;
-          let fillClass = 'energy-bar-fill';
-          if (energyVal < 15) fillClass += ' depleted';
-          else if (energyVal < 40) fillClass += ' warning';
-          this.domElements.energyBarFill.className = fillClass;
+          this.domElements.energyBarFill.style.background = `linear-gradient(90deg, hsl(${Math.round(hue)}, 85%, 35%), hsl(${Math.round(hue)}, 90%, 50%), hsl(${Math.round(hue)}, 95%, 60%))`;
+          this.domElements.energyBarFill.style.boxShadow = `0 0 10px ${shadowHsl}`;
+          this.domElements.energyBarFill.className = 'energy-bar-fill' + (energyVal < 15 ? ' depleted' : '');
         }
 
         if (this.domElements.btnEmergencyShield) {
