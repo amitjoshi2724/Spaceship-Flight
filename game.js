@@ -832,9 +832,9 @@
     }
 
     triggerEmergencyShield() {
-      // If ship already has active shield / invincibility (e.g. from respawn or active shield),
+      // If ship already has active temporary shield (e.g. from respawn or active shield),
       // do NOT activate emergency shield or waste energy!
-      if (this.invincible) {
+      if (this.invincible && !this.unlimitedShield) {
         return false;
       }
 
@@ -915,8 +915,9 @@
       this.dy *= 0.992;
 
       // Battery & Shield Recharge Logic:
-      // Paused while shield is active (forces post-shield recovery phase)
-      if (!this.invincible) {
+      // Paused while temporary emergency shield is active (forces post-shield recovery phase),
+      // but always recharges when Unlimited Shield (God Mode) is enabled.
+      if (!this.invincible || this.unlimitedShield) {
         // 1. Ammo Battery recharging (for shared and dual modes via Kinetic Dynamo)
         if (this.powerMode === 'shared' || this.powerMode === 'dual') {
           if (this.energy < this.maxEnergy) {
@@ -1860,7 +1861,7 @@
         }
 
         if (this.domElements.btnEmergencyShield) {
-          if (!isReady || this.ship.invincible) {
+          if (!isReady || (this.ship.invincible && !this.ship.unlimitedShield)) {
             this.domElements.btnEmergencyShield.classList.add('uncharged');
             this.domElements.btnEmergencyShield.classList.remove('in-debt');
           } else {
@@ -1919,7 +1920,7 @@
           }
 
           if (this.domElements.btnEmergencyShield) {
-            if (!isReady || this.ship.invincible) {
+            if (!isReady || (this.ship.invincible && !this.ship.unlimitedShield)) {
               this.domElements.btnEmergencyShield.classList.add('uncharged');
               this.domElements.btnEmergencyShield.classList.remove('in-debt');
             } else {
@@ -1960,7 +1961,7 @@
         }
 
         if (this.domElements.btnEmergencyShield) {
-          if (this.ship.energy < 50 || this.ship.invincible) {
+          if (this.ship.energy < 50 || (this.ship.invincible && !this.ship.unlimitedShield)) {
             this.domElements.btnEmergencyShield.classList.add('uncharged');
             this.domElements.btnEmergencyShield.classList.remove('in-debt');
           } else {
