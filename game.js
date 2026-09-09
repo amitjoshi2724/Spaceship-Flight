@@ -640,6 +640,61 @@
 
       return false;
     }
+
+    // Fast 2D Line Segment vs Line Segment Intersection
+    segmentsIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+      const d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      if (Math.abs(d) < 1e-9) return false; // Parallel or collinear
+
+      const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / d;
+      const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / d;
+
+      return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+    }
+
+    // Exact Polygon-vs-Polygon Collision between Asteroid and 12-point Spaceship Hull
+    collidesWithShip(ship) {
+      // 1. Broad-phase bounding radius test
+      const distSq = (this.x - ship.x) ** 2 + (this.y - ship.y) ** 2;
+      const maxDist = this.radius * 1.6 + ship.width * 0.55;
+      if (distSq > maxDist * maxDist) return false;
+
+      // 2. Get transformed world vertices for both rock and ship
+      const rockPts = this.getTransformedPoints();
+      const shipPts = ship.getTransformedPoints();
+
+      // 3. Exact Edge-to-Edge segment intersection tests (12 ship edges vs rock polygon edges)
+      for (let i = 0, j = rockPts.length - 1; i < rockPts.length; j = i++) {
+        const rx1 = rockPts[j].x, ry1 = rockPts[j].y;
+        const rx2 = rockPts[i].x, ry2 = rockPts[i].y;
+
+        for (let k = 0, m = shipPts.length - 1; k < shipPts.length; m = k++) {
+          const sx1 = shipPts[m].x, sy1 = shipPts[m].y;
+          const sx2 = shipPts[k].x, sy2 = shipPts[k].y;
+
+          if (this.segmentsIntersect(rx1, ry1, rx2, ry2, sx1, sy1, sx2, sy2)) {
+            return true; // Edge crossing detected!
+          }
+        }
+      }
+
+      // 4. Polygon containment tests (handles cases where one polygon is fully inside the other):
+      // a) Ship center inside rock (large rock engulfs ship)
+      if (this.containsPoint(ship.x, ship.y)) return true;
+
+      // b) Rock center inside ship hull (small rock inside ship body)
+      let rockInsideShip = false;
+      for (let k = 0, m = shipPts.length - 1; k < shipPts.length; m = k++) {
+        const xi = shipPts[k].x, yi = shipPts[k].y;
+        const xj = shipPts[m].x, yj = shipPts[m].y;
+        const intersect = (yi > this.y !== yj > this.y) &&
+          (this.x < ((xj - xi) * (this.y - yi)) / (yj - yi) + xi);
+        if (intersect) rockInsideShip = !rockInsideShip;
+      }
+      if (rockInsideShip) return true;
+
+      return false;
+    }
   }
 
   // ============================================================================
@@ -710,6 +765,37 @@
       try {
         localStorage.setItem('spaceship_flight_ship_scale', this.scalePercent.toString());
       } catch (e) { }
+    }
+
+    // Exact 12-point hull polygon mirroring newspaceship.png (64x64) pixel boundaries
+    // Transformed by ship position (x, y) and rotation angle
+    getTransformedPoints() {
+      const rad = (this.angle * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const w = this.width;
+      const h = this.height;
+
+      // 12-point silhouette coordinates relative to ship center (0, 0)
+      const localPts = [
+        { x:  0.000 * w, y: -0.484 * h }, // 1. Nose Tip
+        { x:  0.219 * w, y: -0.219 * h }, // 2. Right Shoulder (Head-to-body transition)
+        { x:  0.219 * w, y: -0.047 * h }, // 3. Right Wing Root
+        { x:  0.344 * w, y:  0.203 * h }, // 4. Right Wingtip
+        { x:  0.219 * w, y:  0.234 * h }, // 5. Right Wing Inner Notch
+        { x:  0.312 * w, y:  0.469 * h }, // 6. Right Tail Fin Tip
+        { x:  0.000 * w, y:  0.469 * h }, // 7. Engine Base Center
+        { x: -0.312 * w, y:  0.469 * h }, // 8. Left Tail Fin Tip
+        { x: -0.219 * w, y:  0.234 * h }, // 9. Left Wing Inner Notch
+        { x: -0.344 * w, y:  0.203 * h }, // 10. Left Wingtip
+        { x: -0.219 * w, y: -0.047 * h }, // 11. Left Wing Root
+        { x: -0.219 * w, y: -0.219 * h }  // 12. Left Shoulder (Head-to-body transition)
+      ];
+
+      return localPts.map((pt) => ({
+        x: this.x + (pt.x * cos - pt.y * sin),
+        y: this.y + (pt.x * sin + pt.y * cos)
+      }));
     }
 
     reset(full = false) {
@@ -1980,8 +2066,8 @@
             continue;
           }
 
-          // Check collision with ship
-          if (!this.ship.invincible && !r.popped && r.containsPoint(this.ship.x, this.ship.y)) {
+          // Exact 12-point Polygon-vs-Polygon collision with ship
+          if (!this.ship.invincible && !r.popped && r.collidesWithShip(this.ship)) {
             r.popped = true;
             this.rocks.splice(j, 1);
             this.handlePlayerHit();

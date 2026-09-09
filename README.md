@@ -71,9 +71,9 @@ Enjoy a procedural multi-layered parallax starfield with gentle twinkling that r
 ### 4. Clean Plasma Laser Bullets
 In the original 2016 Android app, a blue dot had been placed in the center of bullets as a build test. In this version, bullets are pure, brilliant golden yellow bolts with vibrant outer bloom.
 
-### 5. Authentic Physics & Dynamic Asteroid Variations
-- **5 Varied Asteroid Shapes:** In addition to Amit's original 2016 5-point polygon from `RockMaker.java` (`[0, 25, 15, -5, -8]`, `[0, 5, 30, 25, 15]`), asteroids now feature a handful of distinct space rock shapes (jagged crags, diamond asteroids, chunky meteorites, and elongated boulders) randomly chosen upon spawn.
-- **Ray-Casting Collision Algorithm:** Accurately ports the point-in-polygon ray-casting test from `Polygon.java` (`rayCastIntersect`).
+### 5. Authentic Physics & Exact 12-Point Polygon Collision
+- **5 Varied Asteroid Shapes:** In addition to Amit's original 2016 5-point polygon from `RockMaker.java` (`[0, 25, 15, -5, -8]`, `[0, 5, 30, 25, 15]`), asteroids feature a handful of distinct space rock shapes (jagged crags, diamond asteroids, chunky meteorites, and elongated boulders) randomly chosen upon spawn.
+- **Exact 12-Point Polygon-vs-Polygon Collision:** Replaces single-point checks with a 12-point oriented polygon that traces the rocket's exact pixel boundaries (nose antenna, head-to-body shoulders, wing roots, outer wingtips, inner notches, and flared tail fins). Tests line-segment crossings and containment against rotating asteroid polygons, eliminating ghost passes and near-miss bugs.
 - **Inertial Flight Dynamics & Strict Cleanup:** Authentic drift damping (`dx *= 0.992, dy *= 0.992`), velocity cap, targeted trajectories toward the screen, and immediate memory cleanup of off-screen bullets and asteroids to guarantee zero lag.
 
 ### 6. Power & Shield Systems (3 Game Modes)
