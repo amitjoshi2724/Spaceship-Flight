@@ -1414,11 +1414,9 @@
       this.emergencyOverdrive = false;
       this.jinkTimer = 0;
 
-      // Dual-Channel Weapons Timers
+      // Unified Weapon Timer (Context-aware: Defend vs. Attack choice)
       this.shootTimer = 0;
       this.shootInterval = difficulty === 'hard' ? 95 : difficulty === 'easy' ? 150 : 120;
-      this.defenseTimer = 0;
-      this.defenseInterval = 200; // ~3.3s cooldown: dodging is primary, shooting rocks is rare emergency fallback
       this.telegraphTimer = 0;
     }
 
@@ -1764,12 +1762,22 @@
       }
 
       // -------------------------------------------------------------
-      // DUAL-CHANNEL WEAPONS SYSTEM
+      // UNIFIED WEAPON SYSTEM (Tactical Choice: Defend vs. Attack)
+      // The UFO has 1 single laser cannon. When loaded, it decides:
+      // - If an asteroid poses an imminent crash hazard -> fire DEFENSIVELY to survive.
+      // - Otherwise -> fire OFFENSIVELY at the player rocket.
+      // Firing puts the weapon on full cooldown, creating true opportunity cost!
       // -------------------------------------------------------------
+      this.shootTimer++;
+      if (this.shootTimer >= this.shootInterval - 20) {
+        this.telegraphTimer = this.shootInterval - this.shootTimer;
+      }
 
-      // Channel 2: Emergency Point-Defense (Last-resort defense ONLY when dodging is insufficient)
-      this.defenseTimer++;
-      if (this.defenseTimer >= this.defenseInterval && threats.length > 0) {
+      if (this.shootTimer >= this.shootInterval) {
+        this.shootTimer = 0;
+        this.telegraphTimer = 0;
+
+        // 1. Evaluate whether an emergency defensive shot is needed to survive
         let emergencyTarget = null;
         let highestUrgency = 0;
 
@@ -1778,9 +1786,9 @@
           const proj = th.relX * chosenRay.dkX + th.relY * chosenRay.dkY;
           const lat = Math.hypot(th.relX - proj * chosenRay.dkX, th.relY - proj * chosenRay.dkY);
 
-          // STRICT emergency condition: unavoidable collision directly in forward flight path
+          // Direct imminent collision in the forward corridor
           const isDirectPath = proj > 0 && proj < th.clearance * 1.5 && lat < th.clearance * 0.75;
-          const isImminentCrash = th.tImpact < 0.35 && th.dist < th.clearance * 1.3;
+          const isImminentCrash = th.tImpact < 0.40 && th.dist < th.clearance * 1.4;
 
           if (isDirectPath && isImminentCrash) {
             if (th.urgency > highestUrgency) {
@@ -1791,41 +1799,31 @@
         }
 
         if (emergencyTarget) {
+          // DEFENSIVE SHOT: Uses its only laser to blast the asteroid to save its life!
           const aimDist = Math.hypot(emergencyTarget.relX, emergencyTarget.relY) || 1;
           const bVx = (emergencyTarget.relX / aimDist) * this.vLaser;
           const bVy = (emergencyTarget.relY / aimDist) * this.vLaser;
           ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'rock'));
           this.soundFx.playUFOLaser();
-          this.defenseTimer = 0;
+          // Jink away immediately after defensive blast
+          this.jinkTimer = 25;
+        } else {
+          // OFFENSIVE SHOT: Fires at the player rocket (50% direct, 50% predictive lead)
+          let aimX = pDx;
+          let aimY = pDy;
+          if (Math.random() < 0.5) {
+            const timeToHit = pDist / this.vLaser;
+            aimX += player.dx * timeToHit;
+            aimY += player.dy * timeToHit;
+          }
+          const aimDist = Math.hypot(aimX, aimY) || 1;
+          const bVx = (aimX / aimDist) * this.vLaser;
+          const bVy = (aimY / aimDist) * this.vLaser;
+
+          ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'player'));
+          this.soundFx.playUFOLaser();
+          this.jinkTimer = 25;
         }
-      }
-
-      // Channel 1: Offensive Cannons (Target: Player Rocket)
-      this.shootTimer++;
-      if (this.shootTimer >= this.shootInterval - 20) {
-        this.telegraphTimer = this.shootInterval - this.shootTimer;
-      }
-      if (this.shootTimer >= this.shootInterval) {
-        this.shootTimer = 0;
-        this.telegraphTimer = 0;
-
-        // 50% direct aim, 50% predictive lead aim
-        let aimX = pDx;
-        let aimY = pDy;
-        if (Math.random() < 0.5) {
-          const timeToHit = pDist / this.vLaser;
-          aimX += player.dx * timeToHit;
-          aimY += player.dy * timeToHit;
-        }
-        const aimDist = Math.hypot(aimX, aimY) || 1;
-        const bVx = (aimX / aimDist) * this.vLaser;
-        const bVy = (aimY / aimDist) * this.vLaser;
-
-        ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'player'));
-        this.soundFx.playUFOLaser();
-
-        // Post-shot tactical jink along Algorithm 2's best ray
-        this.jinkTimer = 25;
       }
 
       return true;

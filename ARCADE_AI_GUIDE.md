@@ -504,14 +504,34 @@ $$t^* = \frac{-B - \sqrt{\Delta}}{2A}$$
 
 ---
 
-### 7.2 Dual-Channel Weapons Architecture
-Never lock an enemy out of defending itself just because it shot at the player!
+### 7.2 The Unified Tactical Weapon (Defend vs. Attack Opportunity Cost)
 
-Separate weapons into two distinct timers:
-- **Channel 1: Heavy Primary Cannons** (Interval: ~2.0s). Targets the player. Features a 0.3s glowing telegraph to give the player a fair dodging window.
-- **Channel 2: Rapid Point-Defense System** (Interval: ~0.45s). Automatically sweeps for incoming asteroids or missiles in its forward flight path and vaporizes them.
+In classic arcade design, giving an enemy two separate independent guns (one for shooting the player and one rapid-fire gun for shooting rocks) easily breaks the game: the enemy becomes an automated vacuum cleaner that nukes asteroids and helps the player.
 
-This gives the enemy a living, combat-hardened presence: it fights the environment *with* you while simultaneously hunting you down.
+A far more intelligent, logical, and elegant design is the **Single Unified Tactical Weapon**:
+
+```
+                       ┌─────────────────────────┐
+                       │  UFO LASER READY TO FIRE │
+                       └────────────┬────────────┘
+                                    │
+                    Is an asteroid on an imminent,
+                    unavoidable collision course?
+                               /         \
+                             YES          NO
+                             /             \
+       [DEFENSIVE EMERGENCY SHOT]       [OFFENSIVE HUNTER SHOT]
+       Blasts asteroid to survive       Fires at player rocket
+       (Sacrifices attack round)        (50% direct, 50% lead intercept)
+                             \             /
+                              ▼           ▼
+                       [FULL RELOAD COOLDOWN (~2.0s)]
+```
+
+#### Why This Creates High-Level Gameplay:
+1. **Opportunity Cost**: If the UFO shoots a rock to save its life, its gun goes on full cooldown! It cannot shoot the player until it reloads.
+2. **Player Strategy (Baiting)**: The player can intentionally maneuver so that asteroids crowd the UFO, **forcing the UFO to waste its laser defending itself**, which opens a 2-second vulnerability window for the player to dive in and destroy it!
+3. **No Screen Clearing**: Because the UFO only fires once every ~2 seconds, it will never act as a rock exterminator for the player. 95%+ of the time, it must rely purely on its **Context Steering dodging maneuvers** to survive.
 
 ---
 
