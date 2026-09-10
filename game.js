@@ -1431,7 +1431,8 @@
 
     recalculateSize() {
       const dScreen = Math.min(this.canvas.width, this.canvas.height);
-      this.width = Math.round(Math.max(36, Math.min(72, dScreen * 0.085)));
+      // Doubled UFO size (72px - 144px) so it's a satisfying, legible target to shoot
+      this.width = Math.round(Math.max(72, Math.min(144, dScreen * 0.17)));
       this.height = this.width;
       this.radius = this.width * 0.463;
 
