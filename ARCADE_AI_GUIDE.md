@@ -54,9 +54,12 @@ The lateral repulsion forces completely cancel each other out ($+10 - 10 = 0$). 
 
 ---
 
-### The Solution: Context Steering (The Ray-Map Model)
+### The Solution: Context Steering (The 3 Core Building Blocks)
 
-Instead of forcing all desires into a single summed vector, Context Steering breaks the problem down into **Candidate Directions** (a compass of $N$ rays, typically 8 or 16):
+Instead of forcing all desires into a single summed vector, Context Steering divides the problem into three intuitive, human-like steps:
+
+#### 1. The 16-Ray Compass (Discretizing Options)
+Imagine standing on the bridge of the UFO. Around you are 16 windows looking out in a complete circle ($22.5^\circ$ apart: North, North-East, East, etc.).
 
 ```
                         0° (North)
@@ -70,20 +73,23 @@ Instead of forcing all desires into a single summed vector, Context Steering bre
                        180° (South)
 ```
 
-Every frame, the AI computes two independent scorecards across all 16 rays:
-1. **Danger Map $D(k)$**: How dangerous is it to move in direction $k$? ($0.0 = \text{clear}$, $> 1.0 = \text{collision imminent}$).
-2. **Interest Map $I(k)$**: How desirable is direction $k$? (Moving toward player, flanking, staying on screen).
+Every frame, the UFO grades each of those 16 directions on a report card.
 
-Then, each ray gets a composite score:
-$$\text{Score}(k) = I(k) - w_{\text{danger}} \cdot D(k)$$
+#### 2. The Danger Map vs. The Interest Map
+- **Danger Map ($D$)**: *"Will something hit me if I go this way?"*  
+  For each rock moving towards the UFO, any ray pointing towards that collision path receives a heavy penalty. The closer the time to impact ($1 / t_{\text{impact}}$), the heavier the penalty.
+- **Interest Map ($I$)**: *"Where would I LIKE to be?"*  
+  - *"Do I want to get within combat range of the player?"* (Ray pointing toward rocket gets a positive score)  
+  - *"Do I want to circle around them?"* (Perpendicular flanking rays get bonus points)  
+  - *"Am I too close to the screen edge?"* (Inward rays get bonus points)  
+  - *"Which way am I already moving?"* (Inertia bonus to keep smooth momentum)
 
-The enemy simply steers toward whichever ray has the highest score.
+#### 3. Subtract and Pick the Best Window
+The UFO subtracts the Danger from the Interest for all 16 directions and simply steers towards the highest-scoring window!
+$$\text{Total Score}(k) = \text{Interest}(k) - 3.5 \times \text{Danger}(k)$$
 
-#### Why This Magically Solves Gaps
-- Rays pointing at Rock A get a huge Danger penalty (e.g. $-10.0$).
-- Rays pointing at Rock B get a huge Danger penalty (e.g. $-10.0$).
-- The ray pointing directly through the clear gap between them has **zero Danger**, so its score remains positive!
-- **Result**: Without any special pathfinding code, the ship naturally and gracefully snakes right through the center corridor.
+- **If the corridor ahead is clear**, it flies smoothly toward you.
+- **If two asteroids squeeze toward it**, the rays pointing at the rocks drop to negative infinity, while the narrow gap between them remains positive — **the UFO naturally threads the needle through the gap without needing any special "gap-detecting" code!**
 
 ---
 
@@ -237,7 +243,17 @@ class ContextSteeringBrain {
 
 ---
 
-## 5. The Anti-Jitter Playbook (The 4 Layers of Smoothness)
+## 5. The Anti-Jitter Playbook: The Secret to Making It Feel "Alive"
+
+The difference between a **"janky math experiment"** and a **"badass enemy"** is 3 simple tricks:
+
+1. **Hysteresis (Stubbornness)**: Don't change direction for a 1% score difference. The new direction must be significantly better ($\Delta > 0.18$), which prevents high-frequency flickering.
+2. **Continuous Math over Hardcoded Thresholds**: Never write `if (dist < 100)`. Instead, use smooth curves like $1 / (t_{\text{impact}} + \epsilon)$ or $\tanh(\text{distance})$. Smooth inputs produce smooth behaviors.
+3. **Visual Feedback (Telegraphing)**: We added a 0.3s purple dome glow before firing, thruster particle flares during evasive overdrive, and $\pm 15^\circ$ banking tilt when turning. The player's brain interprets these cues as conscious intent.
+
+---
+
+### The 4 Engineering Layers of Smoothness
 
 When developers try to code AI from scratch, their ships often shake, twitch, or spin like a top. Real creatures and vehicles have mass and inertia. Here are the 4 techniques that eradicate jitter completely:
 
