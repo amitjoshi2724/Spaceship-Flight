@@ -216,6 +216,118 @@
         osc.stop(now + idx * 0.18 + 0.22);
       });
     }
+
+    playUFOWarning() {
+      if (!this.enabled) return;
+      this.init();
+      this.resume();
+      if (!this.ctx) return;
+
+      try {
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const lfo = this.ctx.createOscillator();
+        const lfoGain = this.ctx.createGain();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(760, now + 0.6);
+
+        lfo.type = 'sine';
+        lfo.frequency.setValueAtTime(8, now); // 8Hz vibrato
+        lfoGain.gain.setValueAtTime(45, now);
+        lfo.connect(osc.frequency);
+
+        gain.gain.setValueAtTime(0.01, now);
+        gain.gain.linearRampToValueAtTime(0.18, now + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        lfo.start(now);
+        osc.stop(now + 0.65);
+        lfo.stop(now + 0.65);
+      } catch (e) { }
+    }
+
+    playUFOLaser() {
+      if (!this.enabled) return;
+      this.init();
+      this.resume();
+      if (!this.ctx) return;
+
+      try {
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(240, now + 0.15);
+
+        gain.gain.setValueAtTime(0.16, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.15);
+      } catch (e) { }
+    }
+
+    playUFOExplosion() {
+      if (!this.enabled) return;
+      this.init();
+      this.resume();
+      if (!this.ctx) return;
+
+      try {
+        const now = this.ctx.currentTime;
+        const duration = 0.55;
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(600, now);
+        filter.frequency.exponentialRampToValueAtTime(90, now + duration);
+        filter.Q.setValueAtTime(2.5, now);
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        noise.start(now);
+
+        const osc = this.ctx.createOscillator();
+        const oscGain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.exponentialRampToValueAtTime(320, now + 0.3);
+        oscGain.gain.setValueAtTime(0.12, now);
+        oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        osc.connect(oscGain);
+        oscGain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.3);
+      } catch (e) { }
+    }
   }
 
   // ============================================================================
@@ -798,6 +910,44 @@
       }));
     }
 
+    containsPoint(px, py) {
+      const pts = this.getTransformedPoints();
+      let inside = false;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const xi = pts[i].x, yi = pts[i].y;
+        const xj = pts[j].x, yj = pts[j].y;
+        const intersect = (yi > py !== yj > py) &&
+          (px < ((xj - xi) * (py - yi)) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    containsBullet(bullet) {
+      const distSq = (this.x - bullet.x) ** 2 + (this.y - bullet.y) ** 2;
+      const maxR = this.width * 0.55;
+      if (distSq > (maxR + bullet.radius) ** 2) return false;
+
+      if (this.containsPoint(bullet.x, bullet.y)) return true;
+
+      const pts = this.getTransformedPoints();
+      const bRadiusSq = bullet.radius * bullet.radius;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const x1 = pts[j].x, y1 = pts[j].y;
+        const x2 = pts[i].x, y2 = pts[i].y;
+        const dx = x2 - x1, dy = y2 - y1;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq === 0) continue;
+        let t = ((bullet.x - x1) * dx + (bullet.y - y1) * dy) / lenSq;
+        t = Math.max(0, Math.min(1, t));
+        const projX = x1 + t * dx;
+        const projY = y1 + t * dy;
+        const dSq = (bullet.x - projX) ** 2 + (bullet.y - projY) ** 2;
+        if (dSq <= bRadiusSq) return true;
+      }
+      return false;
+    }
+
     reset(full = false) {
       this.x = this.canvas.width / 2;
       this.y = this.canvas.height / 2;
@@ -865,8 +1015,8 @@
     fire(bullets) {
       const COST_PER_SHOT = 15;
 
-      // In shield_only mode, ammo is free/unlimited
-      if (this.powerMode !== 'shield_only') {
+      // In shield_only mode or with unlimitedAmmo/unlimitedShield (God Mode), ammo is free
+      if (this.powerMode !== 'shield_only' && !this.unlimitedAmmo && !this.unlimitedShield) {
         if (this.energy < COST_PER_SHOT) {
           this.soundFx.playEmptyBattery();
           return false;
@@ -1140,6 +1290,564 @@
   }
 
   // ============================================================================
+  // UFO BULLET (Alien Violet Plasma Bolt)
+  // ============================================================================
+  class UFOBullet {
+    constructor(x, y, dx, dy, targetType = 'player') {
+      this.x = x;
+      this.y = y;
+      this.dx = dx;
+      this.dy = dy;
+      this.radius = 3.5;
+      this.hit = false;
+      this.targetType = targetType; // 'player' or 'rock'
+      this.trail = [];
+    }
+
+    update(canvasWidth, canvasHeight) {
+      this.trail.push({ x: this.x, y: this.y, alpha: 1.0 });
+      if (this.trail.length > 5) this.trail.shift();
+      for (const t of this.trail) t.alpha *= 0.72;
+
+      this.x += this.dx;
+      this.y += this.dy;
+
+      if (
+        this.x < -25 ||
+        this.x > canvasWidth + 25 ||
+        this.y < -25 ||
+        this.y > canvasHeight + 25
+      ) {
+        this.hit = true;
+      }
+    }
+
+    draw(ctx) {
+      if (this.hit) return;
+      ctx.save();
+
+      // Violet plasma trail
+      for (let i = 0; i < this.trail.length; i++) {
+        const t = this.trail[i];
+        ctx.fillStyle = `rgba(192, 132, 252, ${t.alpha * 0.45})`;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, this.radius * (0.6 + (i / this.trail.length) * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Radiant outer glow (neon alien violet / magenta)
+      ctx.shadowColor = '#c084fc';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#e879f9';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Incandescent bright core
+      ctx.fillStyle = '#fdf4ff';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+  }
+
+  // ============================================================================
+  // UFO (EVIL SHIP) CLASS
+  // Uses enemyship.png with exact 20-point collision polygon & Unified Context Steering
+  // ============================================================================
+  class UFO {
+    constructor(canvas, soundFx, particleSystem, difficulty = 'medium') {
+      this.canvas = canvas;
+      this.soundFx = soundFx;
+      this.particles = particleSystem;
+      this.difficulty = difficulty;
+
+      this.sprite = new Image();
+      this.sprite.src = 'enemyship.png';
+
+      this.recalculateSize();
+
+      // Spawn location from screen perimeter
+      const side = Math.floor(Math.random() * 4);
+      if (side === 0) {
+        // Left
+        this.x = -this.width;
+        this.y = this.canvas.height * (0.2 + Math.random() * 0.6);
+        this.dx = this.vCruise;
+        this.dy = (Math.random() - 0.5) * this.vCruise;
+      } else if (side === 1) {
+        // Right
+        this.x = this.canvas.width + this.width;
+        this.y = this.canvas.height * (0.2 + Math.random() * 0.6);
+        this.dx = -this.vCruise;
+        this.dy = (Math.random() - 0.5) * this.vCruise;
+      } else if (side === 2) {
+        // Top: avoid center HUD cluster (spawn on left or right flank)
+        const leftZone = Math.random() < 0.5;
+        this.x = leftZone
+          ? this.canvas.width * (0.08 + Math.random() * 0.22)
+          : this.canvas.width * (0.70 + Math.random() * 0.22);
+        this.y = -this.height;
+        this.dx = (Math.random() - 0.5) * this.vCruise;
+        this.dy = this.vCruise;
+      } else {
+        // Bottom
+        this.x = this.canvas.width * (0.2 + Math.random() * 0.6);
+        this.y = this.canvas.height + this.height;
+        this.dx = (Math.random() - 0.5) * this.vCruise;
+        this.dy = -this.vCruise;
+      }
+
+      this.drawAngle = 0;
+      this.alive = true;
+      this.lifetime = 0;
+      this.maxLifetime = 1500; // ~25 seconds at 60fps
+      this.exiting = false;
+
+      // Steering State (Unified Algorithm 2)
+      this.currentHeadingIndex = 0;
+      this.orbitDirection = Math.random() < 0.5 ? 1 : -1;
+      this.orbitTimer = 0;
+      this.orbitDuration = 300 + Math.random() * 200;
+      this.emergencyOverdrive = false;
+      this.jinkTimer = 0;
+
+      // Dual-Channel Weapons Timers
+      this.shootTimer = 0;
+      this.shootInterval = difficulty === 'hard' ? 95 : difficulty === 'easy' ? 150 : 120;
+      this.defenseTimer = 0;
+      this.defenseInterval = 28; // ~0.47s fast reaction defense cycle
+      this.telegraphTimer = 0;
+    }
+
+    recalculateSize() {
+      const dScreen = Math.min(this.canvas.width, this.canvas.height);
+      this.width = Math.round(Math.max(36, Math.min(72, dScreen * 0.085)));
+      this.height = this.width;
+      this.radius = this.width * 0.463;
+
+      this.vCruise = (0.22 * dScreen) / 60;
+      this.vBoost = this.vCruise * 1.65;
+      this.vLaser = (0.85 * dScreen) / 60;
+    }
+
+    // Exact 20-point boundary polygon tracing enemyship.png
+    getTransformedPoints() {
+      const rad = (this.drawAngle * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const w = this.width;
+      const h = this.height;
+
+      const localPts = [
+        // Upper Cockpit Dome
+        { x:  0.000 * w, y: -0.250 * h }, // 1. Dome Apex Top
+        { x:  0.141 * w, y: -0.244 * h }, // 2. Dome Top Right Slope
+        { x:  0.244 * w, y: -0.206 * h }, // 3. Dome Upper-Right Corner
+        { x:  0.306 * w, y: -0.141 * h }, // 4. Dome Right Flank
+        { x:  0.325 * w, y: -0.031 * h }, // 5. Dome Base / Saucer Transition
+        // Lower Saucer Disc
+        { x:  0.400 * w, y: +0.016 * h }, // 6. Saucer Upper Flange Right
+        { x:  0.463 * w, y: +0.094 * h }, // 7. Saucer Equator Outer Tip Right
+        { x:  0.400 * w, y: +0.172 * h }, // 8. Saucer Lower Flange Right
+        { x:  0.325 * w, y: +0.206 * h }, // 9. Saucer Bottom Curve Right
+        { x:  0.213 * w, y: +0.244 * h }, // 10. Saucer Keel Corner Right
+        { x:  0.000 * w, y: +0.250 * h }, // 11. Saucer Keel Center Bottom
+        // Mirrored Left Flank
+        { x: -0.213 * w, y: +0.244 * h }, // 12. Saucer Keel Corner Left
+        { x: -0.325 * w, y: +0.206 * h }, // 13. Saucer Bottom Curve Left
+        { x: -0.400 * w, y: +0.172 * h }, // 14. Saucer Lower Flange Left
+        { x: -0.463 * w, y: +0.094 * h }, // 15. Saucer Equator Outer Tip Left
+        { x: -0.400 * w, y: +0.016 * h }, // 16. Saucer Upper Flange Left
+        { x: -0.325 * w, y: -0.031 * h }, // 17. Dome Base / Saucer Transition
+        { x: -0.306 * w, y: -0.141 * h }, // 18. Dome Left Flank
+        { x: -0.244 * w, y: -0.206 * h }, // 19. Dome Upper-Left Corner
+        { x: -0.141 * w, y: -0.244 * h }  // 20. Dome Top Left Slope
+      ];
+
+      return localPts.map((pt) => ({
+        x: this.x + (pt.x * cos - pt.y * sin),
+        y: this.y + (pt.x * sin + pt.y * cos)
+      }));
+    }
+
+    containsPoint(px, py) {
+      const pts = this.getTransformedPoints();
+      let inside = false;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const xi = pts[i].x, yi = pts[i].y;
+        const xj = pts[j].x, yj = pts[j].y;
+        const intersect = (yi > py !== yj > py) &&
+          (px < ((xj - xi) * (py - yi)) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    containsBullet(bullet) {
+      const distSq = (this.x - bullet.x) ** 2 + (this.y - bullet.y) ** 2;
+      const maxR = this.width * 0.55;
+      if (distSq > (maxR + bullet.radius) ** 2) return false;
+
+      if (this.containsPoint(bullet.x, bullet.y)) return true;
+
+      const pts = this.getTransformedPoints();
+      const bRadiusSq = bullet.radius * bullet.radius;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const x1 = pts[j].x, y1 = pts[j].y;
+        const x2 = pts[i].x, y2 = pts[i].y;
+        const dx = x2 - x1, dy = y2 - y1;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq === 0) continue;
+        let t = ((bullet.x - x1) * dx + (bullet.y - y1) * dy) / lenSq;
+        t = Math.max(0, Math.min(1, t));
+        const projX = x1 + t * dx;
+        const projY = y1 + t * dy;
+        const dSq = (bullet.x - projX) ** 2 + (bullet.y - projY) ** 2;
+        if (dSq <= bRadiusSq) return true;
+      }
+      return false;
+    }
+
+    collidesWithShip(ship) {
+      const distSq = (this.x - ship.x) ** 2 + (this.y - ship.y) ** 2;
+      const maxDist = this.width * 0.5 + ship.width * 0.5;
+      if (distSq > maxDist * maxDist) return false;
+
+      const ufoPts = this.getTransformedPoints();
+      const shipPts = ship.getTransformedPoints();
+
+      for (let i = 0, j = ufoPts.length - 1; i < ufoPts.length; j = i++) {
+        const ux1 = ufoPts[j].x, uy1 = ufoPts[j].y;
+        const ux2 = ufoPts[i].x, uy2 = ufoPts[i].y;
+        for (let k = 0, m = shipPts.length - 1; k < shipPts.length; m = k++) {
+          const sx1 = shipPts[m].x, sy1 = shipPts[m].y;
+          const sx2 = shipPts[k].x, sy2 = shipPts[k].y;
+          if (this.segmentsIntersect(ux1, uy1, ux2, uy2, sx1, sy1, sx2, sy2)) {
+            return true;
+          }
+        }
+      }
+
+      if (this.containsPoint(ship.x, ship.y) || ship.containsPoint(this.x, this.y)) {
+        return true;
+      }
+      return false;
+    }
+
+    segmentsIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+      const d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      if (Math.abs(d) < 0.00001) return false;
+      const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / d;
+      const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / d;
+      return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+    }
+
+    update(player, rocks, ufoBullets) {
+      if (!this.alive) return false;
+
+      this.lifetime++;
+      if (this.lifetime > this.maxLifetime) {
+        this.exiting = true;
+      }
+
+      // Check off-screen despawn if exiting
+      if (this.exiting) {
+        if (
+          this.x < -this.width * 2 ||
+          this.x > this.canvas.width + this.width * 2 ||
+          this.y < -this.height * 2 ||
+          this.y > this.canvas.height + this.height * 2
+        ) {
+          this.alive = false;
+          return false;
+        }
+      }
+
+      if (this.jinkTimer > 0) this.jinkTimer--;
+
+      // Orbit direction toggle
+      this.orbitTimer++;
+      if (this.orbitTimer > this.orbitDuration) {
+        this.orbitTimer = 0;
+        this.orbitDirection *= -1;
+      }
+
+      // -------------------------------------------------------------
+      // UNIFIED 16-RAY CONTEXT STEERING (Algorithm 2)
+      // -------------------------------------------------------------
+      const dScreen = Math.min(this.canvas.width, this.canvas.height);
+      const R_radar = 6.0 * this.radius;
+
+      // 1. Threat assessment for rocks within radar range
+      const threats = [];
+      this.emergencyOverdrive = false;
+
+      for (let i = 0; i < rocks.length; i++) {
+        const rock = rocks[i];
+        if (rock.popped) continue;
+
+        const relX = rock.x - this.x;
+        const relY = rock.y - this.y;
+        const dist = Math.hypot(relX, relY);
+
+        if (dist < R_radar + rock.radius) {
+          const relVx = rock.dx - this.dx;
+          const relVy = rock.dy - this.dy;
+          const vClose = -(relX * relVx + relY * relVy) / (dist || 1);
+          let tImpact = 5.0;
+          if (vClose > 0.05) {
+            tImpact = dist / vClose;
+          }
+          const urgency = 1.0 / Math.max(0.12, tImpact);
+          const clearance = this.radius + rock.radius + 0.35 * this.radius;
+
+          threats.push({
+            rock,
+            relX,
+            relY,
+            dist,
+            urgency,
+            clearance,
+            tImpact
+          });
+
+          if (tImpact < 0.40) {
+            this.emergencyOverdrive = true;
+          }
+        }
+      }
+
+      // 2. Tactical Interest Variables
+      const pDx = player.x - this.x;
+      const pDy = player.y - this.y;
+      const pDist = Math.hypot(pDx, pDy) || 1;
+      const uPlayerX = pDx / pDist;
+      const uPlayerY = pDy / pDist;
+      const uPerpX = -uPlayerY;
+      const uPerpY = uPlayerX;
+
+      const D_tactical = 0.40 * dScreen;
+      const tanhDist = Math.tanh((pDist - D_tactical) / (0.18 * dScreen));
+
+      // Boundary soft cushion
+      const margin = 0.12 * dScreen;
+      let repelX = 0, repelY = 0;
+      if (!this.exiting) {
+        if (this.x < margin) repelX += (margin - this.x) / margin;
+        if (this.x > this.canvas.width - margin) repelX -= (this.x - (this.canvas.width - margin)) / margin;
+        if (this.y < margin) repelY += (margin - this.y) / margin;
+        if (this.y > this.canvas.height - margin) repelY -= (this.y - (this.canvas.height - margin)) / margin;
+      }
+
+      // Directional inertia vector (anti-jitter)
+      const currentSpeed = Math.hypot(this.dx, this.dy);
+      let vNormX = 1, vNormY = 0;
+      if (currentSpeed > 0.1) {
+        vNormX = this.dx / currentSpeed;
+        vNormY = this.dy / currentSpeed;
+      } else {
+        const rad = (this.drawAngle * Math.PI) / 180;
+        vNormX = Math.cos(rad);
+        vNormY = Math.sin(rad);
+      }
+
+      // 3. Evaluate 16 Candidate Rays
+      const N = 16;
+      const rayScores = [];
+      const dangerScores = [];
+
+      for (let k = 0; k < N; k++) {
+        const angle = (k * 2 * Math.PI) / N;
+        const dkX = Math.cos(angle);
+        const dkY = Math.sin(angle);
+
+        // Danger Score D(k)
+        let rayDanger = 0;
+        for (let t = 0; t < threats.length; t++) {
+          const threat = threats[t];
+          const proj = threat.relX * dkX + threat.relY * dkY;
+          if (proj > -threat.clearance) {
+            const closestDist = Math.hypot(threat.relX - proj * dkX, threat.relY - proj * dkY);
+            if (closestDist < threat.clearance) {
+              const penetration = 1 - closestDist / threat.clearance;
+              rayDanger += threat.urgency * penetration * penetration;
+            }
+          }
+        }
+        dangerScores[k] = rayDanger;
+
+        // Tactical Interest I(k)
+        const I_player = tanhDist * (dkX * uPlayerX + dkY * uPlayerY);
+        const I_flank = this.orbitDirection * (dkX * uPerpX + dkY * uPerpY);
+        const I_boundary = (dkX * repelX + dkY * repelY);
+        const I_inertia = (dkX * vNormX + dkY * vNormY);
+
+        const I_k = 0.8 * I_player + 0.6 * I_flank + 1.2 * I_boundary + 0.7 * I_inertia;
+
+        const totalScore = I_k - 3.5 * rayDanger;
+        rayScores.push({ index: k, dkX, dkY, score: totalScore, danger: rayDanger });
+      }
+
+      // 4. Heading selection with Switching Hysteresis
+      let best = rayScores[0];
+      for (let k = 1; k < N; k++) {
+        if (rayScores[k].score > best.score) {
+          best = rayScores[k];
+        }
+      }
+
+      const currentRay = rayScores[this.currentHeadingIndex] || rayScores[0];
+      if (best.index !== this.currentHeadingIndex) {
+        if (best.score > currentRay.score + 0.18 || currentRay.danger > 0.8) {
+          this.currentHeadingIndex = best.index;
+        }
+      }
+
+      const chosenRay = rayScores[this.currentHeadingIndex];
+
+      // 5. Physical Velocity Steering (No Teleportation)
+      const targetSpeed = (this.emergencyOverdrive || this.jinkTimer > 0) ? this.vBoost : this.vCruise;
+      const targetDx = chosenRay.dkX * targetSpeed;
+      const targetDy = chosenRay.dkY * targetSpeed;
+
+      this.dx += (targetDx - this.dx) * 0.08;
+      this.dy += (targetDy - this.dy) * 0.08;
+
+      this.x += this.dx;
+      this.y += this.dy;
+
+      // Subtle banking tilt (-15 deg to +15 deg)
+      const targetBank = Math.max(-15, Math.min(15, this.dx * 3.5));
+      this.drawAngle += (targetBank - this.drawAngle) * 0.1;
+
+      // Soft boundary clamp if not exiting
+      if (!this.exiting) {
+        if (this.x < this.radius) { this.x = this.radius; this.dx = Math.abs(this.dx) * 0.8; }
+        if (this.x > this.canvas.width - this.radius) { this.x = this.canvas.width - this.radius; this.dx = -Math.abs(this.dx) * 0.8; }
+        if (this.y < this.radius) { this.y = this.radius; this.dy = Math.abs(this.dy) * 0.8; }
+        if (this.y > this.canvas.height - this.radius) { this.y = this.canvas.height - this.radius; this.dy = -Math.abs(this.dy) * 0.8; }
+      }
+
+      // -------------------------------------------------------------
+      // DUAL-CHANNEL WEAPONS SYSTEM
+      // -------------------------------------------------------------
+
+      // Channel 2: Point-Defense & Corridor-Clearing Cannons (Target: Asteroids)
+      this.defenseTimer++;
+      if (this.defenseTimer >= this.defenseInterval && threats.length > 0) {
+        let targetThreat = null;
+        let maxPriority = -1;
+
+        for (let t = 0; t < threats.length; t++) {
+          const th = threats[t];
+          const proj = th.relX * chosenRay.dkX + th.relY * chosenRay.dkY;
+          const lat = Math.hypot(th.relX - proj * chosenRay.dkX, th.relY - proj * chosenRay.dkY);
+
+          // Proactive clearing of forward flight path OR defensive reaction to high urgency
+          const isDirectlyAhead = proj > 0 && proj < 3.5 * this.radius && lat < this.radius * 1.5;
+          const isCriticalUrgency = th.urgency > 1.2;
+
+          if (isDirectlyAhead || isCriticalUrgency) {
+            const priority = th.urgency + (isDirectlyAhead ? 2.5 : 0);
+            if (priority > maxPriority) {
+              maxPriority = priority;
+              targetThreat = th;
+            }
+          }
+        }
+
+        if (targetThreat) {
+          const aimDist = Math.hypot(targetThreat.relX, targetThreat.relY) || 1;
+          const bVx = (targetThreat.relX / aimDist) * this.vLaser;
+          const bVy = (targetThreat.relY / aimDist) * this.vLaser;
+          ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'rock'));
+          this.soundFx.playUFOLaser();
+          this.defenseTimer = 0;
+        }
+      }
+
+      // Channel 1: Offensive Cannons (Target: Player Rocket)
+      this.shootTimer++;
+      if (this.shootTimer >= this.shootInterval - 20) {
+        this.telegraphTimer = this.shootInterval - this.shootTimer;
+      }
+      if (this.shootTimer >= this.shootInterval) {
+        this.shootTimer = 0;
+        this.telegraphTimer = 0;
+
+        // 50% direct aim, 50% predictive lead aim
+        let aimX = pDx;
+        let aimY = pDy;
+        if (Math.random() < 0.5) {
+          const timeToHit = pDist / this.vLaser;
+          aimX += player.dx * timeToHit;
+          aimY += player.dy * timeToHit;
+        }
+        const aimDist = Math.hypot(aimX, aimY) || 1;
+        const bVx = (aimX / aimDist) * this.vLaser;
+        const bVy = (aimY / aimDist) * this.vLaser;
+
+        ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'player'));
+        this.soundFx.playUFOLaser();
+
+        // Post-shot tactical jink along Algorithm 2's best ray
+        this.jinkTimer = 25;
+      }
+
+      return true;
+    }
+
+    draw(ctx) {
+      if (!this.alive) return;
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate((this.drawAngle * Math.PI) / 180);
+
+      // Telegraph glow when about to fire at player
+      if (this.telegraphTimer > 0) {
+        const pulse = Math.sin((this.telegraphTimer / 20) * Math.PI);
+        ctx.shadowColor = '#d946ef';
+        ctx.shadowBlur = 18 * pulse;
+        ctx.fillStyle = `rgba(217, 70, 239, ${0.45 * pulse})`;
+        ctx.beginPath();
+        ctx.arc(0, -this.height * 0.12, this.width * 0.32, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Draw sprite (enemyship.png)
+      if (this.sprite.complete && this.sprite.naturalWidth > 0) {
+        // Visual center is at y = 14.0 in 32x32 sprite
+        ctx.drawImage(this.sprite, -this.width / 2, -this.height * (14.0 / 32.0), this.width, this.height);
+      } else {
+        // Fallback saucer vector
+        ctx.fillStyle = '#6b7280';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, this.width * 0.46, this.height * 0.22, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#c084fc';
+        ctx.beginPath();
+        ctx.ellipse(0, -this.height * 0.12, this.width * 0.28, this.height * 0.18, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Thruster flare when overdrive or jink is engaged
+      if (this.emergencyOverdrive || this.jinkTimer > 0) {
+        ctx.shadowColor = '#e879f9';
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = 'rgba(232, 121, 249, 0.8)';
+        ctx.beginPath();
+        ctx.arc(0, this.height * 0.22, this.width * 0.12, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+  }
+
+  // ============================================================================
   // MAIN GAME CONTROLLER
   // ============================================================================
   class Game {
@@ -1164,6 +1872,10 @@
       this.bullets = [];
       this.rocks = [];
       this.rockSpawnTimer = 0;
+
+      this.ufo = null;
+      this.ufoBullets = [];
+      this.ufoSpawnTimer = 0;
 
       // Input State
       this.keys = {
@@ -1280,15 +1992,18 @@
         this.rockSpawnInterval = 110; // ~1.8s
         this.maxRocks = 8;
         this.rockSpeedMultiplier = 1.0;
+        this.ufoSpawnInterval = 2200; // ~36s
       } else if (this.difficulty === 'hard') {
         this.rockSpawnInterval = 38;  // ~0.63s
         this.maxRocks = 22;
         this.rockSpeedMultiplier = 1.75;
+        this.ufoSpawnInterval = 1400; // ~23s
       } else {
         // medium (standard)
         this.rockSpawnInterval = 68;  // ~1.1s
         this.maxRocks = 14;
         this.rockSpeedMultiplier = 1.35;
+        this.ufoSpawnInterval = 1800; // ~30s
       }
     }
 
@@ -1406,6 +2121,26 @@
         }
         if (e.code === 'KeyP' || e.code === 'Escape') {
           this.togglePause();
+        }
+        if (e.code === 'KeyU') {
+          if (this.state === 'PLAYING') {
+            this.spawnUFO();
+          }
+        }
+        if (e.code === 'KeyG') {
+          this.unlimitedShield = !this.unlimitedShield;
+          this.ship.unlimitedShield = this.unlimitedShield;
+          this.ship.invincible = this.unlimitedShield;
+          this.ship.unlimitedAmmo = this.unlimitedShield;
+          if (this.unlimitedShield) {
+            this.ship.energy = this.ship.maxEnergy;
+            this.ship.shieldEnergy = this.ship.maxShieldEnergy;
+          }
+          if (this.domElements.settingUnlimitedShield) {
+            this.domElements.settingUnlimitedShield.checked = this.unlimitedShield;
+          }
+          this.updateEnergyDisplay();
+          console.log('God Mode toggled:', this.unlimitedShield);
         }
       });
 
@@ -1643,15 +2378,19 @@
         });
       }
 
-      // Unlimited Shield setting
+      // Unlimited Shield setting (God Mode)
       if (this.domElements.settingUnlimitedShield) {
         this.domElements.settingUnlimitedShield.checked = this.unlimitedShield;
         this.domElements.settingUnlimitedShield.addEventListener('change', (e) => {
           this.unlimitedShield = e.target.checked;
           this.ship.unlimitedShield = this.unlimitedShield;
+          this.ship.unlimitedAmmo = this.unlimitedShield;
+          this.ship.invincible = this.unlimitedShield;
           if (this.unlimitedShield) {
-            this.ship.invincible = true;
+            this.ship.energy = this.ship.maxEnergy;
+            this.ship.shieldEnergy = this.ship.maxShieldEnergy;
           }
+          this.updateEnergyDisplay();
           try {
             localStorage.setItem('spaceship_flight_unlimited_shield', this.unlimitedShield.toString());
           } catch (err) { }
@@ -1715,6 +2454,9 @@
       this.updateScore(0);
       this.bullets = [];
       this.rocks = [];
+      this.ufo = null;
+      this.ufoBullets = [];
+      this.ufoSpawnTimer = 0;
       this.particles.clear();
       this.ship.reset(true);
       this.updateLivesDisplay();
@@ -1766,6 +2508,9 @@
     quitToMainMenu() {
       this.hideModals();
       this.ship.setThrust(false);
+      this.ufo = null;
+      this.ufoBullets = [];
+      this.ufoSpawnTimer = 0;
       this.state = 'START';
       if (this.domElements.pauseBtn) {
         this.domElements.pauseBtn.textContent = '| |';
@@ -1812,6 +2557,26 @@
         this.ship.shieldEnergy = Math.min(this.ship.maxShieldEnergy, this.ship.shieldEnergy + 3);
       }
       this.updateEnergyDisplay();
+    }
+
+    applyUFOSiphon() {
+      if (this.powerMode === 'shared') {
+        // Shared Reactor: +10% to shared battery
+        this.ship.energy = Math.min(this.ship.maxEnergy, this.ship.energy + 10);
+      } else if (this.powerMode === 'dual') {
+        // Dual Capacitors: +5% to ammo battery AND +5% to shield capacitor
+        this.ship.energy = Math.min(this.ship.maxEnergy, this.ship.energy + 5);
+        this.ship.shieldEnergy = Math.min(this.ship.maxShieldEnergy, this.ship.shieldEnergy + 5);
+      } else if (this.powerMode === 'shield_only') {
+        // Shield Charger: +10% to shield capacitor
+        this.ship.shieldEnergy = Math.min(this.ship.maxShieldEnergy, this.ship.shieldEnergy + 10);
+      }
+      this.updateEnergyDisplay();
+    }
+
+    spawnUFO() {
+      this.ufo = new UFO(this.canvas, this.soundFx, this.particles, this.difficulty);
+      this.soundFx.playUFOWarning();
     }
 
     updateEnergyDisplay() {
@@ -2030,13 +2795,44 @@
           }
         }
 
-        // Bullets update & Rock collisions
+        // UFO Spawning based on difficulty interval
+        if (!this.ufo) {
+          this.ufoSpawnTimer++;
+          if (this.ufoSpawnTimer > this.ufoSpawnInterval) {
+            this.ufoSpawnTimer = 0;
+            this.spawnUFO();
+          }
+        }
+
+        // UFO update
+        if (this.ufo) {
+          const ufoAlive = this.ufo.update(this.ship, this.rocks, this.ufoBullets);
+          if (!ufoAlive) {
+            this.ufo = null;
+          }
+        }
+
+        // Bullets update & Rock/UFO collisions
         for (let i = this.bullets.length - 1; i >= 0; i--) {
           const b = this.bullets[i];
           b.update(this.canvas.width, this.canvas.height);
 
           if (b.hit) {
             this.bullets.splice(i, 1);
+            continue;
+          }
+
+          // Check player bullet against UFO
+          if (this.ufo && this.ufo.alive && this.ufo.containsBullet(b)) {
+            b.hit = true;
+            this.bullets.splice(i, 1);
+            this.soundFx.playUFOExplosion();
+            this.particles.addExplosion(this.ufo.x, this.ufo.y, '#c084fc', 32);
+            this.particles.addExplosion(this.ufo.x, this.ufo.y, '#38bdf8', 18);
+            this.particles.addExplosion(this.ufo.x, this.ufo.y, '#f43f5e', 12);
+            this.updateScore(this.score + 5);
+            this.applyUFOSiphon();
+            this.ufo = null;
             continue;
           }
 
@@ -2058,7 +2854,50 @@
           }
         }
 
-        // Rocks update & Ship collision
+        // UFO Bullets update & Player/Rock collisions
+        for (let i = this.ufoBullets.length - 1; i >= 0; i--) {
+          const ub = this.ufoBullets[i];
+          ub.update(this.canvas.width, this.canvas.height);
+
+          if (ub.hit) {
+            this.ufoBullets.splice(i, 1);
+            continue;
+          }
+
+          // UFO bullet hits player ship
+          if (this.ship.containsBullet(ub)) {
+            ub.hit = true;
+            this.ufoBullets.splice(i, 1);
+            if (this.ship.invincible) {
+              // Shield absorbs Alien Violet laser with cyan deflection flare
+              this.particles.addExplosion(ub.x, ub.y, '#38bdf8', 16);
+              this.soundFx.playShieldSound();
+            } else {
+              this.particles.addExplosion(ub.x, ub.y, '#c084fc', 18);
+              this.handlePlayerHit();
+            }
+            continue;
+          }
+
+          // UFO bullet hits asteroid (UFO lasers pop asteroids!)
+          for (let j = this.rocks.length - 1; j >= 0; j--) {
+            const r = this.rocks[j];
+            if (!r.popped && r.containsBullet(ub)) {
+              r.popped = true;
+              ub.hit = true;
+              this.soundFx.playExplosion(false);
+              this.particles.addExplosion(r.x, r.y, '#c084fc', 20);
+              this.rocks.splice(j, 1);
+              break;
+            }
+          }
+
+          if (ub.hit) {
+            this.ufoBullets.splice(i, 1);
+          }
+        }
+
+        // Rocks update & Ship/UFO collision
         for (let j = this.rocks.length - 1; j >= 0; j--) {
           const r = this.rocks[j];
           const alive = r.update(this.canvas.width, this.canvas.height);
@@ -2067,12 +2906,45 @@
             continue;
           }
 
+          // Exact Polygon-vs-Polygon collision with UFO (mutual destruction)
+          if (this.ufo && this.ufo.alive && !r.popped && r.collidesWithShip(this.ufo)) {
+            r.popped = true;
+            this.soundFx.playUFOExplosion();
+            this.particles.addExplosion(this.ufo.x, this.ufo.y, '#c084fc', 30);
+            this.particles.addExplosion(r.x, r.y, '#38bdf8', 20);
+            this.rocks.splice(j, 1);
+            this.ufo = null;
+            continue;
+          }
+
           // Exact 12-point Polygon-vs-Polygon collision with ship
-          if (!this.ship.invincible && !r.popped && r.collidesWithShip(this.ship)) {
+          if (!r.popped && r.collidesWithShip(this.ship)) {
             r.popped = true;
             this.rocks.splice(j, 1);
+            if (this.ship.invincible) {
+              // Shield vaporizes the asteroid on impact
+              this.soundFx.playExplosion(false);
+              this.particles.addExplosion(r.x, r.y, '#38bdf8', 24);
+            } else {
+              this.handlePlayerHit();
+              break;
+            }
+          }
+        }
+
+        // Direct UFO vs Player ship hull collision
+        if (this.ufo && this.ufo.alive && this.ufo.collidesWithShip(this.ship)) {
+          this.soundFx.playUFOExplosion();
+          this.particles.addExplosion(this.ufo.x, this.ufo.y, '#c084fc', 35);
+          this.ufo = null;
+          if (this.ship.invincible) {
+            // Shield repels UFO explosion, awards score & siphon
+            this.particles.addExplosion(this.ship.x, this.ship.y, '#38bdf8', 22);
+            this.updateScore(this.score + 5);
+            this.applyUFOSiphon();
+          } else {
+            this.particles.addExplosion(this.ship.x, this.ship.y, '#ef4444', 25);
             this.handlePlayerHit();
-            break;
           }
         }
       }
@@ -2107,6 +2979,14 @@
 
       for (const bullet of this.bullets) {
         bullet.draw(this.ctx);
+      }
+
+      for (const uBullet of this.ufoBullets) {
+        uBullet.draw(this.ctx);
+      }
+
+      if (this.ufo && this.ufo.alive) {
+        this.ufo.draw(this.ctx);
       }
 
       if (this.state === 'PLAYING' || this.state === 'PAUSED') {
