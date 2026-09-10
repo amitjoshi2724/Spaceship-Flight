@@ -1418,7 +1418,7 @@
       this.shootTimer = 0;
       this.shootInterval = difficulty === 'hard' ? 95 : difficulty === 'easy' ? 150 : 120;
       this.defenseTimer = 0;
-      this.defenseInterval = 28; // ~0.47s fast reaction defense cycle
+      this.defenseInterval = 200; // ~3.3s cooldown: dodging is primary, shooting rocks is rare emergency fallback
       this.telegraphTimer = 0;
     }
 
@@ -1738,13 +1738,13 @@
       const chosenRay = rayScores[this.currentHeadingIndex];
 
       // 5. Physical Velocity Steering (Adaptive Agility)
-      const isEvasive = this.emergencyOverdrive || chosenRay.danger > 0 || currentRay.danger > 0.15;
+      const isEvasive = this.emergencyOverdrive || chosenRay.danger > 0 || currentRay.danger > 0.10 || threats.some(t => t.dist < t.clearance * 2.2);
       const targetSpeed = isEvasive ? this.vBoost : this.vCruise;
       const targetDx = chosenRay.dkX * targetSpeed;
       const targetDy = chosenRay.dkY * targetSpeed;
 
-      // Adaptive turn agility: cruise is smooth (0.10), evasion is fast & decisive (0.24)
-      const turnAgility = isEvasive ? 0.24 : 0.10;
+      // Adaptive turn agility: cruise is smooth (0.10), evasion is fast & decisive (0.28)
+      const turnAgility = isEvasive ? 0.28 : 0.10;
       this.dx += (targetDx - this.dx) * turnAgility;
       this.dy += (targetDy - this.dy) * turnAgility;
 
@@ -1767,34 +1767,33 @@
       // DUAL-CHANNEL WEAPONS SYSTEM
       // -------------------------------------------------------------
 
-      // Channel 2: Point-Defense & Corridor-Clearing Cannons (Target: Asteroids)
+      // Channel 2: Emergency Point-Defense (Last-resort defense ONLY when dodging is insufficient)
       this.defenseTimer++;
       if (this.defenseTimer >= this.defenseInterval && threats.length > 0) {
-        let targetThreat = null;
-        let maxPriority = -1;
+        let emergencyTarget = null;
+        let highestUrgency = 0;
 
         for (let t = 0; t < threats.length; t++) {
           const th = threats[t];
           const proj = th.relX * chosenRay.dkX + th.relY * chosenRay.dkY;
           const lat = Math.hypot(th.relX - proj * chosenRay.dkX, th.relY - proj * chosenRay.dkY);
 
-          // Proactive clearing of forward flight path OR defensive reaction to high urgency
-          const isDirectlyAhead = proj > 0 && proj < 3.5 * this.radius && lat < this.radius * 1.5;
-          const isCriticalUrgency = th.urgency > 1.2;
+          // STRICT emergency condition: unavoidable collision directly in forward flight path
+          const isDirectPath = proj > 0 && proj < th.clearance * 1.5 && lat < th.clearance * 0.75;
+          const isImminentCrash = th.tImpact < 0.35 && th.dist < th.clearance * 1.3;
 
-          if (isDirectlyAhead || isCriticalUrgency) {
-            const priority = th.urgency + (isDirectlyAhead ? 2.5 : 0);
-            if (priority > maxPriority) {
-              maxPriority = priority;
-              targetThreat = th;
+          if (isDirectPath && isImminentCrash) {
+            if (th.urgency > highestUrgency) {
+              highestUrgency = th.urgency;
+              emergencyTarget = th;
             }
           }
         }
 
-        if (targetThreat) {
-          const aimDist = Math.hypot(targetThreat.relX, targetThreat.relY) || 1;
-          const bVx = (targetThreat.relX / aimDist) * this.vLaser;
-          const bVy = (targetThreat.relY / aimDist) * this.vLaser;
+        if (emergencyTarget) {
+          const aimDist = Math.hypot(emergencyTarget.relX, emergencyTarget.relY) || 1;
+          const bVx = (emergencyTarget.relX / aimDist) * this.vLaser;
+          const bVy = (emergencyTarget.relY / aimDist) * this.vLaser;
           ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'rock'));
           this.soundFx.playUFOLaser();
           this.defenseTimer = 0;
