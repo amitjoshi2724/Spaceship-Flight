@@ -1358,11 +1358,12 @@
   // Uses enemyship.png with exact 20-point collision polygon & Unified Context Steering
   // ============================================================================
   class UFO {
-    constructor(canvas, soundFx, particleSystem, difficulty = 'medium') {
+    constructor(canvas, soundFx, particleSystem, difficulty = 'medium', ship = null) {
       this.canvas = canvas;
       this.soundFx = soundFx;
       this.particles = particleSystem;
       this.difficulty = difficulty;
+      this.ship = ship;
 
       this.sprite = new Image();
       this.sprite.src = 'enemyship.png';
@@ -1431,8 +1432,17 @@
 
     recalculateSize() {
       const dScreen = Math.min(this.canvas.width, this.canvas.height);
-      // Doubled UFO size (72px - 144px) so it's a satisfying, legible target to shoot
-      this.width = Math.round(Math.max(72, Math.min(144, dScreen * 0.17)));
+      const shipScale = (this.ship && this.ship.scalePercent)
+        ? this.ship.scalePercent
+        : parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
+
+      // UFO scales proportionally with player ship scale (70% - 130%):
+      // The maximum large size (dScreen * 0.17, 72px - 144px) serves as the 130% setting.
+      // Scaling down proportionally at 100% and 70% ensures neither a smaller nor larger ship
+      // has an unfair advantage against enemy targets.
+      const scaleFactor = Math.max(70, Math.min(130, shipScale)) / 130;
+      const baseMaxW = Math.max(72, Math.min(144, dScreen * 0.17));
+      this.width = Math.round(baseMaxW * scaleFactor);
       this.height = this.width;
       this.radius = this.width * 0.463;
 
@@ -1555,6 +1565,9 @@
 
     update(player, rocks, ufoBullets) {
       if (!this.alive) return false;
+      if (!this.ship && player) {
+        this.ship = player;
+      }
 
       this.lifetime++;
       if (this.lifetime > this.maxLifetime) {
@@ -2172,6 +2185,9 @@
       if (this.ship) {
         this.ship.recalculateSize();
       }
+      if (this.ufo) {
+        this.ufo.recalculateSize();
+      }
 
       if (this.starfield) this.starfield.resize();
     }
@@ -2387,6 +2403,9 @@
         this.domElements.settingShipSize.addEventListener('input', (e) => {
           const val = parseInt(e.target.value, 10);
           this.ship.setScalePercent(val);
+          if (this.ufo) {
+            this.ufo.recalculateSize();
+          }
           if (this.domElements.shipSizeVal) {
             this.domElements.shipSizeVal.textContent = `${val}%`;
           }
@@ -2654,7 +2673,7 @@
     }
 
     spawnUFO() {
-      this.ufo = new UFO(this.canvas, this.soundFx, this.particles, this.difficulty);
+      this.ufo = new UFO(this.canvas, this.soundFx, this.particles, this.difficulty, this.ship);
       this.soundFx.playUFOWarning();
     }
 
