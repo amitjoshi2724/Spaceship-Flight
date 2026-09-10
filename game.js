@@ -1293,7 +1293,7 @@
   // UFO BULLET (Alien Violet Plasma Bolt)
   // ============================================================================
   class UFOBullet {
-    constructor(x, y, dx, dy, targetType = 'player', aimMode = 'direct') {
+    constructor(x, y, dx, dy, targetType = 'player', aimMode = 'direct', defensiveColor = 'blue') {
       this.x = x;
       this.y = y;
       this.dx = dx;
@@ -1302,6 +1302,7 @@
       this.hit = false;
       this.targetType = targetType; // 'player' or 'rock'
       this.aimMode = aimMode; // 'direct' or 'predictive'
+      this.defensiveColor = defensiveColor; // 'blue' (starboard) or 'red' (port)
       this.trail = [];
     }
 
@@ -1330,11 +1331,19 @@
       let glowColor, outerColor, trailColor, coreColor;
 
       if (this.targetType === 'rock') {
-        // Defensive CIWS interceptor bolt: Exact photo royal blue from enemyship.png (#1761f2)
-        glowColor = '#2563eb';
-        outerColor = '#1761f2';
-        trailColor = (a) => `rgba(23, 97, 242, ${a * 0.80})`;
-        coreColor = '#ffffff';
+        if (this.defensiveColor === 'red') {
+          // Port CIWS bolt: Matches left red light (#ff1744 / #ef4444)
+          glowColor = '#ff1744';
+          outerColor = '#ef4444';
+          trailColor = (a) => `rgba(239, 68, 68, ${a * 0.80})`;
+          coreColor = '#ffffff';
+        } else {
+          // Starboard CIWS bolt: Exact photo royal blue from enemyship.png (#1761f2)
+          glowColor = '#2563eb';
+          outerColor = '#1761f2';
+          trailColor = (a) => `rgba(23, 97, 242, ${a * 0.80})`;
+          coreColor = '#ffffff';
+        }
       } else if (this.aimMode === 'predictive') {
         // Offensive Predictive Lead: Alien Violet / Purple
         glowColor = '#c084fc';
@@ -1452,10 +1461,11 @@
       this.telegraphTimer = 0;
       this.nextAimMode = Math.random() < 0.5 ? 'predictive' : 'direct';
 
-      // 2. Defensive Point-Defense CIWS (Asteroid survival interceptor)
+      // 2. Defensive Point-Defense CIWS (Dual Port/Starboard interceptors)
       this.defenseTimer = 0;
-      this.defenseInterval = 55; // Reliable ~0.9s defensive cadence
-      this.defenseFlashTimer = 0; // Blue light flash timer
+      this.defenseInterval = 45; // Responsive ~0.75s defensive cadence
+      this.leftDefenseFlashTimer = 0; // Port Red light flash timer
+      this.rightDefenseFlashTimer = 0; // Starboard Blue light flash timer
     }
 
     // Evasive turn agility scales dynamically by difficulty:
@@ -1916,10 +1926,12 @@
 
       // -------------------------------------------------------------
       // CHANNEL 1: DEFENSIVE POINT-DEFENSE (CIWS)
+      // Dual-Sided CIWS: Port (Red) on Left Flank, Starboard (Blue) on Right Flank
       // Reliably destroys imminent closing asteroids before they crush the saucer!
       // -------------------------------------------------------------
       this.defenseTimer++;
-      if (this.defenseFlashTimer > 0) this.defenseFlashTimer--;
+      if (this.leftDefenseFlashTimer > 0) this.leftDefenseFlashTimer--;
+      if (this.rightDefenseFlashTimer > 0) this.rightDefenseFlashTimer--;
 
       let emergencyRock = null;
       let lowestDist = 180;
@@ -1947,18 +1959,34 @@
         const bVx = (leadX / aimDist) * this.vLaser;
         const bVy = (leadY / aimDist) * this.vLaser;
 
-        // Spawn blue bullet directly from the starboard blue emitter!
         const rad = (this.drawAngle * Math.PI) / 180;
         const cosA = Math.cos(rad);
         const sinA = Math.sin(rad);
-        const blueMuzzleX = this.x + (0.2656 * this.width * cosA - 0.1094 * this.height * sinA);
-        const blueMuzzleY = this.y + (0.2656 * this.width * sinA + 0.1094 * this.height * cosA);
 
-        ufoBullets.push(new UFOBullet(blueMuzzleX, blueMuzzleY, bVx, bVy, 'rock'));
+        // Project lead vector into local saucer coordinate frame:
+        // localX < 0 => Threat is on the saucer's LEFT (Port) flank -> Red defensive shot & Red light
+        // localX >= 0 => Threat is on the saucer's RIGHT (Starboard) flank -> Blue defensive shot & Blue light
+        const localX = leadX * cosA + leadY * sinA;
+        const isPort = localX < 0;
+
+        let muzzleX, muzzleY;
+        if (isPort) {
+          // Left (Port) Red emitter & light flash
+          muzzleX = this.x + (-0.2656 * this.width * cosA - 0.1094 * this.height * sinA);
+          muzzleY = this.y + (-0.2656 * this.width * sinA + 0.1094 * this.height * cosA);
+          ufoBullets.push(new UFOBullet(muzzleX, muzzleY, bVx, bVy, 'rock', 'direct', 'red'));
+          this.leftDefenseFlashTimer = 22;
+        } else {
+          // Right (Starboard) Blue emitter & light flash
+          muzzleX = this.x + (0.2656 * this.width * cosA - 0.1094 * this.height * sinA);
+          muzzleY = this.y + (0.2656 * this.width * sinA + 0.1094 * this.height * cosA);
+          ufoBullets.push(new UFOBullet(muzzleX, muzzleY, bVx, bVy, 'rock', 'direct', 'blue'));
+          this.rightDefenseFlashTimer = 22;
+        }
+
         this.soundFx.playUFOLaser();
-        // Trigger defensive jink & flash right blue light!
+        // Trigger defensive jink
         this.jinkTimer = 18;
-        this.defenseFlashTimer = 22;
       }
 
       // -------------------------------------------------------------
@@ -2061,21 +2089,24 @@
         emergencyGlow = Math.max(0, flashPhase);
       }
 
-      // 1. LEFT RED LIGHT: Danger Hazard Strobe
+      // 1. LEFT RED LIGHT: Danger Hazard Strobe & Port Defensive CIWS Flash
       const leftX = -0.2656 * w;
       const leftY = 0.1094 * h;
-      if (emergencyGlow > 0.05) {
+      const leftCiwsPulse = this.leftDefenseFlashTimer > 0 ? (this.leftDefenseFlashTimer / 22) : 0;
+      const redGlow = Math.max(emergencyGlow, leftCiwsPulse);
+
+      if (redGlow > 0.05) {
         ctx.save();
         ctx.shadowColor = '#ff1744';
-        ctx.shadowBlur = 10 * emergencyGlow;
-        ctx.fillStyle = `rgba(255, 23, 68, ${0.95 * emergencyGlow})`;
+        ctx.shadowBlur = 12 * redGlow;
+        ctx.fillStyle = `rgba(255, 23, 68, ${0.95 * redGlow})`;
         ctx.beginPath();
-        ctx.arc(leftX, leftY, lightRadius * (0.95 + 0.25 * emergencyGlow), 0, Math.PI * 2);
+        ctx.arc(leftX, leftY, lightRadius * (0.95 + 0.25 * redGlow), 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = `rgba(255, 240, 240, ${0.98 * emergencyGlow})`;
+        ctx.fillStyle = `rgba(255, 240, 240, ${0.98 * redGlow})`;
         ctx.beginPath();
-        ctx.arc(leftX, leftY, lightRadius * 0.45, 0, Math.PI * 2);
+        ctx.arc(leftX, leftY, lightRadius * 0.45 * redGlow, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -2108,13 +2139,13 @@
         ctx.restore();
       }
 
-      // 3. RIGHT BLUE LIGHT: Danger Strobe & Defensive CIWS Flash
-      // Flashes together with red on danger, AND flashes intensely on defensive shots!
+      // 3. RIGHT BLUE LIGHT: Danger Hazard Strobe & Starboard Defensive CIWS Flash
+      // Flashes together with red on danger, AND flashes intensely on starboard defensive shots!
       // Uses the exact royal blue from enemyship.png: #1761f2!
       const rightX = 0.2656 * w;
       const rightY = 0.1094 * h;
-      const ciwsPulse = this.defenseFlashTimer > 0 ? (this.defenseFlashTimer / 22) : 0;
-      const blueGlow = Math.max(emergencyGlow, ciwsPulse);
+      const rightCiwsPulse = this.rightDefenseFlashTimer > 0 ? (this.rightDefenseFlashTimer / 22) : 0;
+      const blueGlow = Math.max(emergencyGlow, rightCiwsPulse);
 
       if (blueGlow > 0.05) {
         ctx.save();
@@ -3191,7 +3222,8 @@
               if (ub.targetType === 'rock') {
                 r.popped = true;
                 this.soundFx.playExplosion(false);
-                this.particles.addExplosion(r.x, r.y, '#1761f2', 24);
+                const popColor = ub.defensiveColor === 'red' ? '#ff1744' : '#1761f2';
+                this.particles.addExplosion(r.x, r.y, popColor, 24);
                 this.rocks.splice(j, 1);
               } else {
                 // Rock absorbs offensive shot; emits small kinetic dust puff

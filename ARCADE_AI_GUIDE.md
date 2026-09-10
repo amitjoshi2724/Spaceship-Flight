@@ -757,12 +757,12 @@ On the 32×32 enemy saucer (`enemyship.png`), three distinct indicator apertures
                │                                                 │
      [🔴 Left Light]                  [🟢/🟣 Center Light]             [🔵 Right Light]
    (-0.2656w, +0.1094h)             (+0.0156w, +0.1406h)             (+0.2656w, +0.1094h)
-    Danger Emergency Strobe           Primary Cannon Telegraph        Danger Strobe & CIWS Flash
+    Danger Strobe & Port CIWS         Primary Cannon Telegraph        Danger Strobe & Starboard CIWS
 ```
 
 1. **Synchronized Danger Emergency Strobe (🔴 Red & 🔵 Blue Flash Together!)**:
    - **Trigger**: Imminent collision trajectory detected ($v_{\text{closing}} > 0.15$, obstacle in flight path).
-   - **Behavior**: Like emergency police beacons, the **Left Red Light** (`#ff0000` / `#ff1744`) and **Right Blue Light** (`#1761f2`) flash synchronously in high-visibility warning strobe.
+   - **Behavior**: Like emergency law-enforcement beacons, the **Left Red Light** (`#ff1744`) and **Right Blue Light** (`#1761f2`) flash synchronously in high-visibility warning strobe.
    - **Gameplay Read**: Alerts the player that the UFO is in emergency evasive maneuvering and fighting for survival.
 2. **Center Light (🟢 Emerald vs. 🟣 Violet Primary Cannon Telegraph)**:
    - **Position**: Centered at $(+0.0156w, +0.1406h)$ on the ventral weapon aperture.
@@ -773,11 +773,16 @@ On the 32×32 enemy saucer (`enemyship.png`), three distinct indicator apertures
      - **🟣 Alien Violet (`#c084fc`) — 50% of Shots**: **Predictive Lead** (calculating your velocity vector and leading you with $t_{\text{lead}} = d / v_{\text{laser}}$).  
        *Player Counter-Tactic*: **Brake, cut, or reverse!** The bolt will fly to where you were heading, so changing direction or slowing down causes the predictive shot to fly harmlessly past.
    - **Single Unified Light**: There is only one central weapon aperture; it illuminates as a glowing circular bead in emerald green when targeting direct, and in alien purple when targeting predictive.
-3. **Right Light & Defensive CIWS (🔵 Photo Royal Blue - `#1761f2`)**:
-   - **Position**: Centered at $(+0.2656w, +0.1094h)$ on the starboard hull rim.
-   - **Color Match**: Exactly matches the royal blue light on `enemyship.png` (`#1761f2` / RGB: 23, 97, 242).
-   - **Behavior**: Flashes synchronously with red during danger, AND emits an intense blue discharge flash when defensive CIWS fires.
-   - **Defensive CIWS Projectiles**: Fires a royal blue bolt (`#1761f2`) directly from the starboard emitter towards closing asteroids, vaporizing them in a brilliant shower of royal blue sparks.
+3. **Dual-Sided Defensive Point-Defense CIWS (🔴 Left Port Red vs. 🔵 Right Starboard Blue)**:
+   - When an incoming asteroid closes within interception danger range, the UFO's combat computer projects the intercept vector onto its local coordinate frame:
+     - **🔴 Port Defense (Left Flank Threat, $\text{localX} < 0$)**:
+       - **Hull Light**: Emits a vivid ruby-red flash on the **Left Red Light** aperture at $(-0.2656w, +0.1094h)$.
+       - **Muzzle & Bolt**: Discharges a high-velocity **Ruby-Red defensive bolt** (`#ff1744`) from the port emitter.
+       - **Impact**: Asteroid detonates in a radiant burst of ruby-red spark particles.
+     - **🔵 Starboard Defense (Right Flank Threat, $\text{localX} \ge 0$)**:
+       - **Hull Light**: Emits a vivid royal-blue flash on the **Right Blue Light** aperture at $(+0.2656w, +0.1094h)$ (matching `#1761f2` on `enemyship.png`).
+       - **Muzzle & Bolt**: Discharges a high-velocity **Royal-Blue defensive bolt** (`#1761f2`) from the starboard emitter.
+       - **Impact**: Asteroid detonates in a radiant burst of royal-blue spark particles.
 
 ---
 
