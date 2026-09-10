@@ -14,8 +14,14 @@ A practical, no-nonsense engineering guide for building responsive, organic, and
 7. [Combat & Weapons AI (Predictive Aiming & Dual Channels)](#7-combat--weapons-ai-predictive-aiming--dual-channels)
 8. [Advanced Arcade AI Archetypes & Possibilities](#8-advanced-arcade-ai-archetypes--possibilities)
 9. [Dynamic Difficulty Adjustment (DDA) & Player Psychology](#9-dynamic-difficulty-adjustment-dda--player-psychology)
-10. [The Math Cheatsheet: Essential Formulas](#10-the-math-cheatsheet-essential-formulas)
-11. [Responsive Scaling (Never Hardcode Pixels)](#11-responsive-scaling-never-hardcode-pixels)
+10. [Spatial Awareness: Line-of-Sight & Dynamic Cover Finding](#10-spatial-awareness-line-of-sight--dynamic-cover-finding)
+11. [The "AI Director" & Attack Token System (Pacing Control)](#11-the-ai-director--attack-token-system-pacing-control)
+12. [Influence Maps: Macro Strategy Meets Micro Steering](#12-influence-maps-macro-strategy-meets-micro-steering)
+13. [Geometric Bullet Pattern AI (Danmaku Mathematics)](#13-geometric-bullet-pattern-ai-danmaku-mathematics)
+14. [Sensory Perception: Vision Cones & Audio Bubbles](#14-sensory-perception-vision-cones--audio-bubbles)
+15. [Brain Architectures: FSMs vs. Behavior Trees vs. Utility Systems](#15-brain-architectures-fsms-vs-behavior-trees-vs-utility-systems)
+16. [The Math Cheatsheet: Essential Formulas](#16-the-math-cheatsheet-essential-formulas)
+17. [Responsive Scaling (Never Hardcode Pixels)](#17-responsive-scaling-never-hardcode-pixels)
 
 ---
 
@@ -579,7 +585,198 @@ By tuning the inaccuracy cone so bullets narrowly miss the player's bounding box
 
 ---
 
-## 10. The Math Cheatsheet: Essential Formulas
+## 10. Spatial Awareness: Line-of-Sight & Dynamic Cover Finding
+
+Smart enemies don't just shoot blindly or run away in empty space; they **use the environment as armor**.
+
+```
+[Player 🚀] ─── (Laser Fire) ───►  [Asteroid 🪨]  ◄── [Hiding UFO 🛸]
+                                  (Shadow Zone)
+```
+
+### 10.1 The Line-of-Sight (LoS) Ray-Circle Test in LaTeX
+To determine if an asteroid at $\vec{x}_{\text{rock}}$ with radius $R$ blocks the enemy $\vec{x}_{\text{ai}}$ from seeing the player $\vec{x}_p$:
+
+Let the sight ray vector be:
+$$\vec{L} = \vec{x}_p - \vec{x}_{\text{ai}}, \quad \hat{u}_L = \frac{\vec{L}}{\|\vec{L}\|}, \quad d_{\text{LoS}} = \|\vec{L}\|$$
+
+Project the relative vector $\vec{r} = \vec{x}_{\text{rock}} - \vec{x}_{\text{ai}}$ onto the sight line:
+$$t_{\text{proj}} = \vec{r} \cdot \hat{u}_L$$
+
+The rock only blocks sight if it sits strictly between the enemy and player: $0 < t_{\text{proj}} < d_{\text{LoS}}$.  
+The perpendicular distance from the asteroid center to the laser sightline is:
+$$d_{\perp} = \|\vec{r} - t_{\text{proj}} \hat{u}_L\| = \sqrt{\|\vec{r}\|^2 - t_{\text{proj}}^2}$$
+
+$$\text{Line of Sight is BLOCKED} \iff d_{\perp} < R + R_{\text{buffer}}$$
+
+### 10.2 Dynamic Cover Point Generation
+When the AI's shields drop low, it calculates the "shadow vector" cast by the asteroid opposite the player:
+
+$$\hat{u}_{\text{shadow}} = \frac{\vec{x}_{\text{rock}} - \vec{x}_p}{\|\vec{x}_{\text{rock}} - \vec{x}_p\|}$$
+$$\vec{x}_{\text{cover}} = \vec{x}_{\text{rock}} + (R + R_{\text{ai}} + \text{buffer}) \cdot \hat{u}_{\text{shadow}}$$
+
+By injecting $\vec{x}_{\text{cover}}$ into the Interest Map as an attractive goal, the enemy will sprint behind the rock, break line-of-sight, and wait for its shields or weapons to recharge before re-engaging!
+
+---
+
+## 11. The "AI Director" & Attack Token System (Pacing Control)
+
+If you spawn 6 enemies on screen and each runs its own combat loop independently, they will eventually all fire at the exact same millisecond. The player gets vaporized by an undodgeable wall of 12 lasers, feels cheated, and uninstalls the game.
+
+To solve this, classic games (from *DOOM* to *Left 4 Dead* and *God of War*) use an **AI Director with an Attack Token Bucket**.
+
+```
+                   ┌────────────────────────────┐
+                   │   AI DIRECTOR TOKEN POOL   │
+                   │    [🪙 Token 1] [🪙 Token 2]│
+                   └──────────────┬─────────────┘
+                                  │
+         ┌────────────────────────┴────────────────────────┐
+         ▼                                                 ▼
+[🛸 UFO A: Holds Token 1]                         [🛸 UFO B: Holds Token 2]
+    *Attacks with lasers*                             *Fires predictive shot*
+         │                                                 │
+[🛸 UFO C: Waiting in Queue]                     [🛸 UFO D: Waiting in Queue]
+    *Flanks, circles, taunts*                         *Weaves through rocks*
+```
+
+### How to Implement in 20 Lines of Code:
+```javascript
+class AIDirector {
+  constructor(maxConcurrentAttackers = 2) {
+    this.maxTokens = maxConcurrentAttackers;
+    this.availableTokens = maxConcurrentAttackers;
+  }
+
+  requestAttackToken(enemy) {
+    if (this.availableTokens > 0) {
+      this.availableTokens--;
+      return true; // Granted permission to fire!
+    }
+    return false; // Denied: must posture and flank instead
+  }
+
+  releaseAttackToken(enemy) {
+    this.availableTokens = Math.min(this.maxTokens, this.availableTokens + 1);
+  }
+}
+```
+- **The Psychology**: The screen is full of 6 menacing enemies, creating the feeling of an overwhelming armada. But because only 2 are shooting while the other 4 are tactically circling, the player always has an escape lane.
+
+---
+
+## 12. Influence Maps: Macro Strategy Meets Micro Steering
+
+Context Steering is a **microscopic** navigation system (it dodges a rock 40 pixels ahead). But how does an AI make **macroscopic decisions**, like:
+- *"Which quadrant of the arena has the least clutter?"*
+- *"Where is the player trapped?"*
+- *"Where should I retreat to recover?"*
+
+This is solved with an **Influence Map** (a low-resolution 2D heatmap).
+
+```
+[High Danger Zone (Player & Lasers)]  ──►  [Safe Extraction Zone (Cold)]
+       🟥 🟥 🟧 🟨 🟩 🟦                          🟦 🟦 🟦 🟦 🟦 🟦
+       🟥 🟥 🟧 🟨 🟩 🟦                          🟦 🟦 🟦 🟦 🟦 🟦
+```
+
+### 12.1 The Mathematical Diffusion Equation
+Divide the arena into an $M \times N$ grid (e.g. $24 \times 16$ cells).  
+Every frame, obstacles, player threats, and power-ups stamp influence onto the grid, which diffuses outward like heat:
+
+$$I_{x, y}(t + \Delta t) = (1 - \lambda) I_{x, y}(t) + \frac{\lambda}{4} \sum_{(i, j) \in \text{neighbors}} I_{i, j}(t)$$
+
+where $\lambda \in (0, 1)$ is the diffusion rate.
+
+### 12.2 The Macro-to-Micro Pipeline
+1. **Macro Level**: The enemy scans the Influence Grid and finds the cell $\vec{C}_{\text{safe}}$ with minimum hazard heat.
+2. **Micro Level**: The enemy sets $\vec{C}_{\text{safe}}$ as an attraction target in its **Context Steering Interest Map**.
+3. **Result**: The enemy navigates smoothly across the entire screen toward the safest zone, dodging moving obstacles seamlessly along the way.
+
+---
+
+## 13. Geometric Bullet Pattern AI (Danmaku Mathematics)
+
+In retro arcade games (e.g. *Touhou*, *Ikaruga*, *Geometry Wars*), bosses create mesmerizing, geometric bullet patterns. These look complex but are driven by pure trigonometry.
+
+### 1. The Radial Nova (Circular Burst)
+Emits $N$ bullets in a full $360^\circ$ circle with angular offset $\theta_0$:
+
+$$\theta_i = \theta_0 + \frac{2\pi i}{N}, \quad \vec{v}_i = v_b \begin{bmatrix} \cos\theta_i \\ \sin\theta_i \end{bmatrix}, \quad i \in \{0, 1, \dots, N-1\}$$
+
+### 2. The Archimedean Spiral Stream
+By continuously incrementing the emission angle over time $\theta(t) = \omega t$, a fixed gun nozzle produces sweeping pinwheel spirals:
+
+$$\theta_k(t) = \omega t + \frac{2\pi k}{M}, \quad k \in \{0, \dots, M-1\} \text{ spiral arms}$$
+
+### 3. The Targeted Shotgun Fan
+Shoots $M$ bullets in a spread cone centered directly on the player:
+
+$$\theta_{\text{center}} = \text{atan2}(y_p - y_{\text{ai}}, x_p - x_{\text{ai}})$$
+$$\theta_k = \theta_{\text{center}} + \left(k - \frac{M - 1}{2}\right) \cdot \Delta\theta, \quad k \in \{0, \dots, M-1\}$$
+
+Where $\Delta\theta = 8^\circ$ creates a tight spread, forcing the player to weave between bullet lanes.
+
+### 4. Curving / Swirling Lasers (Angular Velocity)
+If a bullet updates its direction by angular velocity $\omega_{\text{curve}}$ every frame:
+$$\theta_{t + \Delta t} = \theta_t + \omega_{\text{curve}} \Delta t$$
+$$\vec{v}_{t + \Delta t} = v_b \begin{bmatrix} \cos\theta_{t + \Delta t} \\ \sin\theta_{t + \Delta t} \end{bmatrix}$$
+The bullets curve in mid-air like laser whips!
+
+---
+
+## 14. Sensory Perception: Vision Cones & Audio Bubbles
+
+Enemies feel infinitely more lifelike when they can be **snuck up on** or **alerted by noise**.
+
+```
+                       \  Forward Vision Cone (120°) /
+                        \       👁️                   /
+                         \                          /
+                          \        🛸 Enemy        /
+                           -----------------------
+                           (  👂 Sound Radius    )
+```
+
+### 14.1 The Field-of-View (FOV) Dot Product
+Let $\hat{v}_{\text{facing}}$ be the enemy's facing direction and $\vec{r} = \vec{x}_p - \vec{x}_{\text{ai}}$ be the vector to the player:
+
+$$\cos\alpha = \hat{v}_{\text{facing}} \cdot \frac{\vec{r}}{\|\vec{r}\|}$$
+
+$$\text{Player is IN Sight Cone} \iff \cos\alpha \ge \cos\left(\frac{\text{FOV}}{2}\right) \quad \text{and} \quad \|\vec{r}\| \le R_{\text{vision}}$$
+
+For a $120^\circ$ vision cone, $\cos(60^\circ) = 0.5$. If the dot product is $< 0.5$, the player is in the enemy's blind spot!
+
+### 14.2 Acoustic Audio Bubbles
+When the player fires a weapon or activates afterburners, emit an acoustic bubble $R_{\text{sound}}$:
+$$\text{Enemy Hears Player} \iff \|\vec{x}_p - \vec{x}_{\text{ai}}\| \le R_{\text{sound}}$$
+This allows players to sneak behind dormant enemies unless they make sudden noise.
+
+---
+
+## 15. Brain Architectures: FSMs vs. Behavior Trees vs. Utility Systems
+
+How should an arcade AI make high-level decisions?
+
+| Architecture | How It Works | Best For | When It Breaks |
+|---|---|---|---|
+| **Finite State Machine (FSM)** | Hardcoded states (`PATROL`, `CHASE`, `FLEE`) linked by transitions. | Classic arcade ghosts, simple bosses. | **Transition Hell**: As states grow from 3 to 10, transitions explode from 6 to 90. |
+| **Behavior Tree (BT)** | Hierarchical tree of Tasks, Selectors (fallback), and Sequences (order). | Complex squad games (*Halo*). | Can become rigid and difficult to author for continuous arcade movement. |
+| **Utility AI (Recommended)** | Every possible action calculates a real-time utility score $U \in [0, 1]$; highest wins. | Dynamic, emergent arcade combat. | Requires careful curve normalization. |
+
+### Multi-Attribute Utility Formulation (MAUT)
+To select an action dynamically, score each action using multiplied response curves:
+
+$$U(\text{Action}) = \prod_{j=1}^{M} \left[f_j(x_j)\right]^{w_j}$$
+
+- For `Action: Retaliate`:
+  $$U_{\text{Retaliate}} = \left(\frac{\text{Health}_{\text{ai}}}{100}\right)^{0.5} \times \left(1 - \frac{\text{Distance}}{D_{\text{max}}}\right)^{1.2}$$
+- When Health is 100% and distance is short, $U_{\text{Retaliate}} \approx 1.0$.
+- When Health drops to 5%, $U_{\text{Retaliate}} \to 0.2$, causing `Action: FleeToCover` to supersede it automatically!
+
+---
+
+## 16. The Math Cheatsheet: Essential Formulas
 
 Keep these handy in every 2D game project:
 
@@ -612,7 +809,7 @@ $$\delta(d) = \tanh\left(\frac{d - D_{\text{ideal}}}{\sigma}\right)$$
 
 ---
 
-## 11. Responsive Scaling (Never Hardcode Pixels)
+## 17. Responsive Scaling (Never Hardcode Pixels)
 
 Never write pixel constants like `const speed = 5` or `const radar = 200`. On a 4K desktop, 200px is tiny; on a mobile phone, 200px is half the screen.
 
