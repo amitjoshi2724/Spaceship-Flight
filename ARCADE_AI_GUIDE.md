@@ -252,38 +252,56 @@ k^*, & \text{if } S(k^*) > S(k_{\text{current}}) + 0.15 \quad \text{(significant
 k_{\text{current}}, & \text{otherwise (smooth cruising)}
 \end{cases}$$
 
-Furthermore, when $D(k_{\text{current}}) > 0.15$ or when threats are imminent:
-1. **The Directional Inertia Bonus is Suppressed to Zero** ($w_{\text{inertia}} = 0$). The AI never rewards itself for staying on a collision course.
-2. **Evasion Interest Suppression**: Tactical interest weights $w_{\text{player}}$ and $w_{\text{flank}}$ drop from $(0.8, 0.6)$ down to $0.05$.  
-   *Why this matters*: Reversing away from the player naturally incurs a negative dot product (up to $-0.8$). If player interest is not suppressed during evasion, the AI will refuse to back up even when an asteroid blocks all forward paths! Zeroing it out frees the AI to reverse or brake without penalty.
+### 4.7 The Imminent Threat Hierarchy (Hard Safety Override)
+A classic flaw in naive Context Steering is linear addition/subtraction:
+
+$$S(k) = I(k) - w_d D(k)$$
+
+*Why this fails*: If an asteroid is closing in from an angle, a candidate ray heading towards both the player and the asteroid might have mild danger $D(k) = 0.10$, but high player attraction $I_{\text{player}} = +0.8$. With $w_d = 6.0$, the net score is $+0.8 - 0.60 = \mathbf{+0.20}$. Meanwhile, a completely clear ray ($D = 0$) heading away from the player scores $-0.40$. **The AI chooses to ram into the asteroid because player attraction outweighed the obstacle!**
+
+To eliminate this bug, game AIs implement **Hierarchical Hard Safety Masking**:
+
+1. **Complete Extinguishment of Player Interest**:  
+   When any obstacle is on an imminent collision course ($t_{\text{impact}} < 1.6\text{s}$ or $d < 2.8 R_{\text{safe}}$):
+   $$w_{\text{player}} = 0.0, \quad w_{\text{flank}} = 0.0, \quad w_{\text{inertia}} = 0.0$$
+   The player attraction vector is 100% disabled. The AI does not care about dogfighting while its life is on the line.
+2. **Absolute Danger Barrier Penalty**:  
+   Any ray with collision danger ($D(k) > 0$) receives an insurmountable barrier penalty:
+   $$S(k) = \begin{cases} I_{\text{boundary}}(k), & \text{if } D(k) = 0 \quad \text{(clear ray)} \\ -100.0 - 25.0 \cdot D(k), & \text{if } D(k) > 0 \quad \text{(hazard ray)} \end{cases}$$
+   Clear rays always score $\ge -1.6$, while hazard rays plunge below $-100.0$. **No amount of interest can ever cause the AI to choose an asteroid over an open corridor.**
 
 ---
 
-### 4.8 Adaptive Velocity Steering & Active Retro-Braking
-Instead of a fixed turn rate, turning agility and momentum control scale dynamically with threat level:
+### 4.8 Adaptive Velocity Steering: Fast Evasive Jerks & Active Retro-Braking
+When evading, the AI must snap onto its new heading in **1–2 frames**, not slide through a wide, sluggish arc:
 
 $$\alpha = \begin{cases} 
-0.32, & \text{if } D(k_{\text{current}}) > 0.15 \text{ or emergency overdrive} \quad \text{(swift, decisive evasion)} \\
-0.10, & \text{otherwise} \quad \text{(majestic, smooth cruise)}
+0.65, & \text{if } D(k_{\text{current}}) > 0.001 \text{ or imminent threat} \quad \text{(instantaneous evasive jerk)} \\
+0.10, & \text{otherwise} \quad \text{(smooth, cinematic cruising)}
+\end{cases}$$
+
+$$v_{\text{target}} = \begin{cases} 
+2.10 \cdot v_{\text{cruise}}, & \text{during evasion (thruster overdrive)} \\
+v_{\text{cruise}}, & \text{during safe cruising}
 \end{cases}$$
 
 #### Active Retro-Braking (Momentum Cancellation)
-When an enemy needs to reverse direction ($\hat{d}^* \cdot \hat{v} < -0.25$) or is boxed in by hazards on all sides:
+When reversing direction ($\hat{d}^* \cdot \hat{v} < -0.15$) or when boxed in by obstacles:
 
 ```javascript
 if (isBoxedIn) {
   // Trapped with hazards on all sides: cut forward speed immediately!
   targetSpeed = 0;
-  this.dx *= 0.85;
-  this.dy *= 0.85;
+  this.dx *= 0.70;
+  this.dy *= 0.70;
 } else if (isReversing) {
-  // Counter-thrust to cancel old diagonal momentum before flying backwards
-  this.dx *= 0.80;
-  this.dy *= 0.80;
+  // Aggressive counter-thrust to cancel old diagonal momentum before flying backwards
+  this.dx *= 0.60;
+  this.dy *= 0.60;
 }
 ```
 
-Without active retro-braking, a ship with diagonal velocity takes 4–5 frames of sluggish turning to change directions, causing it to drift helplessly into adjacent obstacles along its old momentum path!
+This active dampening stops the ship on a dime and propels it cleanly along the escape vector.
 
 ---
 

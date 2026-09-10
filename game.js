@@ -1447,7 +1447,7 @@
       this.radius = this.width * 0.463;
 
       this.vCruise = (0.22 * dScreen) / 60;
-      this.vBoost = this.vCruise * 1.65;
+      this.vBoost = this.vCruise * 2.10;
       this.vLaser = (0.85 * dScreen) / 60;
     }
 
@@ -1645,7 +1645,7 @@
             tImpact
           });
 
-          if (tImpact < 0.60 || dist < clearance * 1.6) {
+          if (tImpact < 1.20 || dist < clearance * 2.2) {
             this.emergencyOverdrive = true;
           }
         }
@@ -1713,12 +1713,18 @@
         dangerScores[k] = rayDanger;
       }
 
-      // Evasion suppression: when threats are imminent, drop player/flank interest to near zero
-      // so the AI does not penalize reversing away from the player or avoid breaking orbit
+      // -------------------------------------------------------------
+      // IMMINENT THREAT OVERRIDE:
+      // An imminent asteroid threat unconditionally outweighs any attraction/repulsion to the ship.
+      // If any rock is on a collision course or in the danger bubble, player combat drives are 100% extinguished.
+      // -------------------------------------------------------------
+      const hasImminentThreat = threats.some(t => t.urgency > 0.8 || t.dist < t.clearance * 2.8 || t.tImpact < 1.6);
       const currentHeadingDanger = dangerScores[this.currentHeadingIndex] || 0;
-      const isFacingDanger = currentHeadingDanger > 0.15 || threats.some(t => t.urgency > 2.0);
-      const wPlayer = isFacingDanger ? 0.05 : 0.8;
-      const wFlank = isFacingDanger ? 0.05 : 0.6;
+      const isFacingDanger = hasImminentThreat || currentHeadingDanger > 0.05;
+
+      // Pure evasion: 0% player attraction, 0% flanking, 0% forward inertia when an asteroid is near!
+      const wPlayer = isFacingDanger ? 0.0 : 0.8;
+      const wFlank = isFacingDanger ? 0.0 : 0.6;
       const inertiaWeight = isFacingDanger ? 0.0 : 0.7;
 
       for (let k = 0; k < N; k++) {
@@ -1733,10 +1739,16 @@
         const I_boundary = (dkX * repelX + dkY * repelY);
         const I_inertia = (dkX * vNormX + dkY * vNormY);
 
-        const I_k = wPlayer * I_player + wFlank * I_flank + 1.4 * I_boundary + inertiaWeight * I_inertia;
+        const I_k = wPlayer * I_player + wFlank * I_flank + 1.6 * I_boundary + inertiaWeight * I_inertia;
 
-        // Heavily weight safety over interest (6.0 penalty multiplier)
-        const totalScore = I_k - 6.0 * rayDanger;
+        // Imminent asteroid threat completely outweighs attraction:
+        // Any ray with danger receives an absolute barrier penalty (-100.0) so that
+        // completely clear rays (rayDanger === 0) will unconditionally beat rays heading into rocks!
+        let totalScore = I_k;
+        if (rayDanger > 0) {
+          totalScore = -100.0 - (rayDanger * 25.0);
+        }
+
         rayScores.push({ index: k, dkX, dkY, score: totalScore, danger: rayDanger });
       }
 
@@ -1750,8 +1762,8 @@
 
       const currentRay = rayScores[this.currentHeadingIndex] || rayScores[0];
       if (best.index !== this.currentHeadingIndex) {
-        // Zero stubbornness if danger exists on current path or if alternative is much safer!
-        const hasDangerAhead = currentRay.danger > 0.15;
+        // Zero stubbornness if danger exists on current path or if alternative is safer!
+        const hasDangerAhead = currentRay.danger > 0.001;
         const saferAlternative = best.danger < currentRay.danger;
         const significantlyBetter = best.score > currentRay.score + 0.15;
 
@@ -1762,33 +1774,32 @@
 
       const chosenRay = rayScores[this.currentHeadingIndex];
 
-      // 5. Physical Velocity Steering (Adaptive Agility & Retro-Braking)
-      const isEvasive = this.emergencyOverdrive || chosenRay.danger > 0 || currentRay.danger > 0.10 || threats.some(t => t.dist < t.clearance * 2.2);
+      // 5. Physical Velocity Steering (Fast Evasive Jerk & Retro-Braking)
+      const isEvasive = this.emergencyOverdrive || chosenRay.danger > 0 || currentRay.danger > 0.01 || isFacingDanger;
       let targetSpeed = isEvasive ? this.vBoost : this.vCruise;
 
       // Active Retro-Braking / Momentum Cancellation:
-      // If the chosen ray points backwards relative to current velocity,
-      // or if all options carry residual danger (boxed in), actively dampen speed!
+      // Decisively dump old momentum so the UFO jerks onto the new heading without sliding
       const dotChosenVel = (chosenRay.dkX * this.dx + chosenRay.dkY * this.dy) / (currentSpeed || 1);
-      const isReversing = dotChosenVel < -0.25;
-      const isBoxedIn = chosenRay.danger > 0.30;
+      const isReversing = dotChosenVel < -0.15;
+      const isBoxedIn = chosenRay.danger > 0.25;
 
       if (isBoxedIn) {
         // Trapped with hazards on all sides: cut speed immediately to minimize collision energy
         targetSpeed = 0;
-        this.dx *= 0.85;
-        this.dy *= 0.85;
+        this.dx *= 0.70;
+        this.dy *= 0.70;
       } else if (isReversing) {
-        // Counter-thrust to cancel old diagonal drift before accelerating into the reverse vector
-        this.dx *= 0.80;
-        this.dy *= 0.80;
+        // Aggressive counter-thrust to cancel old diagonal drift before accelerating into the reverse vector
+        this.dx *= 0.60;
+        this.dy *= 0.60;
       }
 
       const targetDx = chosenRay.dkX * targetSpeed;
       const targetDy = chosenRay.dkY * targetSpeed;
 
-      // Adaptive turn agility: cruise is smooth (0.10), evasion is fast & decisive (0.32)
-      const turnAgility = isEvasive ? 0.32 : 0.10;
+      // Fast, sharp evasive turn agility: 0.65 (redirects in 1-2 frames) vs 0.10 cruise
+      const turnAgility = isEvasive ? 0.65 : 0.10;
       this.dx += (targetDx - this.dx) * turnAgility;
       this.dy += (targetDy - this.dy) * turnAgility;
 
