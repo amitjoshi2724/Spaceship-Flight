@@ -8,11 +8,14 @@ A practical, no-nonsense engineering guide for building responsive, organic, and
 1. [The Golden Rule: The Illusion of Intelligence](#1-the-golden-rule-the-illusion-of-intelligence)
 2. [The 3 Paradigms of Arcade AI](#2-the-3-paradigms-of-arcade-ai)
 3. [Why Vector Summing Breaks (And How Context Steering Solves It)](#3-why-vector-summing-breaks-and-how-context-steering-solves-it)
-4. [Step-by-Step Implementation: Building a Context Steering Brain](#4-step-by-step-implementation-building-a-context-steering-brain)
-5. [The Anti-Jitter Playbook (The 4 Layers of Smoothness)](#5-the-anti-jitter-playbook-the-4-layers-of-smoothness)
-6. [Combat & Weapons AI (Predictive Aiming & Dual Channels)](#6-combat--weapons-ai-predictive-aiming--dual-channels)
-7. [The Math Cheatsheet: Essential Formulas](#7-the-math-cheatsheet-essential-formulas)
-8. [Responsive Scaling (Never Hardcode Pixels)](#8-responsive-scaling-never-hardcode-pixels)
+4. [The Mathematical Deep-Dive: Context Steering Formulated in LaTeX](#4-the-mathematical-deep-dive-context-steering-formulated-in-latex)
+5. [Step-by-Step Implementation: The JavaScript Engine](#5-step-by-step-implementation-the-javascript-engine)
+6. [The Anti-Jitter Playbook: The Secret to Making It Feel "Alive"](#6-the-anti-jitter-playbook-the-secret-to-making-it-feel-alive)
+7. [Combat & Weapons AI (Predictive Aiming & Dual Channels)](#7-combat--weapons-ai-predictive-aiming--dual-channels)
+8. [Advanced Arcade AI Archetypes & Possibilities](#8-advanced-arcade-ai-archetypes--possibilities)
+9. [Dynamic Difficulty Adjustment (DDA) & Player Psychology](#9-dynamic-difficulty-adjustment-dda--player-psychology)
+10. [The Math Cheatsheet: Essential Formulas](#10-the-math-cheatsheet-essential-formulas)
+11. [Responsive Scaling (Never Hardcode Pixels)](#11-responsive-scaling-never-hardcode-pixels)
 
 ---
 
@@ -20,7 +23,7 @@ A practical, no-nonsense engineering guide for building responsive, organic, and
 
 In video games, **you are not trying to create a sentient being; you are creating an actor that plays a convincing role.**
 
-Players cannot see an AI's internal state. They judge intelligence purely through three observable behaviors:
+Players cannot see an AI's internal code or neural weights. They judge intelligence purely through three observable behaviors:
 1. **Decisiveness**: Moving smoothly toward an objective without stuttering or spinning randomly.
 2. **Reactivity**: Noticeably changing course when a threat approaches.
 3. **Telegraphing**: Giving visual and audible hints right before taking an action (e.g. charging a weapon, banking into a turn).
@@ -93,9 +96,152 @@ $$\text{Total Score}(k) = \text{Interest}(k) - 3.5 \times \text{Danger}(k)$$
 
 ---
 
-## 4. Step-by-Step Implementation: Building a Context Steering Brain
+## 4. The Mathematical Deep-Dive: Context Steering Formulated in LaTeX
 
-Here is a clean, dependency-free JavaScript implementation of a 16-ray Context Steering controller that you can drop into any 2D game.
+For developers who prefer mathematical definitions over parsing code, here is the complete mathematical framework of Context Steering.
+
+### 4.1 The Ray Discretization
+We discretize continuous 2D space into $N$ candidate direction unit vectors $\hat{d}_k$ for $k \in \{0, 1, \dots, N-1\}$:
+
+$$\theta_k = \frac{2\pi k}{N}, \quad \hat{d}_k = \begin{bmatrix} \cos\theta_k \\ \sin\theta_k \end{bmatrix}$$
+
+For $N = 16$, the angular resolution is $\Delta\theta = 22.5^\circ$.
+
+---
+
+### 4.2 Relative Kinematics & Closing Speed
+Let the enemy ship be at position $\vec{x}_{\text{ai}}$ with velocity $\vec{v}_{\text{ai}}$.  
+For an obstacle $i$ at position $\vec{x}_i$ with velocity $\vec{v}_i$:
+
+$$\vec{r}_i = \vec{x}_i - \vec{x}_{\text{ai}}, \quad d_i = \|\vec{r}_i\|$$
+$$\vec{v}_{\text{rel}, i} = \vec{v}_i - \vec{v}_{\text{ai}}$$
+
+The **closing velocity** $v_{\text{close}, i}$ represents the rate at which the obstacle is radially closing in on the ship:
+
+$$v_{\text{close}, i} = -\frac{\vec{r}_i \cdot \vec{v}_{\text{rel}, i}}{d_i}$$
+
+- If $v_{\text{close}, i} \le 0$: the obstacle is drifting away or moving parallel. No immediate collision.
+- If $v_{\text{close}, i} > 0$: the obstacle is actively converging toward the ship.
+
+The **time to impact** $t_{\text{impact}, i}$ is:
+
+$$t_{\text{impact}, i} = \begin{cases} \dfrac{d_i}{v_{\text{close}, i}}, & \text{if } v_{\text{close}, i} > v_{\text{threshold}} \\ \infty, & \text{otherwise} \end{cases}$$
+
+---
+
+### 4.3 Continuous Urgency Curve $U(t)$
+Instead of step functions like `if (dist < 50)`, we use a smooth inverse-time urgency curve:
+
+$$U_i = \frac{1}{\max(\epsilon, t_{\text{impact}, i})}$$
+
+where $\epsilon = 0.12\text{s}$ prevents division by zero.
+- At $t = 5.0\text{s}$, $U = 0.2$ (barely registers; calm navigation).
+- At $t = 1.0\text{s}$, $U = 1.0$ (moderate caution; adjusts course).
+- At $t = 0.3\text{s}$, $U = 3.33$ (critical danger; emergency thruster overdrive).
+
+---
+
+### 4.4 Ray Projection, Lateral Clearance, and Penetration
+For each ray $\hat{d}_k$, we project the relative position $\vec{r}_i$ onto the ray:
+
+$$\text{proj}_{k, i} = \vec{r}_i \cdot \hat{d}_k$$
+
+The obstacle only poses a hazard along ray $\hat{d}_k$ if it lies in the forward half-space: $\text{proj}_{k, i} > -R_{\text{safe}, i}$.
+
+The **lateral (perpendicular) distance** from the ray line to the obstacle center is:
+
+$$d_{\text{lat}}(k, i) = \left\| \vec{r}_i - \text{proj}_{k, i} \hat{d}_k \right\| = \sqrt{d_i^2 - \text{proj}_{k, i}^2}$$
+
+The **safety clearance envelope** is:
+$$R_{\text{safe}, i} = R_{\text{ai}} + R_{\text{obs}, i} + \text{buffer}$$
+
+The **penetration depth ratio** $P_{k, i} \in [0, 1]$ represents how deeply the ray cuts through the hazard's collision boundary:
+
+$$P_{k, i} = \max\left(0, 1 - \frac{d_{\text{lat}}(k, i)}{R_{\text{safe}, i}}\right)$$
+
+---
+
+### 4.5 The Danger Map Equation
+The total danger score $D(k)$ for ray $k$ sums all threatening obstacles within radar range:
+
+$$D(k) = \sum_{i \in \text{threats}} U_i \cdot \left(P_{k, i}\right)^2$$
+
+*Why quadratic penetration $(P_{k, i})^2$?*  
+Rays that barely graze the edge receive a very mild penalty, while rays pointing directly at the obstacle's center suffer a punishing quadratic penalty, leaving clean corridors wide open.
+
+---
+
+### 4.6 The Tactical Interest Map Formulation
+The Interest Map balances four distinct tactical drives:
+
+$$I(k) = w_{\text{player}} I_{\text{player}}(k) + w_{\text{flank}} I_{\text{flank}}(k) + w_{\text{bound}} I_{\text{bound}}(k) + w_{\text{inertia}} I_{\text{inertia}}(k)$$
+
+#### 1. Combat Range Desire Curve (Hyperbolic Tangent)
+Let $d_p = \|\vec{x}_{\text{player}} - \vec{x}_{\text{ai}}\|$ and let $D_{\text{combat}}$ be the ideal standoff distance:
+
+$$\delta(d_p) = \tanh\left(\frac{d_p - D_{\text{combat}}}{\sigma}\right) \in (-1, 1)$$
+
+- If $d_p > D_{\text{combat}}$: $\delta(d_p) > 0 \implies$ AI seeks to close distance.
+- If $d_p < D_{\text{combat}}$: $\delta(d_p) < 0 \implies$ AI naturally kites and retreats.
+- If $d_p = D_{\text{combat}}$: $\delta(d_p) = 0 \implies$ perfectly balanced in standoff zone.
+
+The player interest along ray $k$ is:
+$$I_{\text{player}}(k) = \delta(d_p) \cdot \left(\hat{d}_k \cdot \hat{u}_{\text{player}}\right), \quad \text{where } \hat{u}_{\text{player}} = \frac{\vec{x}_{\text{player}} - \vec{x}_{\text{ai}}}{d_p}$$
+
+#### 2. Tangential Flanking / Orbiting
+To circle around the player rather than charging head-on in a straight line, we compute the normal vector:
+
+$$\hat{u}_{\text{perp}} = \text{dir}_{\text{orbit}} \cdot \begin{bmatrix} -\hat{u}_{\text{player}, y} \\ \hat{u}_{\text{player}, x} \end{bmatrix}, \quad \text{dir}_{\text{orbit}} \in \{+1, -1\}$$
+
+$$I_{\text{flank}}(k) = \hat{d}_k \cdot \hat{u}_{\text{perp}}$$
+
+#### 3. Soft Screen Boundary Cushion
+Let the arena dimensions be $(W, H)$ with margin $M = 0.12 \min(W, H)$. The inward boundary repulsion vector $\vec{F}_{\text{bound}}$ is:
+
+$$\vec{F}_{\text{bound}} = \begin{bmatrix} 
+\max\left(0, \frac{M - x}{M}\right) - \max\left(0, \frac{x - (W - M)}{M}\right) \\
+\max\left(0, \frac{M - y}{M}\right) - \max\left(0, \frac{y - (H - M)}{M}\right)
+\end{bmatrix}$$
+
+$$I_{\text{bound}}(k) = \hat{d}_k \cdot \vec{F}_{\text{bound}}$$
+
+#### 4. Directional Inertia (Anti-Jitter Stabilization)
+Let $\hat{v} = \frac{\vec{v}_{\text{ai}}}{\|\vec{v}_{\text{ai}}\|}$ be the current normalized flight direction:
+
+$$I_{\text{inertia}}(k) = \hat{d}_k \cdot \hat{v}$$
+
+Rewarding rays aligned with the current velocity vector acts like an aerodynamic stabilizer, preventing frame-by-frame flutter.
+
+---
+
+### 4.7 Net Scoring & Switching Hysteresis
+Every ray $k$ receives a net score:
+
+$$S(k) = I(k) - w_d D(k), \quad \text{with typical } w_d \approx 3.5$$
+
+The highest-scoring ray is $k^* = \arg\max_k S(k)$.  
+To eliminate oscillation between two nearly identical rays, we enforce **Switching Hysteresis** with threshold $\Delta = 0.18$:
+
+$$\text{Active Ray} \leftarrow \begin{cases} 
+k^*, & \text{if } S(k^*) > S(k_{\text{current}}) + \Delta \quad \text{or} \quad D(k_{\text{current}}) > D_{\text{panic}} \\
+k_{\text{current}}, & \text{otherwise}
+\end{cases}$$
+
+---
+
+### 4.8 Physical Velocity Steering (No Teleportation)
+Once the winning unit vector $\hat{d}^*$ is selected, the ship smoothly accelerates toward the target velocity:
+
+$$\vec{v}_{\text{target}} = \hat{d}^* \cdot v_{\text{cruise}}$$
+$$\vec{v}_{t + \Delta t} = \vec{v}_t + \alpha \left(\vec{v}_{\text{target}} - \vec{v}_t\right)$$
+
+where $\alpha \approx 0.08$ (at 60fps) provides smooth, physical turning arcs with simulated mass.
+
+---
+
+## 5. Step-by-Step Implementation: The JavaScript Engine
+
+Here is the exact JavaScript code implementing the equations above:
 
 ```javascript
 class ContextSteeringBrain {
@@ -145,7 +291,7 @@ class ContextSteeringBrain {
         timeToImpact = dist / closingSpeed;
       }
       
-      // Continuous urgency: scales inversely with time to impact (never hardcode if dist < X)
+      // Continuous urgency: scales inversely with time to impact
       const urgency = 1.0 / Math.max(0.12, timeToImpact);
       const safeClearance = ufo.radius + obs.radius + ufo.radius * 0.35;
 
@@ -159,7 +305,7 @@ class ContextSteeringBrain {
           const latDist = Math.hypot(relX - proj * ray.x, relY - proj * ray.y);
           if (latDist < safeClearance) {
             const penetration = 1.0 - (latDist / safeClearance);
-            // Danger grows with urgency squared and penetration depth
+            // Danger grows quadratically with penetration depth
             danger[k] += urgency * penetration * penetration;
           }
         }
@@ -227,7 +373,7 @@ class ContextSteeringBrain {
       }
     }
 
-    // Hysteresis: only switch heading if the new ray is substantially better
+    // Hysteresis: only switch heading if new ray is substantially better
     // or if the current heading has become actively dangerous.
     const currentScore = interest[this.currentRayIndex] - 3.5 * danger[this.currentRayIndex];
     if (bestIndex !== this.currentRayIndex) {
@@ -243,7 +389,7 @@ class ContextSteeringBrain {
 
 ---
 
-## 5. The Anti-Jitter Playbook: The Secret to Making It Feel "Alive"
+## 6. The Anti-Jitter Playbook: The Secret to Making It Feel "Alive"
 
 The difference between a **"janky math experiment"** and a **"badass enemy"** is 3 simple tricks:
 
@@ -257,12 +403,12 @@ The difference between a **"janky math experiment"** and a **"badass enemy"** is
 
 When developers try to code AI from scratch, their ships often shake, twitch, or spin like a top. Real creatures and vehicles have mass and inertia. Here are the 4 techniques that eradicate jitter completely:
 
-### Layer 1: Directional Inertia Bonus
+#### Layer 1: Directional Inertia Bonus
 In your Interest calculation, always reward the direction the AI is *already* traveling:
-$$I_{\text{inertia}}(k) = \vec{d}_k \cdot \frac{\vec{v}}{\|\vec{v}\|}$$
+$$I_{\text{inertia}}(k) = \hat{d}_k \cdot \frac{\vec{v}}{\|\vec{v}\|}$$
 Giving this a weight of $0.5$ to $0.8$ acts like aerodynamic stabilization. The AI will naturally prefer to continue on its current flight path unless an obstacle or objective provides a strong reason to turn.
 
-### Layer 2: Switching Hysteresis (Stubbornness)
+#### Layer 2: Switching Hysteresis (Stubbornness)
 Never switch directions just because another ray scored $0.001$ points higher. Add a switching threshold $\Delta$:
 ```javascript
 if (bestScore > currentScore + 0.18 || currentDanger > 0.8) {
@@ -271,7 +417,7 @@ if (bestScore > currentScore + 0.18 || currentDanger > 0.8) {
 ```
 The AI stays committed to its trajectory until the alternative is noticeably better or until danger demands an evasive turn.
 
-### Layer 3: Physical Velocity Damping (No Instant Snapping)
+#### Layer 3: Physical Velocity Damping (No Instant Snapping)
 Never directly set an AI's position or velocity:
 ```javascript
 // BAD: Instant snapping creates robotic, jerky motion
@@ -284,7 +430,7 @@ this.dy += (targetDy - this.dy) * 0.08;
 ```
 This single line introduces simulated mass, momentum, and smooth turning arcs.
 
-### Layer 4: Banking Tilt (Visual Weight)
+#### Layer 4: Banking Tilt (Visual Weight)
 In 2D top-down games, tilt the sprite slightly based on its horizontal acceleration:
 ```javascript
 const targetBankAngle = Math.max(-15, Math.min(15, this.dx * 3.5));
@@ -294,34 +440,48 @@ When turning left, the ship banks $-15^\circ$; when turning right, it banks $+15
 
 ---
 
-## 6. Combat & Weapons AI (Predictive Aiming & Dual Channels)
+## 7. Combat & Weapons AI (Predictive Aiming & Dual Channels)
 
 A great enemy doesn't just navigate; it fights with believable tactics.
 
-### 1. First-Order Predictive Aiming (Lead Targeting)
-If an enemy fires directly at where the player is right now, the player will never get hit as long as they are moving.
+### 7.1 Predictive Lead Targeting in LaTeX
 
-To calculate where the player **will be** when the laser arrives:
-```javascript
-// Time for the bullet to travel the current distance
-const distance = Math.hypot(player.x - ufo.x, player.y - ufo.y);
-const timeToHit = distance / bulletSpeed;
+If an enemy fires directly at the player's current position, the laser will miss as long as the player is moving. We must solve for the future intercept coordinate $\vec{x}_{\text{intercept}}$.
 
-// Predict future position assuming constant velocity
-const futureX = player.x + player.dx * timeToHit;
-const futureY = player.y + player.dy * timeToHit;
+#### The First-Order Linear Approximation
+Let bullet speed be $v_b$ and player velocity be $\vec{v}_p$. The first-order estimate of travel time is:
 
-// Fire at predicted coordinate
-const aimAngle = Math.atan2(futureY - ufo.y, futureX - ufo.x);
-```
-> **Pro-Tip for Game Balance**: Give the AI a 50/50 mix:
-> - 50% of shots fire with predictive lead aiming.
-> - 50% fire directly at the player's current position.
-> This forces the player to constantly vary their speed rather than just flying in a circle.
+$$t_h \approx \frac{\|\vec{x}_p - \vec{x}_{\text{gun}}\|}{v_b}$$
+
+Assuming constant target velocity during flight, the projected intercept point is:
+
+$$\vec{x}_{\text{aim}} = \vec{x}_p + \vec{v}_p \cdot t_h$$
+
+$$\theta_{\text{aim}} = \text{atan2}\left(x_{\text{aim}, y} - y_{\text{gun}}, x_{\text{aim}, x} - x_{\text{gun}}\right)$$
+
+#### The Exact Quadratic Intercept Solution
+For high-precision combat, we solve the exact kinematic intercept equation:
+
+$$\|\vec{x}_p + \vec{v}_p t - \vec{x}_{\text{gun}}\| = v_b t$$
+
+Let $\vec{r} = \vec{x}_p - \vec{x}_{\text{gun}}$. Squaring both sides yields the quadratic equation:
+
+$$\left(\|\vec{v}_p\|^2 - v_b^2\right) t^2 + 2\left(\vec{r} \cdot \vec{v}_p\right) t + \|\vec{r}\|^2 = 0$$
+
+$$A t^2 + B t + C = 0$$
+where:
+- $A = v_{p, x}^2 + v_{p, y}^2 - v_b^2$
+- $B = 2(r_x v_{p, x} + r_y v_{p, y})$
+- $C = r_x^2 + r_y^2$
+
+The discriminant is $\Delta = B^2 - 4AC$.
+- If $\Delta < 0$: No mathematical intercept exists (the player is outrunning the laser). Fall back to current player position.
+- If $\Delta \ge 0$: The earliest valid intercept time is the smallest positive root:
+$$t^* = \frac{-B - \sqrt{\Delta}}{2A}$$
 
 ---
 
-### 2. Dual-Channel Weapons Architecture
+### 7.2 Dual-Channel Weapons Architecture
 Never lock an enemy out of defending itself just because it shot at the player!
 
 Separate weapons into two distinct timers:
@@ -332,7 +492,94 @@ This gives the enemy a living, combat-hardened presence: it fights the environme
 
 ---
 
-## 7. The Math Cheatsheet: Essential Formulas
+## 8. Advanced Arcade AI Archetypes & Possibilities
+
+By simply changing the interest weights $w_p, w_f, w_d, w_i$ and the distance curve, you can create a diverse zoo of completely unique enemy behaviors using the exact same Context Steering engine:
+
+```
+                                  [CONTEXT STEERING ENGINE]
+                                             │
+      ┌─────────────────┬────────────────────┼───────────────────┬────────────────┐
+      ▼                 ▼                    ▼                   ▼                ▼
+[1. The Berserker] [2. The Sniper]  [3. The Harasser]   [4. The Swarm]    [5. The Escort]
+ (Pure Aggression)  (Coward/Kite)     (Orbit & Weave)   (Wolfpack Flocking) (VIP Bodyguard)
+```
+
+### Archetype 1: The Berserker / Rammer
+- **Personality**: Aggressive, suicidal, charges with reckless abandon.
+- **Tuning**:
+  - $w_{\text{player}} = 2.5$ (constant forward pull toward player; ignore $\tanh$ standoff).
+  - $w_{\text{danger}} = 1.0$ (minimal fear of rocks; only dodges at the very last millisecond).
+  - $w_{\text{inertia}} = 1.4$ (high forward thrust; charges like a freight train).
+  - $w_{\text{flank}} = 0.0$ (never circles; direct linear pursuit).
+
+### Archetype 2: The Sniper / Coward (Kiter)
+- **Personality**: Skulks in the background, flees whenever the player approaches, and snipes from long range.
+- **Tuning**:
+  - $D_{\text{combat}} = 0.70 \min(W, H)$ (very long standoff distance).
+  - $w_{\text{player}} = 1.8$ (heavily repelled if player closes within standoff distance).
+  - $w_{\text{danger}} = 4.5$ (extreme hazard aversion; avoids even distant rocks).
+  - Weapon: 100% quadratic predictive lead aiming with high laser velocity.
+
+### Archetype 3: The Orbiting Harasser (Our Evil UFO)
+- **Personality**: Graceful, tactical, dances through asteroid belts while picking you apart.
+- **Tuning**:
+  - $D_{\text{combat}} = 0.40 \min(W, H)$ (medium range).
+  - $w_{\text{player}} = 0.8, \quad w_{\text{flank}} = 0.6, \quad w_{\text{danger}} = 3.5, \quad w_{\text{inertia}} = 0.7$.
+  - Periodically flips $\text{dir}_{\text{orbit}}$ every 5–8 seconds to reverse circling direction.
+
+### Archetype 4: The Wolfpack / Swarm (Flocking Context Steering)
+- **Personality**: 3 to 5 small fighters that fly together in formation without crashing into one another.
+- **How to Build It**:
+  In Step 1 (Danger Map), treat **other friendly ships** as soft obstacle spheres:
+  $$R_{\text{separation}} = 2.5 \cdot R_{\text{ship}}$$
+  If a squadmate is too close, rays pointing toward that squadmate receive a Danger penalty.
+  - **Result**: The pack naturally fans out, encircles the player in a pincer formation, and never clumps or clips into each other!
+
+### Archetype 5: The Bodyguard / Shield-Bearer
+- **Personality**: Protects a larger Mother-ship or Boss from incoming player fire.
+- **How to Build It**:
+  Instead of tracking the player directly, calculate the midpoint between the Boss and the Player:
+  $$\vec{x}_{\text{guard}} = \vec{x}_{\text{boss}} + 0.35 (\vec{x}_{\text{player}} - \vec{x}_{\text{boss}})$$
+  Set $I_{\text{player}}$ to track $\vec{x}_{\text{guard}}$. The ship will actively position its hull between the player's cannons and the boss!
+
+---
+
+## 9. Dynamic Difficulty Adjustment (DDA) & Player Psychology
+
+The mark of a master game designer is making the player feel **challenged and thrilled**, never frustrated or cheated.
+
+### 1. The Human Reaction Delay (Ring Buffer)
+A computer can read the player's coordinates at 60fps and react in $0.016\text{s}$. If an AI reacts this fast, it feels unfair and robotic.
+
+Human arcade players take **$200\text{ms}$ to $350\text{ms}$** to react to a sudden turn. To make an AI feel organic, store the player's positions in a 15-frame ring buffer:
+```javascript
+// Store history: [frame-15, frame-14, ... frame-0]
+this.playerHistory.push({ x: player.x, y: player.y, dx: player.dx, dy: player.dy });
+if (this.playerHistory.length > 15) this.playerHistory.shift();
+
+// AI tracks where the player WAS 250ms ago:
+const perceivedPlayer = this.playerHistory[0];
+```
+Now, when the player hits the reverse thrusters, the AI overshoots for a split second before correcting its course — exactly like a human dogfighter!
+
+### 2. The Inaccuracy Gaussian Cone
+Never give an enemy 100% laser accuracy. Instead, add a small angular noise offset sampled from a normal distribution:
+
+$$\theta_{\text{fire}} = \theta_{\text{aim}} + \mathcal{N}(0, \sigma^2)$$
+
+- On Easy difficulty: $\sigma = 12^\circ$ (shots fly dangerously close, raising adrenaline, but usually miss).
+- On Medium difficulty: $\sigma = 5^\circ$.
+- On Hard / Boss difficulty: $\sigma = 1.5^\circ$.
+
+### 3. The "Near-Miss" Thrill Effect
+Players don't get adrenaline rushes when enemies miss by half the screen. They get thrills when enemy lasers **whiz past their cockpit by 10 pixels**.
+
+By tuning the inaccuracy cone so bullets narrowly miss the player's bounding box, players feel like skilled escape artists without realizing the AI was intentionally giving them a close shave.
+
+---
+
+## 10. The Math Cheatsheet: Essential Formulas
 
 Keep these handy in every 2D game project:
 
@@ -358,15 +605,14 @@ const perpY =  unitX;
 ```
 
 ### 4. Hyperbolic Tangent Curve (Combat Range Softener)
-Instead of writing an ugly `if/else` block for distance:
-$$f(d) = \tanh\left(\frac{d - D_{\text{ideal}}}{\text{Scale}}\right)$$
-- If $d > D_{\text{ideal}}$, returns a positive number (attracted to player).
-- If $d < D_{\text{ideal}}$, returns a negative number (repelled from player).
+$$\delta(d) = \tanh\left(\frac{d - D_{\text{ideal}}}{\sigma}\right)$$
+- If $d > D_{\text{ideal}}$: returns positive (attraction).
+- If $d < D_{\text{ideal}}$: returns negative (repulsion).
 - Smoothly transitions through zero at $D_{\text{ideal}}$.
 
 ---
 
-## 8. Responsive Scaling (Never Hardcode Pixels)
+## 11. Responsive Scaling (Never Hardcode Pixels)
 
 Never write pixel constants like `const speed = 5` or `const radar = 200`. On a 4K desktop, 200px is tiny; on a mobile phone, 200px is half the screen.
 
