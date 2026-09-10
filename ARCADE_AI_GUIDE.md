@@ -220,34 +220,45 @@ Rewarding rays aligned with the current velocity vector acts like an aerodynamic
 
 ---
 
-### 4.7 Net Scoring & Switching Hysteresis
+### 4.7 Net Scoring & Responsive Hysteresis
 Every ray $k$ receives a net score:
 
-$$S(k) = I(k) - w_d D(k), \quad \text{with typical } w_d \approx 3.5$$
+$$S(k) = I(k) - w_d D(k), \quad \text{with strong safety weighting } w_d \approx 5.0$$
 
 The highest-scoring ray is $k^* = \arg\max_k S(k)$.  
-To eliminate oscillation between two nearly identical rays, we enforce **Switching Hysteresis** with threshold $\Delta = 0.18$:
+
+#### The Hysteresis Trap & The Solution:
+If hysteresis is too stubborn (e.g. demanding $\Delta > 0.18$ even when heading toward a rock), the ship will slam into the obstacle because its forward inertia bonus $+0.7$ artificially inflates the current path's score!
+
+**The Golden Rule of Hysteresis**: *Stubbornness is ONLY for safe cruising; it must INSTANTLY yield when danger is detected.*
 
 $$\text{Active Ray} \leftarrow \begin{cases} 
-k^*, & \text{if } S(k^*) > S(k_{\text{current}}) + \Delta \quad \text{or} \quad D(k_{\text{current}}) > D_{\text{panic}} \\
-k_{\text{current}}, & \text{otherwise}
+k^*, & \text{if } D(k_{\text{current}}) > 0.15 \quad \text{(immediate danger ahead)} \\
+k^*, & \text{if } D(k^*) < D(k_{\text{current}}) \quad \text{(safer alternative)} \\
+k^*, & \text{if } S(k^*) > S(k_{\text{current}}) + 0.15 \quad \text{(significantly better)} \\
+k_{\text{current}}, & \text{otherwise (smooth cruising)}
 \end{cases}$$
+
+Furthermore, when $D(k_{\text{current}}) > 0.15$, the **directional inertia bonus is suppressed to zero** ($w_{\text{inertia}} = 0$). The AI never rewards itself for staying on a collision course!
 
 ---
 
-### 4.8 Physical Velocity Steering (No Teleportation)
-Once the winning unit vector $\hat{d}^*$ is selected, the ship smoothly accelerates toward the target velocity:
+### 4.8 Adaptive Velocity Steering (Dual Agility)
+Instead of a fixed turn rate, turning agility scales dynamically with threat level:
 
-$$\vec{v}_{\text{target}} = \hat{d}^* \cdot v_{\text{cruise}}$$
+$$\alpha = \begin{cases} 
+0.24, & \text{if } D(k_{\text{current}}) > 0.15 \text{ or emergency overdrive} \quad \text{(swift, decisive evasion)} \\
+0.10, & \text{otherwise} \quad \text{(majestic, smooth cruise)}
+\end{cases}$$
+
+$$\vec{v}_{\text{target}} = \hat{d}^* \cdot v_{\text{target}}$$
 $$\vec{v}_{t + \Delta t} = \vec{v}_t + \alpha \left(\vec{v}_{\text{target}} - \vec{v}_t\right)$$
-
-where $\alpha \approx 0.08$ (at 60fps) provides smooth, physical turning arcs with simulated mass.
 
 ---
 
 ## 5. Step-by-Step Implementation: The JavaScript Engine
 
-Here is the exact JavaScript code implementing the equations above:
+Here is the exact, battle-tested JavaScript code implementing the robust avoidance equations:
 
 ```javascript
 class ContextSteeringBrain {
@@ -272,9 +283,10 @@ class ContextSteeringBrain {
     const N = this.numRays;
     const danger = new Float32Array(N);
     const interest = new Float32Array(N);
+    const radarRange = Math.max(180, ufo.radius * 8.0);
 
     // -------------------------------------------------------------
-    // STEP 1: POPULATE DANGER MAP (Obstacles & Hazards)
+    // STEP 1: POPULATE DANGER MAP (Dual Urgency: Kinematic + Proximity)
     // -------------------------------------------------------------
     for (const obs of obstacles) {
       if (obs.popped || obs.dead) continue;
@@ -283,43 +295,44 @@ class ContextSteeringBrain {
       const relY = obs.y - ufo.y;
       const dist = Math.hypot(relX, relY);
 
-      // Only evaluate obstacles within radar range
-      const radarRange = ufo.radius * 6.0 + obs.radius;
-      if (dist > radarRange) continue;
+      if (dist < radarRange + obs.radius) {
+        const relVx = (obs.dx || 0) - ufo.dx;
+        const relVy = (obs.dy || 0) - ufo.dy;
+        const closingSpeed = -(relX * relVx + relY * relVy) / (dist || 1);
+        
+        // Kinematic time-to-impact urgency
+        let urgencyKinematic = 0;
+        if (closingSpeed > 0.05) {
+          const tImpact = dist / closingSpeed;
+          urgencyKinematic = 1.0 / Math.max(0.10, tImpact);
+        }
 
-      // Calculate time to closest approach (continuous urgency)
-      const relVx = (obs.dx || 0) - ufo.dx;
-      const relVy = (obs.dy || 0) - ufo.dy;
-      const closingSpeed = -(relX * relVx + relY * relVy) / (dist || 1);
-      
-      let timeToImpact = 5.0; // Default safe buffer
-      if (closingSpeed > 0.05) {
-        timeToImpact = dist / closingSpeed;
-      }
-      
-      // Continuous urgency: scales inversely with time to impact
-      const urgency = 1.0 / Math.max(0.12, timeToImpact);
-      const safeClearance = ufo.radius + obs.radius + ufo.radius * 0.35;
+        // Static spatial proximity urgency (prevents slow/crossing rocks from being ignored!)
+        const proximityFactor = Math.max(0, 1.0 - dist / (radarRange + obs.radius));
+        const urgencyProximity = proximityFactor * 2.5;
 
-      // Project obstacle sphere onto each ray
-      for (let k = 0; k < N; k++) {
-        const ray = this.rays[k];
-        const proj = relX * ray.x + relY * ray.y;
+        const urgency = Math.max(urgencyKinematic, urgencyProximity);
+        const safeClearance = ufo.radius + obs.radius + ufo.radius * 0.45;
 
-        // If obstacle is in the forward half-space of this ray
-        if (proj > -safeClearance) {
-          const latDist = Math.hypot(relX - proj * ray.x, relY - proj * ray.y);
-          if (latDist < safeClearance) {
-            const penetration = 1.0 - (latDist / safeClearance);
-            // Danger grows quadratically with penetration depth
-            danger[k] += urgency * penetration * penetration;
+        // Project obstacle onto candidate rays
+        for (let k = 0; k < N; k++) {
+          const ray = this.rays[k];
+          const proj = relX * ray.x + relY * ray.y;
+
+          if (proj > -ufo.radius * 0.4 && proj < radarRange) {
+            const latDist = Math.hypot(relX - proj * ray.x, relY - proj * ray.y);
+            if (latDist < safeClearance) {
+              const penetration = 1.0 - (latDist / safeClearance);
+              const distanceWeight = Math.max(0.2, 1.0 - Math.max(0, proj) / radarRange);
+              danger[k] += urgency * (penetration * penetration) * distanceWeight * 2.5;
+            }
           }
         }
       }
     }
 
     // -------------------------------------------------------------
-    // STEP 2: POPULATE INTEREST MAP (Player, Orbiting, Walls, Inertia)
+    // STEP 2: POPULATE INTEREST MAP (Inertia Suppressed When Threatened)
     // -------------------------------------------------------------
     const pDx = player.x - ufo.x;
     const pDy = player.y - ufo.y;
@@ -327,12 +340,10 @@ class ContextSteeringBrain {
     const uPlayerX = pDx / pDist;
     const uPlayerY = pDy / pDist;
 
-    // Perpendicular vector for tactical circling / flanking
-    const orbitDir = ufo.orbitDirection || 1; // +1 clockwise, -1 counter-clockwise
+    const orbitDir = ufo.orbitDirection || 1;
     const uPerpX = -uPlayerY * orbitDir;
     const uPerpY =  uPlayerX * orbitDir;
 
-    // Soft wall repellent margins (keep inside screen bounds)
     const margin = Math.min(arenaWidth, arenaHeight) * 0.12;
     let wallX = 0, wallY = 0;
     if (ufo.x < margin) wallX += (margin - ufo.x) / margin;
@@ -340,14 +351,16 @@ class ContextSteeringBrain {
     if (ufo.y < margin) wallY += (margin - ufo.y) / margin;
     if (ufo.y > arenaHeight - margin) wallY -= (ufo.y - (arenaHeight - margin)) / margin;
 
-    // Current forward velocity normalized (anti-jitter inertia)
     const currentSpeed = Math.hypot(ufo.dx, ufo.dy);
     const vNormX = currentSpeed > 0.1 ? ufo.dx / currentSpeed : this.rays[this.currentRayIndex].x;
     const vNormY = currentSpeed > 0.1 ? ufo.dy / currentSpeed : this.rays[this.currentRayIndex].y;
 
-    // Distance desire curve: chase if far, retreat if too close
     const combatRange = Math.min(arenaWidth, arenaHeight) * 0.40;
     const distFactor = Math.tanh((pDist - combatRange) / (arenaWidth * 0.18));
+
+    // Suppress inertia bonus if current flight path is in danger!
+    const currentHeadingDanger = danger[this.currentRayIndex];
+    const inertiaWeight = currentHeadingDanger > 0.15 ? 0.0 : 0.7;
 
     for (let k = 0; k < N; k++) {
       const ray = this.rays[k];
@@ -361,29 +374,33 @@ class ContextSteeringBrain {
         0.8 * I_player +
         0.6 * I_flank +
         1.2 * I_boundary +
-        0.7 * I_inertia
+        inertiaWeight * I_inertia
       );
     }
 
     // -------------------------------------------------------------
-    // STEP 3: SCORE EVALUATION & HYSTERESIS SELECTION
+    // STEP 3: SCORE EVALUATION & RESPONSIVE HYSTERESIS SELECTION
     // -------------------------------------------------------------
     let bestIndex = 0;
     let bestScore = -Infinity;
 
     for (let k = 0; k < N; k++) {
-      const score = interest[k] - 3.5 * danger[k];
+      // Strong 5.0 safety weighting guarantees survival strictly dominates desire
+      const score = interest[k] - 5.0 * danger[k];
       if (score > bestScore) {
         bestScore = score;
         bestIndex = k;
       }
     }
 
-    // Hysteresis: only switch heading if new ray is substantially better
-    // or if the current heading has become actively dangerous.
-    const currentScore = interest[this.currentRayIndex] - 3.5 * danger[this.currentRayIndex];
+    // Responsive Hysteresis: ZERO stubbornness if current path has any danger
+    const currentScore = interest[this.currentRayIndex] - 5.0 * danger[this.currentRayIndex];
     if (bestIndex !== this.currentRayIndex) {
-      if (bestScore > currentScore + 0.18 || danger[this.currentRayIndex] > 0.8) {
+      const hasDangerAhead = danger[this.currentRayIndex] > 0.15;
+      const saferAlternative = danger[bestIndex] < danger[this.currentRayIndex];
+      const significantlyBetter = bestScore > currentScore + 0.15;
+
+      if (hasDangerAhead || saferAlternative || significantlyBetter) {
         this.currentRayIndex = bestIndex;
       }
     }

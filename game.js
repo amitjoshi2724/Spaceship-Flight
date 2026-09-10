@@ -1576,10 +1576,10 @@
       }
 
       // -------------------------------------------------------------
-      // UNIFIED 16-RAY CONTEXT STEERING (Algorithm 2)
+      // UNIFIED 16-RAY CONTEXT STEERING (Algorithm 2 - Enhanced Avoidance)
       // -------------------------------------------------------------
       const dScreen = Math.min(this.canvas.width, this.canvas.height);
-      const R_radar = 6.0 * this.radius;
+      const R_radar = Math.max(180, 8.0 * this.radius);
 
       // 1. Threat assessment for rocks within radar range
       const threats = [];
@@ -1597,12 +1597,22 @@
           const relVx = rock.dx - this.dx;
           const relVy = rock.dy - this.dy;
           const vClose = -(relX * relVx + relY * relVy) / (dist || 1);
+          
+          // Kinematic time-to-impact urgency
+          let urgencyKinematic = 0;
           let tImpact = 5.0;
           if (vClose > 0.05) {
             tImpact = dist / vClose;
+            urgencyKinematic = 1.0 / Math.max(0.10, tImpact);
           }
-          const urgency = 1.0 / Math.max(0.12, tImpact);
-          const clearance = this.radius + rock.radius + 0.35 * this.radius;
+
+          // Static spatial proximity urgency (never 0 just because vClose is small!)
+          // Rocks close to the ship are inherently dangerous regardless of relative speed
+          const proximityFactor = Math.max(0, 1.0 - dist / (R_radar + rock.radius));
+          const urgencyProximity = proximityFactor * 2.5;
+
+          const urgency = Math.max(urgencyKinematic, urgencyProximity);
+          const clearance = this.radius + rock.radius + 0.45 * this.radius;
 
           threats.push({
             rock,
@@ -1614,7 +1624,7 @@
             tImpact
           });
 
-          if (tImpact < 0.40) {
+          if (tImpact < 0.60 || dist < clearance * 1.6) {
             this.emergencyOverdrive = true;
           }
         }
@@ -1669,15 +1679,28 @@
         for (let t = 0; t < threats.length; t++) {
           const threat = threats[t];
           const proj = threat.relX * dkX + threat.relY * dkY;
-          if (proj > -threat.clearance) {
+          if (proj > -this.radius * 0.4 && proj < R_radar) {
             const closestDist = Math.hypot(threat.relX - proj * dkX, threat.relY - proj * dkY);
             if (closestDist < threat.clearance) {
-              const penetration = 1 - closestDist / threat.clearance;
-              rayDanger += threat.urgency * penetration * penetration;
+              const penetration = 1.0 - closestDist / threat.clearance;
+              // Distance weight: obstacles closer along the ray are significantly more urgent
+              const distanceWeight = Math.max(0.2, 1.0 - Math.max(0, proj) / R_radar);
+              rayDanger += threat.urgency * (penetration * penetration) * distanceWeight * 2.5;
             }
           }
         }
         dangerScores[k] = rayDanger;
+      }
+
+      // Suppress inertia bonus if current flight path faces danger (prevents fighting evasion)
+      const currentHeadingDanger = dangerScores[this.currentHeadingIndex] || 0;
+      const inertiaWeight = currentHeadingDanger > 0.15 ? 0.0 : 0.7;
+
+      for (let k = 0; k < N; k++) {
+        const angle = (k * 2 * Math.PI) / N;
+        const dkX = Math.cos(angle);
+        const dkY = Math.sin(angle);
+        const rayDanger = dangerScores[k];
 
         // Tactical Interest I(k)
         const I_player = tanhDist * (dkX * uPlayerX + dkY * uPlayerY);
@@ -1685,13 +1708,14 @@
         const I_boundary = (dkX * repelX + dkY * repelY);
         const I_inertia = (dkX * vNormX + dkY * vNormY);
 
-        const I_k = 0.8 * I_player + 0.6 * I_flank + 1.2 * I_boundary + 0.7 * I_inertia;
+        const I_k = 0.8 * I_player + 0.6 * I_flank + 1.2 * I_boundary + inertiaWeight * I_inertia;
 
-        const totalScore = I_k - 3.5 * rayDanger;
+        // Heavily weight safety over interest (5.0 vs 3.5)
+        const totalScore = I_k - 5.0 * rayDanger;
         rayScores.push({ index: k, dkX, dkY, score: totalScore, danger: rayDanger });
       }
 
-      // 4. Heading selection with Switching Hysteresis
+      // 4. Heading selection with Responsive Hysteresis
       let best = rayScores[0];
       for (let k = 1; k < N; k++) {
         if (rayScores[k].score > best.score) {
@@ -1701,27 +1725,35 @@
 
       const currentRay = rayScores[this.currentHeadingIndex] || rayScores[0];
       if (best.index !== this.currentHeadingIndex) {
-        if (best.score > currentRay.score + 0.18 || currentRay.danger > 0.8) {
+        // Zero stubbornness if danger exists on current path or if alternative is much safer!
+        const hasDangerAhead = currentRay.danger > 0.15;
+        const saferAlternative = best.danger < currentRay.danger;
+        const significantlyBetter = best.score > currentRay.score + 0.15;
+
+        if (hasDangerAhead || saferAlternative || significantlyBetter) {
           this.currentHeadingIndex = best.index;
         }
       }
 
       const chosenRay = rayScores[this.currentHeadingIndex];
 
-      // 5. Physical Velocity Steering (No Teleportation)
-      const targetSpeed = (this.emergencyOverdrive || this.jinkTimer > 0) ? this.vBoost : this.vCruise;
+      // 5. Physical Velocity Steering (Adaptive Agility)
+      const isEvasive = this.emergencyOverdrive || chosenRay.danger > 0 || currentRay.danger > 0.15;
+      const targetSpeed = isEvasive ? this.vBoost : this.vCruise;
       const targetDx = chosenRay.dkX * targetSpeed;
       const targetDy = chosenRay.dkY * targetSpeed;
 
-      this.dx += (targetDx - this.dx) * 0.08;
-      this.dy += (targetDy - this.dy) * 0.08;
+      // Adaptive turn agility: cruise is smooth (0.10), evasion is fast & decisive (0.24)
+      const turnAgility = isEvasive ? 0.24 : 0.10;
+      this.dx += (targetDx - this.dx) * turnAgility;
+      this.dy += (targetDy - this.dy) * turnAgility;
 
       this.x += this.dx;
       this.y += this.dy;
 
       // Subtle banking tilt (-15 deg to +15 deg)
       const targetBank = Math.max(-15, Math.min(15, this.dx * 3.5));
-      this.drawAngle += (targetBank - this.drawAngle) * 0.1;
+      this.drawAngle += (targetBank - this.drawAngle) * 0.12;
 
       // Soft boundary clamp if not exiting
       if (!this.exiting) {
@@ -2918,17 +2950,11 @@
           }
 
           // Exact 12-point Polygon-vs-Polygon collision with ship
-          if (!r.popped && r.collidesWithShip(this.ship)) {
+          if (!this.ship.invincible && !r.popped && r.collidesWithShip(this.ship)) {
             r.popped = true;
             this.rocks.splice(j, 1);
-            if (this.ship.invincible) {
-              // Shield vaporizes the asteroid on impact
-              this.soundFx.playExplosion(false);
-              this.particles.addExplosion(r.x, r.y, '#38bdf8', 24);
-            } else {
-              this.handlePlayerHit();
-              break;
-            }
+            this.handlePlayerHit();
+            break;
           }
         }
 
