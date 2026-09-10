@@ -1330,11 +1330,11 @@
       let glowColor, outerColor, trailColor, coreColor;
 
       if (this.targetType === 'rock') {
-        // Defensive CIWS interceptor bolt: Electric cyan/blue
-        glowColor = '#38bdf8';
-        outerColor = '#60a5fa';
-        trailColor = (a) => `rgba(56, 189, 248, ${a * 0.45})`;
-        coreColor = '#f0f9ff';
+        // Defensive CIWS interceptor bolt: 100% Pure Electric Neon Cyan & Deep Sky Blue (0 red!)
+        glowColor = '#00e5ff';
+        outerColor = '#00b0ff';
+        trailColor = (a) => `rgba(0, 229, 255, ${a * 0.70})`;
+        coreColor = '#ffffff';
       } else if (this.aimMode === 'predictive') {
         // Offensive Predictive Lead: Alien Violet / Purple
         glowColor = '#c084fc';
@@ -1452,9 +1452,9 @@
       this.telegraphTimer = 0;
       this.nextAimMode = Math.random() < 0.5 ? 'predictive' : 'direct';
 
-      // 2. Defensive Point-Defense CIWS (Emergency asteroid survival bubble)
+      // 2. Defensive Point-Defense CIWS (Rare, last-resort emergency point defense)
       this.defenseTimer = 0;
-      this.defenseInterval = difficulty === 'hard' ? 32 : difficulty === 'easy' ? 52 : 40;
+      this.defenseInterval = 120; // 2.0s cooldown; evasion is primary!
     }
 
     // Evasive turn agility scales dynamically by difficulty:
@@ -1915,32 +1915,30 @@
 
       // -------------------------------------------------------------
       // CHANNEL 1: DEFENSIVE POINT-DEFENSE (CIWS)
-      // Evaluates radial collision course relative to UFO physical center
-      // (True spatial kinematics; independent of chosenRay heading!)
+      // Rare, last-resort emergency defense against imminent unavoidable collision.
+      // Evasion is primary! CIWS only engages if a fast rock is on an immediate collision course.
       // -------------------------------------------------------------
       this.defenseTimer++;
 
       let emergencyRock = null;
-      let lowestTImpact = 1.30; // In seconds! Engages any rock closing within 1.30s
+      let lowestTImpact = 0.45; // In seconds! Only engages rocks within 0.45s of impact
 
       for (let t = 0; t < threats.length; t++) {
         const th = threats[t];
-        const isClosing = th.vClosing > 0.15;
-        const isWithinRange = th.dist < Math.max(220, th.clearance * 3.0);
+        const isClosingFast = th.vClosing > 0.40;
+        const isCloseProximity = th.dist < Math.min(95, th.clearance * 1.4);
         const isCollidingSoon = th.tImpact < lowestTImpact;
-        const isImmediateHazard = th.dist < th.clearance * 1.7 && th.vClosing > 0.1;
+        const isCollisionCourse = th.dMin < th.clearance * 0.85;
 
-        if (isWithinRange && isClosing && (isCollidingSoon || isImmediateHazard)) {
+        if (isClosingFast && isCloseProximity && isCollidingSoon && isCollisionCourse) {
           lowestTImpact = th.tImpact;
           emergencyRock = th;
         }
       }
 
-      // Emergency Quick-Draw:
-      // If a rock is an imminent lethal threat (tImpact < 0.80s or d < clearance * 1.6),
-      // override standard cadence and fire after only 12 frames so the UFO never holds fire!
-      const isUrgentThreat = emergencyRock && (emergencyRock.tImpact < 0.80 || emergencyRock.dist < emergencyRock.clearance * 1.6);
-      const canFire = this.defenseTimer >= this.defenseInterval || (isUrgentThreat && this.defenseTimer >= 12);
+      // Emergency Cadence:
+      // Minimum cooldown of 75 frames (~1.25s) even in emergencies; standard interval is 120 frames (~2.0s).
+      const canFire = this.defenseTimer >= this.defenseInterval || (emergencyRock && this.defenseTimer >= 75);
 
       if (emergencyRock && canFire) {
         this.defenseTimer = 0;
@@ -1954,9 +1952,9 @@
 
         ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'rock'));
         this.soundFx.playUFOLaser();
-        // Jink away and flash defensive beacon
+        // Jink away and flash defensive cyan beacon
         this.jinkTimer = 18;
-        this.defenseJinkTimer = 15;
+        this.defenseJinkTimer = 20;
       }
 
       // -------------------------------------------------------------
@@ -2034,21 +2032,19 @@
 
       // -------------------------------------------------------------
       // DIEGETIC PIXEL-ACCURATE HULL LIGHT TELEGRAPHING SYSTEM
-      // On the 32x32 sprite, each light is a 2x2 pixel square (radius = w * 0.03125).
-      // All lights are drawn tight and pixel-accurate to avoid oversized auras!
-      // - LEFT LIGHT (RED): Asteroid Emergency Strobe ((-0.266w, 0.109h))
-      // - MIDDLE LIGHT (GREEN / PURPLE):
-      //     🟢 GREEN  = Direct Aim (shooting player's current position)
-      //     🟣 PURPLE = Predictive Lead (shooting player's predicted velocity path)
-      // - RIGHT LIGHT (BLUE): Engine Status & Point-Defense ((0.266w, 0.109h))
+      // Exact sprite pixel grid mapping (w/32, h/32):
+      // - LEFT LIGHT (RED): Columns 7..8, Rows 17..18 (Emergency Asteroid Strobe)
+      // - MIDDLE LIGHT: Columns 16..17, Rows 18..19 (Half Emerald, Half Violet)
+      //     🟢 Left Column (16): Direct Aim (50% of shots)
+      //     🟣 Right Column (17): Predictive Lead (50% of shots)
+      // - RIGHT LIGHT (BLUE / CYAN): Columns 24..25, Rows 17..18 (Engine & CIWS Status)
       // -------------------------------------------------------------
       const w = this.width;
       const h = this.height;
-      const pixelLightR = w * 0.032; // Exactly 2x2 sprite pixels in size
+      const px = w / 32;
+      const py = h / 32;
 
-      // 1. LEFT RED LIGHT: Asteroid Emergency Strobe (Collision avoidance beacon)
-      const leftX = -0.266 * w;
-      const leftY = 0.109 * h;
+      // 1. LEFT RED LIGHT: Asteroid Emergency Strobe (Columns 7..8, Rows 17..18)
       if (this.emergencyAlertTimer > 0 || this.emergencyOverdrive) {
         const flashPhase = (this.emergencyAlertTimer > 0)
           ? Math.sin((this.emergencyAlertTimer / 18) * Math.PI * 3)
@@ -2057,71 +2053,75 @@
         if (redGlow > 0.05) {
           ctx.save();
           ctx.shadowColor = '#ff1744';
-          ctx.shadowBlur = 6 * redGlow;
+          ctx.shadowBlur = 4 * redGlow;
           ctx.fillStyle = `rgba(255, 23, 68, ${0.95 * redGlow})`;
-          ctx.beginPath();
-          ctx.arc(leftX, leftY, pixelLightR, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.fillRect(-9 * px, 1 * py, 2 * px, 2 * py);
 
-          // Incandescent white-hot center core
+          // White-hot center core
           ctx.fillStyle = `rgba(255, 240, 240, ${0.98 * redGlow})`;
-          ctx.beginPath();
-          ctx.arc(leftX, leftY, pixelLightR * 0.45, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.fillRect(-8.5 * px, 1.5 * py, 1 * px, 1 * py);
           ctx.restore();
         }
       }
 
-      // 2. MIDDLE LIGHT: Primary Cannon Telegraph (Pixel-Accurate: Green = Direct, Purple = Predictive)
-      const midX = 0.0;
-      const midY = 0.141 * h;
+      // 2. MIDDLE LIGHT: Dual Split Aperture (Columns 16..17, Rows 18..19)
+      // Half emerald (col 16) half violet (col 17).
+      // When telegraphing, only the corresponding pixel column illuminates!
       if (this.telegraphTimer > 0) {
         const pulse = Math.sin((this.telegraphTimer / (this.telegraphDuration || 22)) * Math.PI);
         const isPredictive = this.nextAimMode === 'predictive';
-        const lightColor = isPredictive ? '#c084fc' : '#00ff8e';
-        const coreColor = isPredictive ? '#fdf4ff' : '#f0fdf4';
 
         ctx.save();
-        ctx.shadowColor = lightColor;
-        ctx.shadowBlur = 8 * pulse;
+        if (isPredictive) {
+          // 🟣 Alien Violet Predictive Lead: Illuminates ONLY the right pixel column (col 17)
+          ctx.shadowColor = '#c084fc';
+          ctx.shadowBlur = 3 * pulse;
+          ctx.fillStyle = '#c084fc';
+          ctx.fillRect(px, 2 * py, px, 2 * py);
 
-        // Pixel-accurate bead (only as big as the 2x2 pixel indicator on the hull!)
-        ctx.fillStyle = lightColor;
-        ctx.beginPath();
-        ctx.arc(midX, midY, pixelLightR * (0.95 + 0.20 * pulse), 0, Math.PI * 2);
-        ctx.fill();
+          // Incandescent white center
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(1.2 * px, 2.5 * py, 0.6 * px, py);
+        } else {
+          // 🟢 Emerald Green Direct Aim: Illuminates ONLY the left pixel column (col 16)
+          ctx.shadowColor = '#00ff8e';
+          ctx.shadowBlur = 3 * pulse;
+          ctx.fillStyle = '#00ff8e';
+          ctx.fillRect(0, 2 * py, px, 2 * py);
 
-        // Incandescent center core highlight
-        ctx.fillStyle = coreColor;
-        ctx.beginPath();
-        ctx.arc(midX, midY, pixelLightR * 0.45 * pulse, 0, Math.PI * 2);
-        ctx.fill();
+          // Incandescent white center
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0.2 * px, 2.5 * py, 0.6 * px, py);
+        }
         ctx.restore();
       }
 
-      // 3. RIGHT BLUE LIGHT: Sublight Propulsion & Point-Defense Status Beacon
-      const rightX = 0.266 * w;
-      const rightY = 0.109 * h;
-      const bluePulse = (this.defenseJinkTimer > 0)
-        ? 1.0
-        : 0.35 + 0.25 * Math.sin(this.lifetime * 0.08);
+      // 3. RIGHT BLUE LIGHT: Sublight Propulsion & Point-Defense Status (Columns 24..25, Rows 17..18)
+      const isCIWS = this.defenseJinkTimer > 0;
+      const blueColor = isCIWS ? '#00e5ff' : '#00b0ff';
+      const bluePulse = isCIWS ? 1.0 : 0.45 + 0.35 * Math.sin(this.lifetime * 0.10);
       ctx.save();
-      ctx.shadowColor = '#38bdf8';
-      ctx.shadowBlur = 5 * bluePulse;
-      ctx.fillStyle = `rgba(56, 189, 248, ${0.90 * bluePulse})`;
-      ctx.beginPath();
-      ctx.arc(rightX, rightY, pixelLightR, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.shadowColor = blueColor;
+      ctx.shadowBlur = isCIWS ? 8 : 3 * bluePulse;
+      ctx.fillStyle = isCIWS ? '#00e5ff' : `rgba(0, 176, 255, ${0.90 * bluePulse})`;
+      ctx.fillRect(8 * px, 1 * py, 2 * px, 2 * py);
+
+      if (isCIWS || bluePulse > 0.70) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(8.5 * px, 1.5 * py, 1 * px, 1 * py);
+      }
       ctx.restore();
 
       // Thruster flare when overdrive or jink is engaged
       if (this.emergencyOverdrive || this.jinkTimer > 0) {
-        ctx.shadowColor = '#38bdf8';
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.85)';
+        ctx.save();
+        ctx.shadowColor = '#00e5ff';
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = 'rgba(0, 229, 255, 0.85)';
         ctx.beginPath();
-        ctx.arc(0, this.height * 0.22, this.width * 0.10, 0, Math.PI * 2);
+        ctx.arc(0, this.height * 0.22, this.width * 0.09, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
       }
 
       ctx.restore();
@@ -3173,16 +3173,22 @@
             continue;
           }
 
-          // UFO bullet hits asteroid (UFO lasers pop asteroids!)
+          // UFO bullet hits asteroid:
+          // Defensive CIWS interceptor bolts pop the asteroid in a neon cyan blast!
+          // Offensive bullets aimed at the player deflect off the asteroid (rock acts as cover for player).
           for (let j = this.rocks.length - 1; j >= 0; j--) {
             const r = this.rocks[j];
             if (!r.popped && r.containsBullet(ub)) {
-              r.popped = true;
               ub.hit = true;
-              this.soundFx.playExplosion(false);
-              const popColor = ub.targetType === 'rock' ? '#38bdf8' : (ub.aimMode === 'predictive' ? '#c084fc' : '#00ff8e');
-              this.particles.addExplosion(r.x, r.y, popColor, 20);
-              this.rocks.splice(j, 1);
+              if (ub.targetType === 'rock') {
+                r.popped = true;
+                this.soundFx.playExplosion(false);
+                this.particles.addExplosion(r.x, r.y, '#00e5ff', 24);
+                this.rocks.splice(j, 1);
+              } else {
+                // Rock absorbs offensive shot; emits small kinetic dust puff
+                this.particles.addExplosion(ub.x, ub.y, '#94a3b8', 8);
+              }
               break;
             }
           }

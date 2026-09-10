@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spaceship-flight-1.2.0';
+const CACHE_NAME = 'spaceship-flight-1.3.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const ASSETS_TO_CACHE = [
   './newspaceshipmoving2.png',
   './bluenewspaceship.png',
   './bluenewspaceshipmoving2.png',
+  './enemyship.png',
   './amitjoshi2724_pfp.png'
 ];
 
@@ -41,38 +42,49 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event: Cache-first, fallback to network
+// Fetch Event: Network-first for scripts & navigation, Cache-first for images/audio
 self.addEventListener('fetch', (event) => {
   // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+  const isCodeOrDoc = event.request.mode === 'navigate' ||
+                      event.request.destination === 'script' ||
+                      url.pathname.endsWith('.js') ||
+                      url.pathname.endsWith('.html');
+
+  if (isCodeOrDoc) {
+    // Network-first strategy so game logic updates apply immediately
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Cache-first strategy for media assets
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Fetch background update if online to keep cache fresh
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, networkResponse);
-            });
-          }
-        }).catch(() => {
-          // Offline, ignore network fetch failure
-        });
         return cachedResponse;
       }
-
-      // Not in cache, fetch from network and cache for next time
       return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+        if (!networkResponse || networkResponse.status !== 200) {
           return networkResponse;
         }
-
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseToCache);
         });
-
         return networkResponse;
       });
     })

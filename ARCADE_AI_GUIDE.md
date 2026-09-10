@@ -750,32 +750,39 @@ Two critical architectural bugs frequently paralyze defensive weapon systems:
 ### 9.5 Diegetic Hull Light Telegraphing: Reading the AI's Brain
 The highest echelon of game AI design is **diegetic feedback**: communicating internal AI state through visual cues embedded on the physical ship model rather than external HUD text.
 
-On the 32×32 enemy saucer (`enemyship.png`), three distinct pixel-accurate indicator lights line the hull (each matching the exact 2×2 pixel dimensions on the sprite):
+On the 32×32 enemy saucer (`enemyship.png`), three distinct pixel-accurate indicator apertures line the hull:
 
 ```
-          ┌─────────────[Lavender Cockpit Dome]─────────────┐
-          │                                                 │
-     [🔴 Left Light]       [🟢/🟣 Center Light]        [🔵 Right Light]
-   (-0.266w, +0.109h)       (0.000w, +0.141h)         (+0.266w, +0.109h)
-  Asteroid Hazard Strobe   Primary Cannon Telegraph   Engine & CIWS Status
+               ┌─────────────[Lavender Cockpit Dome]─────────────┐
+               │                                                 │
+     [🔴 Left Light]             [🟢/🟣 Center Light]             [🔵 Right Light]
+   (Cols 7..8, Rows 17..18)     (Cols 16..17, Rows 18..19)     (Cols 24..25, Rows 17..18)
+    Asteroid Hazard Strobe       Dual Split Weapon Aperture        Engine & CIWS Status
 ```
 
 1. **Left Light (🔴 Hazard Red - `#ff1744`)**:
-   - **Trigger**: Imminent collision trajectory detected ($v_{\text{closing}} > 0.3$, $t_{\text{impact}} < 0.70\text{s}$).
-   - **Behavior**: High-frequency emergency hazard strobe (tight pixel-sized bead).
+   - **Sprite Footprint**: 2×2 pixels (Columns 7..8, Rows 17..18).
+   - **Trigger**: Imminent collision trajectory detected ($v_{\text{closing}} > 0.40$, $t_{\text{impact}} < 0.45\text{s}$, close proximity).
+   - **Behavior**: High-frequency emergency hazard strobe with crisp 1px white-hot core.
    - **Gameplay Read**: Alerts the human player that the UFO has spotted an obstacle and is breaking off its attack run to execute evasive retro-braking.
-2. **Center Light (🟢 Alien Emerald vs. 🟣 Alien Violet Telegraph)**:
+2. **Center Light (🟢 Emerald / 🟣 Violet Dual Split Aperture)**:
+   - **Sprite Footprint**: 2×2 pixels (Columns 16..17, Rows 18..19), split vertically:
+     - **Left Column (16)**: Emerald Green (`#00ff8e`)
+     - **Right Column (17)**: Alien Violet (`#c084fc`)
    - **Trigger**: Offensive cannon charging ($t_{\text{telegraph}} \in [0, 22]$ frames / $\approx 0.35\text{s}$).
    - **Dual Targeting Modes**:
-     - **🟢 Emerald Green (`#00ff8e`)**: **Direct Aim** (the UFO is aiming directly at the player's current coordinate).  
+     - **🟢 Emerald Green (`#00ff8e`) — 50% of Shots**: **Direct Aim** (aiming directly at the player's current coordinate).  
+       *Visual Cue*: ONLY the left pixel column (col 16) illuminates with an emerald plasma pulse and white-hot center.  
        *Player Counter-Tactic*: **Keep moving!** The bolt will hit where you were, so maintaining velocity guarantees a clean dodge.
-     - **🟣 Alien Violet / Purple (`#c084fc`)**: **Predictive Lead** (the UFO is calculating your velocity vector and leading you with $t_{\text{lead}} = d / v_{\text{laser}}$).  
+     - **🟣 Alien Violet (`#c084fc`) — 50% of Shots**: **Predictive Lead** (calculating your velocity vector and leading you with $t_{\text{lead}} = d / v_{\text{laser}}$).  
+       *Visual Cue*: ONLY the right pixel column (col 17) illuminates with a violet plasma pulse and white-hot center.  
        *Player Counter-Tactic*: **Brake, cut, or reverse!** The bolt will fly to where you were heading, so changing direction or slowing down causes the predictive shot to fly harmlessly past.
-   - **Visual Finish**: Pixel-accurate hull bead with a tight 8px glow, launching a matching emerald or purple plasma bolt.
-3. **Right Light (🔵 Sublight Cyan/Blue - `#38bdf8`)**:
-   - **Trigger**: Normal flight propulsion & defensive countermeasure status.
-   - **Behavior**: Rhythmic cyan engine glow during cruising; sharp cobalt flash when defensive CIWS destroys an oncoming asteroid with an electric-cyan interceptor bolt.
-   - **Gameplay Read**: Indicates propulsion integrity and active point-defense operations.
+   - **Idle State**: Displays the half-emerald, half-violet split aperture cleanly at 1:1 sprite pixel size without obscuring the lavender dome.
+3. **Right Light (🔵 Electric Cyan/Blue - `#00e5ff` / `#00b0ff`)**:
+   - **Sprite Footprint**: 2×2 pixels (Columns 24..25, Rows 17..18).
+   - **Trigger**: Sublight propulsion & defensive CIWS countermeasure status.
+   - **Behavior**: Rhythmic sky-blue glow during cruising; sharp neon-cyan (`#00e5ff`) flash when defensive CIWS destroys an oncoming asteroid with an electric-cyan interceptor bolt.
+   - **Defensive CIWS Cadence**: Calibrated strictly for rare emergency survival ($t_{\text{impact}} < 0.45\text{s}$, $d < 95\text{px}$, interval $\ge 120$ frames / 2.0s). Intervening asteroids block offensive player-hunting lasers (serving as player cover), while only defensive CIWS pops rocks in a neon-cyan blast.
 
 ---
 
