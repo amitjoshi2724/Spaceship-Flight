@@ -1663,7 +1663,7 @@
           let urgencyKinematic = 0;
           let tImpact = 5.0;
           if (vClosing > 0.05) {
-            tImpact = dist / vClosing;
+            tImpact = (dist / vClosing) / 60; // in SECONDS!
             urgencyKinematic = 1.0 / Math.max(0.04, tImpact * tImpact);
           }
 
@@ -1741,6 +1741,8 @@
         let rayDanger = 0;
         for (let t = 0; t < threats.length; t++) {
           const threat = threats[t];
+          
+          // 1. Static Raycast Penetration (forward half-space obstacles)
           const proj = threat.relX * dkX + threat.relY * dkY;
           if (proj > -this.radius * 0.4 && proj < R_radar) {
             const closestDist = Math.hypot(threat.relX - proj * dkX, threat.relY - proj * dkY);
@@ -1749,6 +1751,32 @@
               // Distance weight: obstacles closer along the ray are significantly more urgent
               const distanceWeight = Math.max(0.2, 1.0 - Math.max(0, proj) / R_radar);
               rayDanger += threat.urgency * (penetration * penetration) * distanceWeight * 2.5;
+            }
+          }
+
+          // 2. Dynamic Trajectory / Velocity-Obstacle Collision Check:
+          // Prevents trying to "outrun" a fast rock along its approach corridor!
+          // If the rock is closing and UFO flies along ray dk with speed vBoost:
+          if (threat.vClosing > 0.1) {
+            const ufoVx = dkX * this.vBoost;
+            const ufoVy = dkY * this.vBoost;
+            const relVx = threat.rock.dx - ufoVx;
+            const relVy = threat.rock.dy - ufoVy;
+            const vRelSq = relVx * relVx + relVy * relVy;
+
+            // Is the rock closing on the UFO along this candidate trajectory?
+            const relDot = threat.relX * relVx + threat.relY * relVy;
+            if (relDot < 0 && vRelSq > 1e-4) {
+              const tCloseFrames = -relDot / vRelSq;
+              if (tCloseFrames > 0 && tCloseFrames < 75) { // within 1.25 seconds
+                const closestDistSq = (threat.relX + relVx * tCloseFrames) ** 2 + (threat.relY + relVy * tCloseFrames) ** 2;
+                const clearSq = threat.clearance * threat.clearance;
+                if (closestDistSq < clearSq) {
+                  const dMin = Math.sqrt(closestDistSq);
+                  const pen = 1.0 - dMin / threat.clearance;
+                  rayDanger += threat.urgency * (pen * pen) * 4.0;
+                }
+              }
             }
           }
         }
@@ -1875,33 +1903,44 @@
       // (True spatial kinematics; independent of chosenRay heading!)
       // -------------------------------------------------------------
       this.defenseTimer++;
-      if (this.defenseTimer >= this.defenseInterval) {
-        let emergencyRock = null;
-        let lowestTImpact = 0.90; // Only engage rocks on collision course within 0.90s
 
-        for (let t = 0; t < threats.length; t++) {
-          const th = threats[t];
-          // True radial collision check: obstacle is within close defense radius and closing fast
-          const isWithinRange = th.dist < Math.max(140, th.clearance * 2.2);
-          const isClosingFast = th.tImpact < lowestTImpact;
+      let emergencyRock = null;
+      let lowestTImpact = 1.30; // In seconds! Engages any rock closing within 1.30s
 
-          if (isWithinRange && isClosingFast) {
-            lowestTImpact = th.tImpact;
-            emergencyRock = th;
-          }
+      for (let t = 0; t < threats.length; t++) {
+        const th = threats[t];
+        const isClosing = th.vClosing > 0.15;
+        const isWithinRange = th.dist < Math.max(220, th.clearance * 3.0);
+        const isCollidingSoon = th.tImpact < lowestTImpact;
+        const isImmediateHazard = th.dist < th.clearance * 1.7 && th.vClosing > 0.1;
+
+        if (isWithinRange && isClosing && (isCollidingSoon || isImmediateHazard)) {
+          lowestTImpact = th.tImpact;
+          emergencyRock = th;
         }
+      }
 
-        if (emergencyRock) {
-          this.defenseTimer = 0;
-          const aimDist = Math.hypot(emergencyRock.relX, emergencyRock.relY) || 1;
-          const bVx = (emergencyRock.relX / aimDist) * this.vLaser;
-          const bVy = (emergencyRock.relY / aimDist) * this.vLaser;
-          ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'rock'));
-          this.soundFx.playUFOLaser();
-          // Jink away and flash defensive beacon
-          this.jinkTimer = 18;
-          this.defenseJinkTimer = 15;
-        }
+      // Emergency Quick-Draw:
+      // If a rock is an imminent lethal threat (tImpact < 0.80s or d < clearance * 1.6),
+      // override standard cadence and fire after only 12 frames so the UFO never holds fire!
+      const isUrgentThreat = emergencyRock && (emergencyRock.tImpact < 0.80 || emergencyRock.dist < emergencyRock.clearance * 1.6);
+      const canFire = this.defenseTimer >= this.defenseInterval || (isUrgentThreat && this.defenseTimer >= 12);
+
+      if (emergencyRock && canFire) {
+        this.defenseTimer = 0;
+        // Predictive Intercept Lead: Lead the incoming asteroid by bullet travel time
+        const bulletFlightTime = emergencyRock.dist / this.vLaser;
+        const leadX = emergencyRock.relX + emergencyRock.rock.dx * bulletFlightTime;
+        const leadY = emergencyRock.relY + emergencyRock.rock.dy * bulletFlightTime;
+        const aimDist = Math.hypot(leadX, leadY) || 1;
+        const bVx = (leadX / aimDist) * this.vLaser;
+        const bVy = (leadY / aimDist) * this.vLaser;
+
+        ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'rock'));
+        this.soundFx.playUFOLaser();
+        // Jink away and flash defensive beacon
+        this.jinkTimer = 18;
+        this.defenseJinkTimer = 15;
       }
 
       // -------------------------------------------------------------

@@ -178,6 +178,28 @@ The **penetration depth ratio** $P_{k, i} \in [0, 1]$ represents how deeply the 
 
 $$P_{k, i} = \max\left(0, 1 - \frac{d_{\text{lat}}(k, i)}{R_{\text{safe}, i}}\right)$$
 
+#### 4.4.1 The "Outrunning Trap": Why AIs Try to Outrun Faster Obstacles
+A classic flaw in naive raycasting occurs when a fast obstacle is closing **from behind**:
+- If the rock is behind the AI ($\vec{r}_i = \vec{x}_{\text{rock}} - \vec{x}_{\text{ai}}$ points backwards), then for any ray $\hat{d}_k$ pointing forwards, $\text{proj}_{k, i} = \vec{r}_i \cdot \hat{d}_k < 0$.
+- Static raycasting concludes: *"There is no obstacle ahead on ray $\hat{d}_k$!"*
+- Because ray $\hat{d}_k$ matches the AI's current velocity, it receives a $+0.7$ inertia bonus.
+- **The AI tries to outrun the asteroid in a straight line.** But if $v_{\text{rock}} > v_{\text{ai}}$, the rock inevitably overtakes and smashes the ship from behind!
+
+#### The Velocity-Obstacle Dynamic Trajectory Solution
+For every candidate ray $\hat{d}_k$, evaluate whether traveling along that ray at speed $v_{\text{boost}}$ results in an unavoidable collision with a closing obstacle:
+
+$$\vec{v}_{\text{rel}, k} = \vec{v}_{\text{rock}} - \left(\hat{d}_k \cdot v_{\text{boost}}\right)$$
+
+If $\vec{r}_i \cdot \vec{v}_{\text{rel}, k} < 0$ (the obstacle is closing on the AI along this candidate path), the time of closest approach is:
+
+$$t_{\text{close}} = -\frac{\vec{r}_i \cdot \vec{v}_{\text{rel}, k}}{\|\vec{v}_{\text{rel}, k}\|^2}$$
+
+If $t_{\text{close}} > 0$ and within the evasive horizon ($t < 1.25\text{s}$), the minimum future distance is:
+
+$$d_{\text{min}} = \|\vec{r}_i + \vec{v}_{\text{rel}, k} t_{\text{close}}\|$$
+
+If $d_{\text{min}} < R_{\text{safe}}$, **this ray leads to an unavoidable rear collision**. The ray receives an insurmountable barrier penalty ($-100.0$), forcing the AI to **break laterally/perpendicularly** out of the asteroid's path rather than futilely trying to outpace it!
+
 ---
 
 ### 4.5 The Danger Map Equation
@@ -703,23 +725,23 @@ Attempting to force a single weapon to serve both offensive player combat and de
                  ▼                                               ▼
    [Offensive Player Laser]                       [Defensive CIWS Point-Defense]
    - Cooldown: 85–140 frames (~1.4s - 2.3s)       - Cooldown: 32–52 frames (~0.5s - 0.8s)
-   - Long-range player hunting                    - Short-range radar bubble (d <= 140px)
-   - Gaussian spread (sigma = 7.5 deg)            - True radial collision check (t_impact < 0.9s)
-   - Green muzzle flare telegraph (22 frames)     - Only fires at rocks threatening the UFO
+   - Long-range player hunting                    - Extended radar bubble (d <= 220px)
+   - Gaussian spread (sigma = 7.5 deg)            - True radial collision check (t_impact < 1.3s)
+   - Green muzzle flare telegraph (22 frames)     - Predictive intercept lead targeting
    - Emerald plasma bolt (#00ff8e)                - Electric cyan plasma bolt (#38bdf8)
-   - Fair & fun dogfight pacing                   - Decoupled from player combat pacing
+   - Fair & fun dogfight pacing                   - Emergency quick-draw override (12 frames)
 ```
 
-#### The "Projected Ray" Pitfall: Why Single-Channel AIs Shoot the Player by Mistake
-A common architectural bug occurs when point-defense targeting evaluates obstacles projected onto the **steering heading** (`chosenRay`):
+#### The "Units & Projected Ray" Pitfalls in Point-Defense
+Two critical architectural bugs frequently paralyze defensive weapon systems:
 
-```javascript
-// ❌ BUGGY EVALUATION:
-const proj = threat.relX * chosenRay.dkX + threat.relY * chosenRay.dkY;
-const isDirectPath = proj > 0 && proj < threat.clearance * 1.5;
-```
-
-*What goes wrong*: If a rock is barreling in from the right, the steering system has already chosen an evasive heading pointing left. Because the rock is now perpendicular or behind the *new heading*, $\text{proj} \le 0$! The AI concludes there is no emergency on its flight path, fires an offensive shot at the player, and gets crushed by the asteroid 10 frames later!
+1. **The Frames vs. Seconds Units Trap**:  
+   If relative closing speed $v_{\text{closing}}$ is measured in $\text{px/frame}$, then $t_{\text{impact}} = \text{dist} / v_{\text{closing}}$ is in **frames** ($\sim 20$ to $60$). If your code checks `if (t_impact < 0.90)`, it is checking if impact is less than **0.90 frames (15ms)**! The weapon will never fire! Always convert to seconds: $t_{\text{impact}} = \frac{\text{dist}}{v_{\text{closing}} \times 60}$.
+2. **The "Projected Ray" Blinder**:  
+   Targeting obstacles projected onto the current steering heading (`chosenRay`) causes the AI to ignore rocks closing from the flanks or rear. If a rock is barreling in from behind or from a flank, the steering system has already chosen an evasive heading pointing away. Because the rock is now perpendicular or behind the *new heading*, $\text{proj} \le 0$! The AI concludes there is no emergency on its flight path, fires an offensive shot at the player, and gets crushed by the asteroid 10 frames later!
+3. **Predictive Intercept Leading**:  
+   Shooting at the rock's current position causes bullets to trail behind fast-moving asteroids. The weapon must project the rock's future position during bullet flight time:
+   $$t_{\text{flight}} = \frac{d}{v_{\text{laser}}}, \quad \vec{x}_{\text{target}} = \vec{x}_{\text{rock}} + \vec{v}_{\text{rock}} \cdot t_{\text{flight}}$$
 
 **The Golden Rule of Defensive CIWS**: *Point-defense must evaluate true radial kinematics relative to the ship's physical center ($d < R_{\text{bubble}}$ and $t_{\text{impact}} < t_{\text{danger}}$), completely independent of steering direction.*
 
