@@ -1416,7 +1416,12 @@
 
       // Unified Weapon Timer (Context-aware: Defend vs. Attack choice)
       this.shootTimer = 0;
-      this.shootInterval = difficulty === 'hard' ? 95 : difficulty === 'easy' ? 150 : 120;
+      // Difficulty-adapted base cooldown (faster cadence so UFO can deal with asteroid clutter):
+      // Hard: ~0.63s (38 frames) amid swarms of rocks
+      // Medium: ~0.86s (52 frames) crisp arcade rhythm
+      // Easy: ~1.16s (70 frames)
+      this.baseShootInterval = difficulty === 'hard' ? 38 : difficulty === 'easy' ? 70 : 52;
+      this.shootInterval = this.baseShootInterval;
       this.telegraphTimer = 0;
     }
 
@@ -1766,11 +1771,19 @@
       // The UFO has 1 single laser cannon. When loaded, it decides:
       // - If an asteroid poses an imminent crash hazard -> fire DEFENSIVELY to survive.
       // - Otherwise -> fire OFFENSIVELY at the player rocket.
-      // Firing puts the weapon on full cooldown, creating true opportunity cost!
+      // Dynamic Cooldown: Adapts to rock clutter so the UFO isn't overwhelmed in dense fields.
       // -------------------------------------------------------------
+      const clutterCap = this.difficulty === 'hard' ? 18 : this.difficulty === 'easy' ? 8 : 12;
+      const rockClutter = Math.min(1.0, rocks.length / clutterCap);
+      // Up to 25% faster reload under heavy asteroid density
+      this.shootInterval = Math.max(20, Math.round(this.baseShootInterval * (1.0 - rockClutter * 0.25)));
+
       this.shootTimer++;
-      if (this.shootTimer >= this.shootInterval - 20) {
+      const telegraphDuration = Math.min(16, Math.round(this.shootInterval * 0.28));
+      if (this.shootTimer >= this.shootInterval - telegraphDuration) {
         this.telegraphTimer = this.shootInterval - this.shootTimer;
+      } else {
+        this.telegraphTimer = 0;
       }
 
       if (this.shootTimer >= this.shootInterval) {
@@ -1807,8 +1820,11 @@
           this.soundFx.playUFOLaser();
           // Jink away immediately after defensive blast
           this.jinkTimer = 25;
+          // Defensive recovery refund: 35% cooldown head-start to prevent getting trapped by multi-rock clusters
+          this.shootTimer = Math.round(this.shootInterval * 0.35);
         } else {
           // OFFENSIVE SHOT: Fires at the player rocket (50% direct, 50% predictive lead)
+          // Includes Gaussian angular noise (Box-Muller) for thrilling near-misses
           let aimX = pDx;
           let aimY = pDy;
           if (Math.random() < 0.5) {
@@ -1816,9 +1832,18 @@
             aimX += player.dx * timeToHit;
             aimY += player.dy * timeToHit;
           }
-          const aimDist = Math.hypot(aimX, aimY) || 1;
-          const bVx = (aimX / aimDist) * this.vLaser;
-          const bVy = (aimY / aimDist) * this.vLaser;
+
+          // Box-Muller Gaussian angular dispersion for organic near-misses
+          const sigmaDeg = this.difficulty === 'hard' ? 4.5 : this.difficulty === 'easy' ? 11.5 : 7.5;
+          const sigmaRad = (sigmaDeg * Math.PI) / 180;
+          const u1 = Math.max(1e-6, Math.random());
+          const u2 = Math.random();
+          const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+          const angleOffset = Math.max(-2.2 * sigmaRad, Math.min(2.2 * sigmaRad, z0 * sigmaRad));
+
+          const aimAngle = Math.atan2(aimY, aimX) + angleOffset;
+          const bVx = Math.cos(aimAngle) * this.vLaser;
+          const bVy = Math.sin(aimAngle) * this.vLaser;
 
           ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'player'));
           this.soundFx.playUFOLaser();

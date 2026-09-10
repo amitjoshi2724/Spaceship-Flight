@@ -606,19 +606,36 @@ const perceivedPlayer = this.playerHistory[0];
 ```
 Now, when the player hits the reverse thrusters, the AI overshoots for a split second before correcting its course — exactly like a human dogfighter!
 
-### 2. The Inaccuracy Gaussian Cone
-Never give an enemy 100% laser accuracy. Instead, add a small angular noise offset sampled from a normal distribution:
+### 2. The Inaccuracy Gaussian Cone (Box-Muller Transform)
+Never give an enemy 100% laser accuracy (aimbot precision feels unfair and robotic). Instead, add an angular noise offset sampled from a normal distribution:
 
-$$\theta_{\text{fire}} = \theta_{\text{aim}} + \mathcal{N}(0, \sigma^2)$$
+$$\theta_{\text{fire}} = \theta_{\text{aim}} + \Delta\theta, \quad \Delta\theta \sim \mathcal{N}(0, \sigma^2)$$
 
-- On Easy difficulty: $\sigma = 12^\circ$ (shots fly dangerously close, raising adrenaline, but usually miss).
-- On Medium difficulty: $\sigma = 5^\circ$.
-- On Hard / Boss difficulty: $\sigma = 1.5^\circ$.
+Where the standard deviation $\sigma$ adapts to difficulty:
+- **Easy difficulty**: $\sigma = 11.5^\circ$ (shots fly visibly wide, creating forgiving dogfights).
+- **Medium difficulty**: $\sigma = 7.5^\circ$ (tight near-misses that graze the cockpit by 15–30 pixels).
+- **Hard difficulty**: $\sigma = 4.5^\circ$ (disciplined sniper fire that rewards sudden maneuvers).
+
+In JavaScript, sample this without external libraries using the **Box-Muller transform**:
+```javascript
+const u1 = Math.max(1e-6, Math.random());
+const u2 = Math.random();
+const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+const angleOffset = Math.max(-2.2 * sigmaRad, Math.min(2.2 * sigmaRad, z0 * sigmaRad));
+const aimAngle = Math.atan2(aimY, aimX) + angleOffset;
+```
 
 ### 3. The "Near-Miss" Thrill Effect
-Players don't get adrenaline rushes when enemies miss by half the screen. They get thrills when enemy lasers **whiz past their cockpit by 10 pixels**.
+Players don't get adrenaline rushes when enemies miss by half the screen. They get thrills when enemy lasers **whiz past their cockpit by 10–20 pixels**.
 
 By tuning the inaccuracy cone so bullets narrowly miss the player's bounding box, players feel like skilled escape artists without realizing the AI was intentionally giving them a close shave.
+
+### 4. Clutter-Adaptive Weapon Cycling
+When the arena is crowded with hazards, enemy weapon reload times should dynamically compress so the AI doesn't become helpless against environmental swarms:
+
+$$T_{\text{cooldown}} = T_{\text{base}} \cdot \left(1.0 - 0.25 \cdot \min\left(1.0, \frac{N_{\text{rocks}}}{N_{\text{cap}}}\right)\right)$$
+
+Furthermore, when the AI spends its unified shot defensively on a hazard, award a **35% reload recovery refund** so it isn't immediately crushed by cascading obstacles.
 
 ---
 
