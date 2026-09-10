@@ -272,18 +272,28 @@ To eliminate this bug, game AIs implement **Hierarchical Hard Safety Masking**:
 
 ---
 
-### 4.8 Adaptive Velocity Steering: Fast Evasive Jerks & Active Retro-Braking
-When evading, the AI must snap onto its new heading in **1–2 frames**, not slide through a wide, sluggish arc:
+### 4.8 Adaptive Velocity Steering: Difficulty-Scaled Agility & Active Retro-Braking
+A common failure mode in arcade AI is using a single, high turn agility (e.g. $\alpha = 0.65$) across all scenarios. While this prevents collisions, it produces a **twitchy, jittery AI** that appears to vibrate and accelerate unnaturally.
+
+To achieve organic, grounded flight, turning agility and thruster boost scale **dynamically with difficulty**:
 
 $$\alpha = \begin{cases} 
-0.65, & \text{if } D(k_{\text{current}}) > 0.001 \text{ or imminent threat} \quad \text{(instantaneous evasive jerk)} \\
-0.10, & \text{otherwise} \quad \text{(smooth, cinematic cruising)}
+0.10, & \text{during safe cruising (smooth, cinematic motion)} \\
+0.30, & \text{during evasion on Easy mode} \\
+0.40, & \text{during evasion on Medium mode} \\
+0.50, & \text{during evasion on Hard mode}
 \end{cases}$$
 
-$$v_{\text{target}} = \begin{cases} 
-2.10 \cdot v_{\text{cruise}}, & \text{during evasion (thruster overdrive)} \\
-v_{\text{cruise}}, & \text{during safe cruising}
+$$v_{\text{boost}} = \begin{cases} 
+1.25 \cdot v_{\text{cruise}}, & \text{Easy mode evasion} \\
+1.40 \cdot v_{\text{cruise}}, & \text{Medium mode evasion} \\
+1.55 \cdot v_{\text{cruise}}, & \text{Hard mode evasion}
 \end{cases}$$
+
+#### Calibrated Emergency Overdrive (Preventing Premature Panic)
+If emergency overdrive triggers on distant or non-threatening asteroids, the enemy will twitch "willy nilly." Evasion overdrive must enforce two strict kinematic gates:
+1. **Positive Closing Velocity**: $v_{\text{closing}} > 0.30 \text{ px/frame}$. If an obstacle is drifting away or stationary relative to the ship, never trigger overdrive!
+2. **Imminent Collision Window**: $t_{\text{impact}} < 0.70\text{s}$ (or $d < 1.35 R_{\text{clearance}}$ with $t_{\text{impact}} < 1.1\text{s}$).
 
 #### Active Retro-Braking (Momentum Cancellation)
 When reversing direction ($\hat{d}^* \cdot \hat{v} < -0.15$) or when boxed in by obstacles:
@@ -301,7 +311,7 @@ if (isBoxedIn) {
 }
 ```
 
-This active dampening stops the ship on a dime and propels it cleanly along the escape vector.
+This active dampening halts old momentum without wide, sloppy drift arcs, letting the ship redirect cleanly into the open corridor.
 
 ---
 
@@ -695,7 +705,8 @@ Attempting to force a single weapon to serve both offensive player combat and de
    - Cooldown: 85–140 frames (~1.4s - 2.3s)       - Cooldown: 32–52 frames (~0.5s - 0.8s)
    - Long-range player hunting                    - Short-range radar bubble (d <= 140px)
    - Gaussian spread (sigma = 7.5 deg)            - True radial collision check (t_impact < 0.9s)
-   - Purple telegraph glow (22 frames)            - Only fires at rocks threatening the UFO
+   - Green muzzle flare telegraph (22 frames)     - Only fires at rocks threatening the UFO
+   - Emerald plasma bolt (#00ff8e)                - Electric cyan plasma bolt (#38bdf8)
    - Fair & fun dogfight pacing                   - Decoupled from player combat pacing
 ```
 
@@ -711,6 +722,34 @@ const isDirectPath = proj > 0 && proj < threat.clearance * 1.5;
 *What goes wrong*: If a rock is barreling in from the right, the steering system has already chosen an evasive heading pointing left. Because the rock is now perpendicular or behind the *new heading*, $\text{proj} \le 0$! The AI concludes there is no emergency on its flight path, fires an offensive shot at the player, and gets crushed by the asteroid 10 frames later!
 
 **The Golden Rule of Defensive CIWS**: *Point-defense must evaluate true radial kinematics relative to the ship's physical center ($d < R_{\text{bubble}}$ and $t_{\text{impact}} < t_{\text{danger}}$), completely independent of steering direction.*
+
+---
+
+### 9.5 Diegetic Hull Light Telegraphing: Reading the AI's Brain
+The highest echelon of game AI design is **diegetic feedback**: communicating internal AI state through visual cues embedded on the physical ship model rather than external HUD text.
+
+On the 32×32 enemy saucer (`enemyship.png`), three distinct indicator lights line the hull:
+
+```
+          ┌─────────────[Cockpit Dome]─────────────┐
+          │                                        │
+     [🔴 Left Light]       [🟢 Center Light]       [🔵 Right Light]
+   (-0.266w, +0.109h)       (0.000w, +0.141h)      (+0.266w, +0.109h)
+  Asteroid Hazard Strobe   Primary Cannon Charge   Engine & CIWS Status
+```
+
+1. **Left Light (🔴 Hazard Red - `#ff1744`)**:
+   - **Trigger**: Imminent collision trajectory detected ($v_{\text{closing}} > 0.3$, $t_{\text{impact}} < 0.70\text{s}$).
+   - **Behavior**: High-frequency emergency hazard strobe.
+   - **Gameplay Read**: Alerts the human player that the UFO has spotted an obstacle and is breaking off its attack run to execute evasive retro-braking.
+2. **Center Light (🟢 Alien Emerald - `#00ff8e`)**:
+   - **Trigger**: Offensive player cannon charging ($t_{\text{telegraph}} \in [0, 22]$ frames).
+   - **Behavior**: Expanding emerald plasma lens flare perfectly color-matched to the outgoing plasma bolt.
+   - **Gameplay Read**: Gives the player a 0.35s visual warning to juke, bank, or raise shields before the laser fires.
+3. **Right Light (🔵 Sublight Cyan/Blue - `#38bdf8`)**:
+   - **Trigger**: Normal flight propulsion & defensive countermeasure status.
+   - **Behavior**: Rhythmic cyan engine glow during cruising; sharp cobalt flash when defensive CIWS destroys an asteroid.
+   - **Gameplay Read**: Indicates propulsion integrity and active point-defense operations.
 
 ---
 

@@ -1326,25 +1326,33 @@
       if (this.hit) return;
       ctx.save();
 
-      // Violet plasma trail
+      const isPlayerShot = this.targetType === 'player';
+      // Offensive cannon: radiant emerald green matching UFO center light (#00ff8e)
+      // Defensive CIWS: electric cyan matching right status beacon (#38bdf8)
+      const glowColor = isPlayerShot ? '#00ff8e' : '#38bdf8';
+      const outerColor = isPlayerShot ? '#00ff9d' : '#60a5fa';
+
+      // Plasma trail
       for (let i = 0; i < this.trail.length; i++) {
         const t = this.trail[i];
-        ctx.fillStyle = `rgba(192, 132, 252, ${t.alpha * 0.45})`;
+        ctx.fillStyle = isPlayerShot
+          ? `rgba(0, 255, 142, ${t.alpha * 0.45})`
+          : `rgba(56, 189, 248, ${t.alpha * 0.45})`;
         ctx.beginPath();
         ctx.arc(t.x, t.y, this.radius * (0.6 + (i / this.trail.length) * 0.5), 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Radiant outer glow (neon alien violet / magenta)
-      ctx.shadowColor = '#c084fc';
+      // Radiant outer glow
+      ctx.shadowColor = glowColor;
       ctx.shadowBlur = 12;
-      ctx.fillStyle = '#e879f9';
+      ctx.fillStyle = outerColor;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius * 1.8, 0, Math.PI * 2);
       ctx.fill();
 
       // Incandescent bright core
-      ctx.fillStyle = '#fdf4ff';
+      ctx.fillStyle = isPlayerShot ? '#f0fdf4' : '#f0f9ff';
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius * 0.9, 0, Math.PI * 2);
       ctx.fill();
@@ -1413,7 +1421,10 @@
       this.orbitTimer = 0;
       this.orbitDuration = 300 + Math.random() * 200;
       this.emergencyOverdrive = false;
+      this.emergencyAlertTimer = 0;
       this.jinkTimer = 0;
+      this.defenseJinkTimer = 0;
+      this.telegraphDuration = 22;
 
       // -------------------------------------------------------------
       // DUAL-CHANNEL WEAPON SYSTEM
@@ -1428,6 +1439,32 @@
       // 2. Defensive Point-Defense CIWS (Emergency asteroid survival bubble)
       this.defenseTimer = 0;
       this.defenseInterval = difficulty === 'hard' ? 32 : difficulty === 'easy' ? 52 : 40;
+    }
+
+    // Evasive turn agility scales dynamically by difficulty:
+    // Easy: 0.30, Medium: 0.40, Hard: 0.50 (cruising remains smooth at 0.10)
+    getEvasiveAgility() {
+      const agilityTable = {
+        easy: 0.30,
+        medium: 0.40,
+        hard: 0.50,
+        expert: 0.60,
+        nightmare: 0.70
+      };
+      return agilityTable[this.difficulty] ?? 0.40;
+    }
+
+    // Evasive thruster overdrive boost scales by difficulty:
+    // Easy: 1.25x, Medium: 1.40x, Hard: 1.55x (smooth & organic, avoiding unnatural warping)
+    getBoostMultiplier() {
+      const boostTable = {
+        easy: 1.25,
+        medium: 1.40,
+        hard: 1.55,
+        expert: 1.70,
+        nightmare: 1.85
+      };
+      return boostTable[this.difficulty] ?? 1.40;
     }
 
     recalculateSize() {
@@ -1447,7 +1484,7 @@
       this.radius = this.width * 0.463;
 
       this.vCruise = (0.22 * dScreen) / 60;
-      this.vBoost = this.vCruise * 2.10;
+      this.vBoost = this.vCruise * this.getBoostMultiplier();
       this.vLaser = (0.85 * dScreen) / 60;
     }
 
@@ -1588,6 +1625,8 @@
       }
 
       if (this.jinkTimer > 0) this.jinkTimer--;
+      if (this.defenseJinkTimer > 0) this.defenseJinkTimer--;
+      if (this.emergencyAlertTimer > 0) this.emergencyAlertTimer--;
 
       // Orbit direction toggle
       this.orbitTimer++;
@@ -1617,14 +1656,14 @@
         if (dist < R_radar + rock.radius) {
           const relVx = rock.dx - this.dx;
           const relVy = rock.dy - this.dy;
-          const vClose = -(relX * relVx + relY * relVy) / (dist || 1);
+          const vClosing = -(relX * relVx + relY * relVy) / (dist || 1);
           
           // Kinematic time-to-impact urgency (Inverse-Square Law: U = 1 / t_impact^2)
           // Required evasive acceleration scales quadratically with decreasing time (a = 2d / t^2)
           let urgencyKinematic = 0;
           let tImpact = 5.0;
-          if (vClose > 0.05) {
-            tImpact = dist / vClose;
+          if (vClosing > 0.05) {
+            tImpact = dist / vClosing;
             urgencyKinematic = 1.0 / Math.max(0.04, tImpact * tImpact);
           }
 
@@ -1642,11 +1681,14 @@
             dist,
             urgency,
             clearance,
-            tImpact
+            tImpact,
+            vClosing
           });
 
-          if (tImpact < 1.20 || dist < clearance * 2.2) {
+          // Calibrated emergency detection: only trigger if actually closing on a collision course
+          if (vClosing > 0.3 && (tImpact < 0.70 || (dist < clearance * 1.35 && tImpact < 1.1))) {
             this.emergencyOverdrive = true;
+            this.emergencyAlertTimer = 18; // Flashes left red warning strobe
           }
         }
       }
@@ -1718,9 +1760,11 @@
       // An imminent asteroid threat unconditionally outweighs any attraction/repulsion to the ship.
       // If any rock is on a collision course or in the danger bubble, player combat drives are 100% extinguished.
       // -------------------------------------------------------------
-      const hasImminentThreat = threats.some(t => t.urgency > 0.8 || t.dist < t.clearance * 2.8 || t.tImpact < 1.6);
+      const hasImminentThreat = threats.some(t =>
+        t.vClosing > 0.3 && (t.urgency > 1.8 || (t.dist < t.clearance * 1.5 && t.tImpact < 1.0))
+      );
       const currentHeadingDanger = dangerScores[this.currentHeadingIndex] || 0;
-      const isFacingDanger = hasImminentThreat || currentHeadingDanger > 0.05;
+      const isFacingDanger = hasImminentThreat || currentHeadingDanger > 0.12;
 
       // Pure evasion: 0% player attraction, 0% flanking, 0% forward inertia when an asteroid is near!
       const wPlayer = isFacingDanger ? 0.0 : 0.8;
@@ -1774,8 +1818,8 @@
 
       const chosenRay = rayScores[this.currentHeadingIndex];
 
-      // 5. Physical Velocity Steering (Fast Evasive Jerk & Retro-Braking)
-      const isEvasive = this.emergencyOverdrive || chosenRay.danger > 0 || currentRay.danger > 0.01 || isFacingDanger;
+      // 5. Physical Velocity Steering (Scaled Agility & Active Retro-Braking)
+      const isEvasive = this.emergencyOverdrive || (isFacingDanger && chosenRay.danger > 0.05) || currentRay.danger > 0.12;
       let targetSpeed = isEvasive ? this.vBoost : this.vCruise;
 
       // Active Retro-Braking / Momentum Cancellation:
@@ -1798,8 +1842,9 @@
       const targetDx = chosenRay.dkX * targetSpeed;
       const targetDy = chosenRay.dkY * targetSpeed;
 
-      // Fast, sharp evasive turn agility: 0.65 (redirects in 1-2 frames) vs 0.10 cruise
-      const turnAgility = isEvasive ? 0.65 : 0.10;
+      // Turn agility scales dynamically by difficulty:
+      // Easy: 0.30, Medium: 0.40, Hard: 0.50 (cruising remains 0.10)
+      const turnAgility = isEvasive ? this.getEvasiveAgility() : 0.10;
       this.dx += (targetDx - this.dx) * turnAgility;
       this.dy += (targetDy - this.dy) * turnAgility;
 
@@ -1853,8 +1898,9 @@
           const bVy = (emergencyRock.relY / aimDist) * this.vLaser;
           ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'rock'));
           this.soundFx.playUFOLaser();
-          // Jink away immediately after defensive blast
-          this.jinkTimer = 20;
+          // Jink away and flash defensive beacon
+          this.jinkTimer = 18;
+          this.defenseJinkTimer = 15;
         }
       }
 
@@ -1863,7 +1909,7 @@
       // Deliberate combat cadence with telegraph glow & Gaussian near-miss spread
       // -------------------------------------------------------------
       this.shootTimer++;
-      const telegraphDuration = 22;
+      const telegraphDuration = this.telegraphDuration || 22;
       if (this.shootTimer >= this.shootInterval - telegraphDuration) {
         this.telegraphTimer = this.shootInterval - this.shootTimer;
       } else {
@@ -1909,17 +1955,6 @@
       ctx.translate(this.x, this.y);
       ctx.rotate((this.drawAngle * Math.PI) / 180);
 
-      // Telegraph glow when about to fire at player
-      if (this.telegraphTimer > 0) {
-        const pulse = Math.sin((this.telegraphTimer / 20) * Math.PI);
-        ctx.shadowColor = '#d946ef';
-        ctx.shadowBlur = 18 * pulse;
-        ctx.fillStyle = `rgba(217, 70, 239, ${0.45 * pulse})`;
-        ctx.beginPath();
-        ctx.arc(0, -this.height * 0.12, this.width * 0.32, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
       // Draw sprite (enemyship.png)
       if (this.sprite.complete && this.sprite.naturalWidth > 0) {
         // Visual center is at y = 14.0 in 32x32 sprite
@@ -1930,17 +1965,97 @@
         ctx.beginPath();
         ctx.ellipse(0, 0, this.width * 0.46, this.height * 0.22, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#c084fc';
+        ctx.fillStyle = '#10b981';
         ctx.beginPath();
         ctx.ellipse(0, -this.height * 0.12, this.width * 0.28, this.height * 0.18, 0, 0, Math.PI * 2);
         ctx.fill();
       }
 
+      // -------------------------------------------------------------
+      // DIEGETIC HULL LIGHT TELEGRAPHING SYSTEM
+      // Exact pixel coordinates on enemyship.png:
+      // - LEFT LIGHT (RED): Asteroid Emergency Strobe ((-0.266w, 0.109h))
+      // - MIDDLE LIGHT (GREEN): Weapon Cannon Charge & Fire ((0w, 0.141h))
+      // - RIGHT LIGHT (BLUE): Engine Status & Point-Defense ((0.266w, 0.109h))
+      // -------------------------------------------------------------
+      const w = this.width;
+      const h = this.height;
+
+      // 1. LEFT RED LIGHT: Asteroid Emergency Strobe (Collision avoidance beacon)
+      const leftX = -0.266 * w;
+      const leftY = 0.109 * h;
+      if (this.emergencyAlertTimer > 0 || this.emergencyOverdrive) {
+        const flashPhase = (this.emergencyAlertTimer > 0)
+          ? Math.sin((this.emergencyAlertTimer / 18) * Math.PI * 3)
+          : Math.sin(this.lifetime * 0.35);
+        const redGlow = Math.max(0, flashPhase);
+        if (redGlow > 0.05) {
+          ctx.save();
+          ctx.shadowColor = '#ff1744';
+          ctx.shadowBlur = 16 * redGlow;
+          ctx.fillStyle = `rgba(255, 23, 68, ${0.92 * redGlow})`;
+          ctx.beginPath();
+          ctx.arc(leftX, leftY, w * 0.048, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Incandescent white-hot center core
+          ctx.fillStyle = `rgba(255, 235, 238, ${0.95 * redGlow})`;
+          ctx.beginPath();
+          ctx.arc(leftX, leftY, w * 0.022, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // 2. MIDDLE GREEN LIGHT: Primary Laser Cannon Charge & Fire Telegraph (Color-matched to emerald beam)
+      const midX = 0.0;
+      const midY = 0.141 * h;
+      if (this.telegraphTimer > 0) {
+        const pulse = Math.sin((this.telegraphTimer / (this.telegraphDuration || 22)) * Math.PI);
+        ctx.save();
+        ctx.shadowColor = '#00ff8e';
+        ctx.shadowBlur = 20 * pulse;
+
+        // Wide emerald charging aura
+        ctx.fillStyle = `rgba(0, 255, 142, ${0.40 * pulse})`;
+        ctx.beginPath();
+        ctx.arc(midX, midY, w * 0.16 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Intense glowing lens flare at weapon muzzle
+        ctx.fillStyle = `rgba(0, 255, 142, ${0.88 * pulse})`;
+        ctx.beginPath();
+        ctx.arc(midX, midY, w * 0.065 * (0.8 + 0.4 * pulse), 0, Math.PI * 2);
+        ctx.fill();
+
+        // Incandescent mint-white core
+        ctx.fillStyle = `rgba(240, 255, 244, ${0.98 * pulse})`;
+        ctx.beginPath();
+        ctx.arc(midX, midY, w * 0.03 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // 3. RIGHT BLUE LIGHT: Sublight Propulsion & Point-Defense Status Beacon
+      const rightX = 0.266 * w;
+      const rightY = 0.109 * h;
+      const bluePulse = (this.defenseJinkTimer > 0)
+        ? 1.0
+        : 0.35 + 0.25 * Math.sin(this.lifetime * 0.08);
+      ctx.save();
+      ctx.shadowColor = '#38bdf8';
+      ctx.shadowBlur = 10 * bluePulse;
+      ctx.fillStyle = `rgba(56, 189, 248, ${0.85 * bluePulse})`;
+      ctx.beginPath();
+      ctx.arc(rightX, rightY, w * 0.035, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
       // Thruster flare when overdrive or jink is engaged
       if (this.emergencyOverdrive || this.jinkTimer > 0) {
-        ctx.shadowColor = '#e879f9';
+        ctx.shadowColor = '#38bdf8';
         ctx.shadowBlur = 14;
-        ctx.fillStyle = 'rgba(232, 121, 249, 0.8)';
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.85)';
         ctx.beginPath();
         ctx.arc(0, this.height * 0.22, this.width * 0.12, 0, Math.PI * 2);
         ctx.fill();
@@ -2113,6 +2228,12 @@
     setDifficulty(level) {
       this.difficulty = level;
       this.applyDifficultySettings();
+      if (this.ufo) {
+        this.ufo.difficulty = level;
+        this.ufo.shootInterval = level === 'hard' ? 85 : level === 'easy' ? 140 : 110;
+        this.ufo.defenseInterval = level === 'hard' ? 32 : level === 'easy' ? 52 : 40;
+        this.ufo.recalculateSize();
+      }
       try {
         localStorage.setItem('spaceship_flight_difficulty', level);
       } catch (e) { }
