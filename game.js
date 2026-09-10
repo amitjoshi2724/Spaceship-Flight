@@ -1330,10 +1330,10 @@
       let glowColor, outerColor, trailColor, coreColor;
 
       if (this.targetType === 'rock') {
-        // Defensive CIWS interceptor bolt: 100% Pure Electric Neon Cyan & Deep Sky Blue (0 red!)
-        glowColor = '#00e5ff';
-        outerColor = '#00b0ff';
-        trailColor = (a) => `rgba(0, 229, 255, ${a * 0.70})`;
+        // Defensive CIWS interceptor bolt: Exact photo royal blue from enemyship.png (#1761f2)
+        glowColor = '#2563eb';
+        outerColor = '#1761f2';
+        trailColor = (a) => `rgba(23, 97, 242, ${a * 0.80})`;
         coreColor = '#ffffff';
       } else if (this.aimMode === 'predictive') {
         // Offensive Predictive Lead: Alien Violet / Purple
@@ -1947,11 +1947,18 @@
         const bVx = (leadX / aimDist) * this.vLaser;
         const bVy = (leadY / aimDist) * this.vLaser;
 
-        ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'rock'));
+        // Spawn blue bullet directly from the starboard blue emitter!
+        const rad = (this.drawAngle * Math.PI) / 180;
+        const cosA = Math.cos(rad);
+        const sinA = Math.sin(rad);
+        const blueMuzzleX = this.x + (0.2656 * this.width * cosA - 0.1094 * this.height * sinA);
+        const blueMuzzleY = this.y + (0.2656 * this.width * sinA + 0.1094 * this.height * cosA);
+
+        ufoBullets.push(new UFOBullet(blueMuzzleX, blueMuzzleY, bVx, bVy, 'rock'));
         this.soundFx.playUFOLaser();
         // Trigger defensive jink & flash right blue light!
         this.jinkTimer = 18;
-        this.defenseFlashTimer = 20;
+        this.defenseFlashTimer = 22;
       }
 
       // -------------------------------------------------------------
@@ -1997,7 +2004,13 @@
         const bVx = Math.cos(aimAngle) * this.vLaser;
         const bVy = Math.sin(aimAngle) * this.vLaser;
 
-        ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'player', this.nextAimMode));
+        const rad = (this.drawAngle * Math.PI) / 180;
+        const cosA = Math.cos(rad);
+        const sinA = Math.sin(rad);
+        const centerMuzzleX = this.x + (0.0156 * this.width * cosA - 0.1406 * this.height * sinA);
+        const centerMuzzleY = this.y + (0.0156 * this.width * sinA + 0.1406 * this.height * cosA);
+
+        ufoBullets.push(new UFOBullet(centerMuzzleX, centerMuzzleY, bVx, bVy, 'player', this.nextAimMode));
         this.soundFx.playUFOLaser();
         this.jinkTimer = 25;
       }
@@ -2038,29 +2051,33 @@
       const h = this.height;
       const lightRadius = w * 0.048; // Glowing circular bead matching user's preferred purple size
 
-      // 1. LEFT RED LIGHT: Asteroid Emergency Hazard Strobe
-      const leftX = -0.2656 * w;
-      const leftY = 0.1094 * h;
-      if (this.emergencyAlertTimer > 0 || this.emergencyOverdrive) {
+      // 1 & 3. DANGER HAZARD STROBE (Red and Blue flash TOGETHER on danger!)
+      const isEmergency = this.emergencyAlertTimer > 0 || this.emergencyOverdrive;
+      let emergencyGlow = 0;
+      if (isEmergency) {
         const flashPhase = (this.emergencyAlertTimer > 0)
           ? Math.sin((this.emergencyAlertTimer / 18) * Math.PI * 3)
           : Math.sin(this.lifetime * 0.35);
-        const redGlow = Math.max(0, flashPhase);
-        if (redGlow > 0.05) {
-          ctx.save();
-          ctx.shadowColor = '#ff1744';
-          ctx.shadowBlur = 8 * redGlow;
-          ctx.fillStyle = `rgba(255, 23, 68, ${0.95 * redGlow})`;
-          ctx.beginPath();
-          ctx.arc(leftX, leftY, lightRadius * (0.9 + 0.2 * redGlow), 0, Math.PI * 2);
-          ctx.fill();
+        emergencyGlow = Math.max(0, flashPhase);
+      }
 
-          ctx.fillStyle = `rgba(255, 240, 240, ${0.98 * redGlow})`;
-          ctx.beginPath();
-          ctx.arc(leftX, leftY, lightRadius * 0.45, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        }
+      // 1. LEFT RED LIGHT: Danger Hazard Strobe
+      const leftX = -0.2656 * w;
+      const leftY = 0.1094 * h;
+      if (emergencyGlow > 0.05) {
+        ctx.save();
+        ctx.shadowColor = '#ff1744';
+        ctx.shadowBlur = 10 * emergencyGlow;
+        ctx.fillStyle = `rgba(255, 23, 68, ${0.95 * emergencyGlow})`;
+        ctx.beginPath();
+        ctx.arc(leftX, leftY, lightRadius * (0.95 + 0.25 * emergencyGlow), 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(255, 240, 240, ${0.98 * emergencyGlow})`;
+        ctx.beginPath();
+        ctx.arc(leftX, leftY, lightRadius * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
 
       // 2. MIDDLE LIGHT: Primary Cannon Telegraph (Green = Direct, Purple = Predictive)
@@ -2075,7 +2092,7 @@
 
         ctx.save();
         ctx.shadowColor = lightColor;
-        ctx.shadowBlur = 10 * pulse;
+        ctx.shadowBlur = 12 * pulse;
 
         // Glowing circular bead (equal size and shape for both green and purple!)
         ctx.fillStyle = lightColor;
@@ -2091,23 +2108,26 @@
         ctx.restore();
       }
 
-      // 3. RIGHT BLUE LIGHT: Point-Defense CIWS Flash
-      // Does NOT constantly flash; ONLY flashes bright cyan during a defensive shot!
+      // 3. RIGHT BLUE LIGHT: Danger Strobe & Defensive CIWS Flash
+      // Flashes together with red on danger, AND flashes intensely on defensive shots!
+      // Uses the exact royal blue from enemyship.png: #1761f2!
       const rightX = 0.2656 * w;
       const rightY = 0.1094 * h;
-      if (this.defenseFlashTimer > 0) {
-        const flashPulse = this.defenseFlashTimer / 20;
+      const ciwsPulse = this.defenseFlashTimer > 0 ? (this.defenseFlashTimer / 22) : 0;
+      const blueGlow = Math.max(emergencyGlow, ciwsPulse);
+
+      if (blueGlow > 0.05) {
         ctx.save();
-        ctx.shadowColor = '#00e5ff';
-        ctx.shadowBlur = 12 * flashPulse;
-        ctx.fillStyle = `rgba(0, 229, 255, ${0.95 * flashPulse})`;
+        ctx.shadowColor = '#2563eb';
+        ctx.shadowBlur = 12 * blueGlow;
+        ctx.fillStyle = `rgba(23, 97, 242, ${0.95 * blueGlow})`;
         ctx.beginPath();
-        ctx.arc(rightX, rightY, lightRadius * (1.0 + 0.25 * flashPulse), 0, Math.PI * 2);
+        ctx.arc(rightX, rightY, lightRadius * (0.95 + 0.25 * blueGlow), 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
-        ctx.arc(rightX, rightY, lightRadius * 0.45 * flashPulse, 0, Math.PI * 2);
+        ctx.arc(rightX, rightY, lightRadius * 0.45 * blueGlow, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -3171,7 +3191,7 @@
               if (ub.targetType === 'rock') {
                 r.popped = true;
                 this.soundFx.playExplosion(false);
-                this.particles.addExplosion(r.x, r.y, '#00e5ff', 24);
+                this.particles.addExplosion(r.x, r.y, '#1761f2', 24);
                 this.rocks.splice(j, 1);
               } else {
                 // Rock absorbs offensive shot; emits small kinetic dust puff

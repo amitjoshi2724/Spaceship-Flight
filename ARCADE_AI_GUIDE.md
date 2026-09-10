@@ -757,27 +757,27 @@ On the 32×32 enemy saucer (`enemyship.png`), three distinct indicator apertures
                │                                                 │
      [🔴 Left Light]                  [🟢/🟣 Center Light]             [🔵 Right Light]
    (-0.2656w, +0.1094h)             (+0.0156w, +0.1406h)             (+0.2656w, +0.1094h)
-    Asteroid Hazard Strobe            Primary Cannon Telegraph        Point-Defense CIWS Flash
+    Danger Emergency Strobe           Primary Cannon Telegraph        Danger Strobe & CIWS Flash
 ```
 
-1. **Left Light (🔴 Hazard Red - `#ff1744`)**:
-   - **Position**: Centered at $(-0.2656w, +0.1094h)$ on the port hull rim.
-   - **Trigger**: Imminent collision trajectory detected during asteroid avoidance.
-   - **Behavior**: Emergency hazard strobe alerting the player that the UFO has spotted an obstacle and is breaking off its attack run to execute evasive retro-braking.
+1. **Synchronized Danger Emergency Strobe (🔴 Red & 🔵 Blue Flash Together!)**:
+   - **Trigger**: Imminent collision trajectory detected ($v_{\text{closing}} > 0.15$, obstacle in flight path).
+   - **Behavior**: Like emergency police beacons, the **Left Red Light** (`#ff0000` / `#ff1744`) and **Right Blue Light** (`#1761f2`) flash synchronously in high-visibility warning strobe.
+   - **Gameplay Read**: Alerts the player that the UFO is in emergency evasive maneuvering and fighting for survival.
 2. **Center Light (🟢 Emerald vs. 🟣 Violet Primary Cannon Telegraph)**:
    - **Position**: Centered at $(+0.0156w, +0.1406h)$ on the ventral weapon aperture.
    - **Trigger**: Offensive cannon charging ($t_{\text{telegraph}} \in [0, 22]$ frames / $\approx 0.35\text{s}$).
    - **Dual Targeting Modes (Identical Size & Glowing Halo)**:
-     - **🟢 Emerald Green (`#00ff8e`) — 50% of Shots**: **Direct Aim** (aiming directly at the player's current coordinate).  
+     - **🟢 Emerald Green (`#00ff8e`) — 50% of Shots**: **Direct Aim** (aiming directly at player's current coordinate).  
        *Player Counter-Tactic*: **Keep moving!** The bolt will hit where you were, so maintaining velocity guarantees a clean dodge.
      - **🟣 Alien Violet (`#c084fc`) — 50% of Shots**: **Predictive Lead** (calculating your velocity vector and leading you with $t_{\text{lead}} = d / v_{\text{laser}}$).  
        *Player Counter-Tactic*: **Brake, cut, or reverse!** The bolt will fly to where you were heading, so changing direction or slowing down causes the predictive shot to fly harmlessly past.
    - **Single Unified Light**: There is only one central weapon aperture; it illuminates as a glowing circular bead in emerald green when targeting direct, and in alien purple when targeting predictive.
-3. **Right Light (🔵 Electric Cyan/Blue - `#00e5ff`)**:
+3. **Right Light & Defensive CIWS (🔵 Photo Royal Blue - `#1761f2`)**:
    - **Position**: Centered at $(+0.2656w, +0.1094h)$ on the starboard hull rim.
-   - **Trigger**: Defensive Point-Defense (CIWS) activation.
-   - **Behavior**: Does **not** constantly flash during cruise; it flashes bright neon-cyan (`#00e5ff`) **only during a defensive shot** when the UFO launches an interceptor bolt to vaporize an oncoming asteroid.
-   - **Defensive CIWS Mechanics**: Engages closing asteroids within 160px on a ~0.9s cadence, destroying rocks with electric cyan particle explosions while allowing asteroids to act as cover against offensive shots.
+   - **Color Match**: Exactly matches the royal blue light on `enemyship.png` (`#1761f2` / RGB: 23, 97, 242).
+   - **Behavior**: Flashes synchronously with red during danger, AND emits an intense blue discharge flash when defensive CIWS fires.
+   - **Defensive CIWS Projectiles**: Fires a royal blue bolt (`#1761f2`) directly from the starboard emitter towards closing asteroids, vaporizing them in a brilliant shower of royal blue sparks.
 
 ---
 
