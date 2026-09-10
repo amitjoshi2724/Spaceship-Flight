@@ -1414,15 +1414,19 @@
       this.emergencyOverdrive = false;
       this.jinkTimer = 0;
 
-      // Unified Weapon Timer (Context-aware: Defend vs. Attack choice)
+      // -------------------------------------------------------------
+      // DUAL-CHANNEL WEAPON SYSTEM
+      // Channel 1: Offensive Laser Cannon (Player Hunting)
+      // Channel 2: Defensive Point-Defense CIWS (Asteroid Survival)
+      // -------------------------------------------------------------
+      // 1. Offensive Laser Cannon (Deliberate, enjoyable player combat rhythm)
       this.shootTimer = 0;
-      // Difficulty-adapted base cooldown (faster cadence so UFO can deal with asteroid clutter):
-      // Hard: ~0.63s (38 frames) amid swarms of rocks
-      // Medium: ~0.86s (52 frames) crisp arcade rhythm
-      // Easy: ~1.16s (70 frames)
-      this.baseShootInterval = difficulty === 'hard' ? 38 : difficulty === 'easy' ? 70 : 52;
-      this.shootInterval = this.baseShootInterval;
+      this.shootInterval = difficulty === 'hard' ? 85 : difficulty === 'easy' ? 140 : 110;
       this.telegraphTimer = 0;
+
+      // 2. Defensive Point-Defense CIWS (Emergency asteroid survival bubble)
+      this.defenseTimer = 0;
+      this.defenseInterval = difficulty === 'hard' ? 32 : difficulty === 'easy' ? 52 : 40;
     }
 
     recalculateSize() {
@@ -1601,18 +1605,18 @@
           const relVy = rock.dy - this.dy;
           const vClose = -(relX * relVx + relY * relVy) / (dist || 1);
           
-          // Kinematic time-to-impact urgency
+          // Kinematic time-to-impact urgency (Inverse-Square Law: U = 1 / t_impact^2)
+          // Required evasive acceleration scales quadratically with decreasing time (a = 2d / t^2)
           let urgencyKinematic = 0;
           let tImpact = 5.0;
           if (vClose > 0.05) {
             tImpact = dist / vClose;
-            urgencyKinematic = 1.0 / Math.max(0.10, tImpact);
+            urgencyKinematic = 1.0 / Math.max(0.04, tImpact * tImpact);
           }
 
-          // Static spatial proximity urgency (never 0 just because vClose is small!)
-          // Rocks close to the ship are inherently dangerous regardless of relative speed
+          // Static spatial proximity urgency (quadratic ramp: close rocks are inherently dangerous)
           const proximityFactor = Math.max(0, 1.0 - dist / (R_radar + rock.radius));
-          const urgencyProximity = proximityFactor * 2.5;
+          const urgencyProximity = (proximityFactor * proximityFactor) * 3.5;
 
           const urgency = Math.max(urgencyKinematic, urgencyProximity);
           const clearance = this.radius + rock.radius + 0.45 * this.radius;
@@ -1695,9 +1699,13 @@
         dangerScores[k] = rayDanger;
       }
 
-      // Suppress inertia bonus if current flight path faces danger (prevents fighting evasion)
+      // Evasion suppression: when threats are imminent, drop player/flank interest to near zero
+      // so the AI does not penalize reversing away from the player or avoid breaking orbit
       const currentHeadingDanger = dangerScores[this.currentHeadingIndex] || 0;
-      const inertiaWeight = currentHeadingDanger > 0.15 ? 0.0 : 0.7;
+      const isFacingDanger = currentHeadingDanger > 0.15 || threats.some(t => t.urgency > 2.0);
+      const wPlayer = isFacingDanger ? 0.05 : 0.8;
+      const wFlank = isFacingDanger ? 0.05 : 0.6;
+      const inertiaWeight = isFacingDanger ? 0.0 : 0.7;
 
       for (let k = 0; k < N; k++) {
         const angle = (k * 2 * Math.PI) / N;
@@ -1711,10 +1719,10 @@
         const I_boundary = (dkX * repelX + dkY * repelY);
         const I_inertia = (dkX * vNormX + dkY * vNormY);
 
-        const I_k = 0.8 * I_player + 0.6 * I_flank + 1.2 * I_boundary + inertiaWeight * I_inertia;
+        const I_k = wPlayer * I_player + wFlank * I_flank + 1.4 * I_boundary + inertiaWeight * I_inertia;
 
-        // Heavily weight safety over interest (5.0 vs 3.5)
-        const totalScore = I_k - 5.0 * rayDanger;
+        // Heavily weight safety over interest (6.0 penalty multiplier)
+        const totalScore = I_k - 6.0 * rayDanger;
         rayScores.push({ index: k, dkX, dkY, score: totalScore, danger: rayDanger });
       }
 
@@ -1740,14 +1748,33 @@
 
       const chosenRay = rayScores[this.currentHeadingIndex];
 
-      // 5. Physical Velocity Steering (Adaptive Agility)
+      // 5. Physical Velocity Steering (Adaptive Agility & Retro-Braking)
       const isEvasive = this.emergencyOverdrive || chosenRay.danger > 0 || currentRay.danger > 0.10 || threats.some(t => t.dist < t.clearance * 2.2);
-      const targetSpeed = isEvasive ? this.vBoost : this.vCruise;
+      let targetSpeed = isEvasive ? this.vBoost : this.vCruise;
+
+      // Active Retro-Braking / Momentum Cancellation:
+      // If the chosen ray points backwards relative to current velocity,
+      // or if all options carry residual danger (boxed in), actively dampen speed!
+      const dotChosenVel = (chosenRay.dkX * this.dx + chosenRay.dkY * this.dy) / (currentSpeed || 1);
+      const isReversing = dotChosenVel < -0.25;
+      const isBoxedIn = chosenRay.danger > 0.30;
+
+      if (isBoxedIn) {
+        // Trapped with hazards on all sides: cut speed immediately to minimize collision energy
+        targetSpeed = 0;
+        this.dx *= 0.85;
+        this.dy *= 0.85;
+      } else if (isReversing) {
+        // Counter-thrust to cancel old diagonal drift before accelerating into the reverse vector
+        this.dx *= 0.80;
+        this.dy *= 0.80;
+      }
+
       const targetDx = chosenRay.dkX * targetSpeed;
       const targetDy = chosenRay.dkY * targetSpeed;
 
-      // Adaptive turn agility: cruise is smooth (0.10), evasion is fast & decisive (0.28)
-      const turnAgility = isEvasive ? 0.28 : 0.10;
+      // Adaptive turn agility: cruise is smooth (0.10), evasion is fast & decisive (0.32)
+      const turnAgility = isEvasive ? 0.32 : 0.10;
       this.dx += (targetDx - this.dx) * turnAgility;
       this.dy += (targetDy - this.dy) * turnAgility;
 
@@ -1767,19 +1794,51 @@
       }
 
       // -------------------------------------------------------------
-      // UNIFIED WEAPON SYSTEM (Tactical Choice: Defend vs. Attack)
-      // The UFO has 1 single laser cannon. When loaded, it decides:
-      // - If an asteroid poses an imminent crash hazard -> fire DEFENSIVELY to survive.
-      // - Otherwise -> fire OFFENSIVELY at the player rocket.
-      // Dynamic Cooldown: Adapts to rock clutter so the UFO isn't overwhelmed in dense fields.
+      // DUAL-CHANNEL WEAPON SYSTEM
+      // Channel 1: Defensive Point-Defense (CIWS)
+      // Channel 2: Offensive Laser Cannon (Player Hunting)
       // -------------------------------------------------------------
-      const clutterCap = this.difficulty === 'hard' ? 18 : this.difficulty === 'easy' ? 8 : 12;
-      const rockClutter = Math.min(1.0, rocks.length / clutterCap);
-      // Up to 25% faster reload under heavy asteroid density
-      this.shootInterval = Math.max(20, Math.round(this.baseShootInterval * (1.0 - rockClutter * 0.25)));
 
+      // -------------------------------------------------------------
+      // CHANNEL 1: DEFENSIVE POINT-DEFENSE (CIWS)
+      // Evaluates radial collision course relative to UFO physical center
+      // (True spatial kinematics; independent of chosenRay heading!)
+      // -------------------------------------------------------------
+      this.defenseTimer++;
+      if (this.defenseTimer >= this.defenseInterval) {
+        let emergencyRock = null;
+        let lowestTImpact = 0.90; // Only engage rocks on collision course within 0.90s
+
+        for (let t = 0; t < threats.length; t++) {
+          const th = threats[t];
+          // True radial collision check: obstacle is within close defense radius and closing fast
+          const isWithinRange = th.dist < Math.max(140, th.clearance * 2.2);
+          const isClosingFast = th.tImpact < lowestTImpact;
+
+          if (isWithinRange && isClosingFast) {
+            lowestTImpact = th.tImpact;
+            emergencyRock = th;
+          }
+        }
+
+        if (emergencyRock) {
+          this.defenseTimer = 0;
+          const aimDist = Math.hypot(emergencyRock.relX, emergencyRock.relY) || 1;
+          const bVx = (emergencyRock.relX / aimDist) * this.vLaser;
+          const bVy = (emergencyRock.relY / aimDist) * this.vLaser;
+          ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'rock'));
+          this.soundFx.playUFOLaser();
+          // Jink away immediately after defensive blast
+          this.jinkTimer = 20;
+        }
+      }
+
+      // -------------------------------------------------------------
+      // CHANNEL 2: OFFENSIVE LASER CANNON (Player Hunting)
+      // Deliberate combat cadence with telegraph glow & Gaussian near-miss spread
+      // -------------------------------------------------------------
       this.shootTimer++;
-      const telegraphDuration = Math.min(16, Math.round(this.shootInterval * 0.28));
+      const telegraphDuration = 22;
       if (this.shootTimer >= this.shootInterval - telegraphDuration) {
         this.telegraphTimer = this.shootInterval - this.shootTimer;
       } else {
@@ -1790,65 +1849,30 @@
         this.shootTimer = 0;
         this.telegraphTimer = 0;
 
-        // 1. Evaluate whether an emergency defensive shot is needed to survive
-        let emergencyTarget = null;
-        let highestUrgency = 0;
-
-        for (let t = 0; t < threats.length; t++) {
-          const th = threats[t];
-          const proj = th.relX * chosenRay.dkX + th.relY * chosenRay.dkY;
-          const lat = Math.hypot(th.relX - proj * chosenRay.dkX, th.relY - proj * chosenRay.dkY);
-
-          // Direct imminent collision in the forward corridor
-          const isDirectPath = proj > 0 && proj < th.clearance * 1.5 && lat < th.clearance * 0.75;
-          const isImminentCrash = th.tImpact < 0.40 && th.dist < th.clearance * 1.4;
-
-          if (isDirectPath && isImminentCrash) {
-            if (th.urgency > highestUrgency) {
-              highestUrgency = th.urgency;
-              emergencyTarget = th;
-            }
-          }
+        // Predictive or direct lead on player rocket
+        let aimX = pDx;
+        let aimY = pDy;
+        if (Math.random() < 0.5) {
+          const timeToHit = pDist / this.vLaser;
+          aimX += player.dx * timeToHit;
+          aimY += player.dy * timeToHit;
         }
 
-        if (emergencyTarget) {
-          // DEFENSIVE SHOT: Uses its only laser to blast the asteroid to save its life!
-          const aimDist = Math.hypot(emergencyTarget.relX, emergencyTarget.relY) || 1;
-          const bVx = (emergencyTarget.relX / aimDist) * this.vLaser;
-          const bVy = (emergencyTarget.relY / aimDist) * this.vLaser;
-          ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'rock'));
-          this.soundFx.playUFOLaser();
-          // Jink away immediately after defensive blast
-          this.jinkTimer = 25;
-          // Defensive recovery refund: 35% cooldown head-start to prevent getting trapped by multi-rock clusters
-          this.shootTimer = Math.round(this.shootInterval * 0.35);
-        } else {
-          // OFFENSIVE SHOT: Fires at the player rocket (50% direct, 50% predictive lead)
-          // Includes Gaussian angular noise (Box-Muller) for thrilling near-misses
-          let aimX = pDx;
-          let aimY = pDy;
-          if (Math.random() < 0.5) {
-            const timeToHit = pDist / this.vLaser;
-            aimX += player.dx * timeToHit;
-            aimY += player.dy * timeToHit;
-          }
+        // Box-Muller Gaussian angular dispersion for organic near-miss thrills
+        const sigmaDeg = this.difficulty === 'hard' ? 4.5 : this.difficulty === 'easy' ? 11.5 : 7.5;
+        const sigmaRad = (sigmaDeg * Math.PI) / 180;
+        const u1 = Math.max(1e-6, Math.random());
+        const u2 = Math.random();
+        const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+        const angleOffset = Math.max(-2.2 * sigmaRad, Math.min(2.2 * sigmaRad, z0 * sigmaRad));
 
-          // Box-Muller Gaussian angular dispersion for organic near-misses
-          const sigmaDeg = this.difficulty === 'hard' ? 4.5 : this.difficulty === 'easy' ? 11.5 : 7.5;
-          const sigmaRad = (sigmaDeg * Math.PI) / 180;
-          const u1 = Math.max(1e-6, Math.random());
-          const u2 = Math.random();
-          const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
-          const angleOffset = Math.max(-2.2 * sigmaRad, Math.min(2.2 * sigmaRad, z0 * sigmaRad));
+        const aimAngle = Math.atan2(aimY, aimX) + angleOffset;
+        const bVx = Math.cos(aimAngle) * this.vLaser;
+        const bVy = Math.sin(aimAngle) * this.vLaser;
 
-          const aimAngle = Math.atan2(aimY, aimX) + angleOffset;
-          const bVx = Math.cos(aimAngle) * this.vLaser;
-          const bVy = Math.sin(aimAngle) * this.vLaser;
-
-          ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'player'));
-          this.soundFx.playUFOLaser();
-          this.jinkTimer = 25;
-        }
+        ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'player'));
+        this.soundFx.playUFOLaser();
+        this.jinkTimer = 25;
       }
 
       return true;

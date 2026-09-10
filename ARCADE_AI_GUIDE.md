@@ -135,15 +135,28 @@ $$t_{\text{impact}, i} = \begin{cases} \dfrac{d_i}{v_{\text{close}, i}}, & \text
 
 ---
 
-### 4.3 Continuous Urgency Curve $U(t)$
-Instead of step functions like `if (dist < 50)`, we use a smooth inverse-time urgency curve:
+### 4.3 Continuous Quadratic Urgency Curve $U(t)$ (Inverse-Square Law)
+Instead of step functions or linear curves, physics dictates an **inverse-square urgency curve**:
 
-$$U_i = \frac{1}{\max(\epsilon, t_{\text{impact}, i})}$$
+$$U_i = \frac{1}{\max(\epsilon, t_{\text{impact}, i}^2)}$$
 
-where $\epsilon = 0.12\text{s}$ prevents division by zero.
-- At $t = 5.0\text{s}$, $U = 0.2$ (barely registers; calm navigation).
-- At $t = 1.0\text{s}$, $U = 1.0$ (moderate caution; adjusts course).
-- At $t = 0.3\text{s}$, $U = 3.33$ (critical danger; emergency thruster overdrive).
+where $\epsilon = 0.04\text{s}^2$ prevents division by zero (equivalent to $t = 0.20\text{s}$).
+
+#### Physical Derivation (Constant-Acceleration Evasion)
+Under uniform lateral or braking thruster acceleration $a$, the displacement needed to clear an obstacle within time $t$ is:
+
+$$d = \frac{1}{2} a t^2 \implies a_{\text{required}} = \frac{2d}{t_{\text{impact}}^2}$$
+
+The physical acceleration required to avoid a collision scales with the **inverse square of time** ($1 / t^2$).
+
+#### Comparing Linear ($1/t$) vs. Quadratic ($1/t^2$):
+- **Linear ($1/t$)**: At $t = 1.0\text{s}$, $U = 1.0$; at $t = 0.5\text{s}$, $U = 2.0$. The gradient is far too shallow—the AI feels "safe enough" until $t < 0.25\text{s}$, at which point physical inertia makes a crash unavoidable.
+- **Quadratic ($1/t^2$)**:
+  - At $t = 2.0\text{s}$, $U = 0.25$ (peaceful, ignores distant non-threats).
+  - At $t = 1.0\text{s}$, $U = 1.0$ (early gentle course adjustment).
+  - At $t = 0.6\text{s}$, $U = 2.78$ (**decisive evasion begins early!**).
+  - At $t = 0.35\text{s}$, $U = 8.16$ (massive repulsion spike that instantly crushes interest biases).
+  - At $t = 0.20\text{s}$, $U = 25.0$ (emergency thruster overdrive).
 
 ---
 
@@ -239,20 +252,38 @@ k^*, & \text{if } S(k^*) > S(k_{\text{current}}) + 0.15 \quad \text{(significant
 k_{\text{current}}, & \text{otherwise (smooth cruising)}
 \end{cases}$$
 
-Furthermore, when $D(k_{\text{current}}) > 0.15$, the **directional inertia bonus is suppressed to zero** ($w_{\text{inertia}} = 0$). The AI never rewards itself for staying on a collision course!
+Furthermore, when $D(k_{\text{current}}) > 0.15$ or when threats are imminent:
+1. **The Directional Inertia Bonus is Suppressed to Zero** ($w_{\text{inertia}} = 0$). The AI never rewards itself for staying on a collision course.
+2. **Evasion Interest Suppression**: Tactical interest weights $w_{\text{player}}$ and $w_{\text{flank}}$ drop from $(0.8, 0.6)$ down to $0.05$.  
+   *Why this matters*: Reversing away from the player naturally incurs a negative dot product (up to $-0.8$). If player interest is not suppressed during evasion, the AI will refuse to back up even when an asteroid blocks all forward paths! Zeroing it out frees the AI to reverse or brake without penalty.
 
 ---
 
-### 4.8 Adaptive Velocity Steering (Dual Agility)
-Instead of a fixed turn rate, turning agility scales dynamically with threat level:
+### 4.8 Adaptive Velocity Steering & Active Retro-Braking
+Instead of a fixed turn rate, turning agility and momentum control scale dynamically with threat level:
 
 $$\alpha = \begin{cases} 
-0.24, & \text{if } D(k_{\text{current}}) > 0.15 \text{ or emergency overdrive} \quad \text{(swift, decisive evasion)} \\
+0.32, & \text{if } D(k_{\text{current}}) > 0.15 \text{ or emergency overdrive} \quad \text{(swift, decisive evasion)} \\
 0.10, & \text{otherwise} \quad \text{(majestic, smooth cruise)}
 \end{cases}$$
 
-$$\vec{v}_{\text{target}} = \hat{d}^* \cdot v_{\text{target}}$$
-$$\vec{v}_{t + \Delta t} = \vec{v}_t + \alpha \left(\vec{v}_{\text{target}} - \vec{v}_t\right)$$
+#### Active Retro-Braking (Momentum Cancellation)
+When an enemy needs to reverse direction ($\hat{d}^* \cdot \hat{v} < -0.25$) or is boxed in by hazards on all sides:
+
+```javascript
+if (isBoxedIn) {
+  // Trapped with hazards on all sides: cut forward speed immediately!
+  targetSpeed = 0;
+  this.dx *= 0.85;
+  this.dy *= 0.85;
+} else if (isReversing) {
+  // Counter-thrust to cancel old diagonal momentum before flying backwards
+  this.dx *= 0.80;
+  this.dy *= 0.80;
+}
+```
+
+Without active retro-braking, a ship with diagonal velocity takes 4–5 frames of sluggish turning to change directions, causing it to drift helplessly into adjacent obstacles along its old momentum path!
 
 ---
 
@@ -630,12 +661,38 @@ Players don't get adrenaline rushes when enemies miss by half the screen. They g
 
 By tuning the inaccuracy cone so bullets narrowly miss the player's bounding box, players feel like skilled escape artists without realizing the AI was intentionally giving them a close shave.
 
-### 4. Clutter-Adaptive Weapon Cycling
-When the arena is crowded with hazards, enemy weapon reload times should dynamically compress so the AI doesn't become helpless against environmental swarms:
+### 4. The Dual-Channel Weapon Architecture: Decoupling Combat from Survival
+Attempting to force a single weapon to serve both offensive player combat and defensive obstacle survival creates an insoluble design conflict:
+- If cooldown is fast enough to blast asteroid swarms (~0.5s), the AI unleashes an oppressive bullet-hell on the player.
+- If cooldown is slow enough for fair dogfights (~2.0s), the AI gets crushed whenever two rocks approach in sequence.
 
-$$T_{\text{cooldown}} = T_{\text{base}} \cdot \left(1.0 - 0.25 \cdot \min\left(1.0, \frac{N_{\text{rocks}}}{N_{\text{cap}}}\right)\right)$$
+```
+                     ┌────────────────────────────────────────┐
+                     │          UFO Combat Computer           │
+                     └───────────────────┬────────────────────┘
+                                         │
+                 ┌───────────────────────┴───────────────────────┐
+                 ▼                                               ▼
+   [Offensive Player Laser]                       [Defensive CIWS Point-Defense]
+   - Cooldown: 85–140 frames (~1.4s - 2.3s)       - Cooldown: 32–52 frames (~0.5s - 0.8s)
+   - Long-range player hunting                    - Short-range radar bubble (d <= 140px)
+   - Gaussian spread (sigma = 7.5 deg)            - True radial collision check (t_impact < 0.9s)
+   - Purple telegraph glow (22 frames)            - Only fires at rocks threatening the UFO
+   - Fair & fun dogfight pacing                   - Decoupled from player combat pacing
+```
 
-Furthermore, when the AI spends its unified shot defensively on a hazard, award a **35% reload recovery refund** so it isn't immediately crushed by cascading obstacles.
+#### The "Projected Ray" Pitfall: Why Single-Channel AIs Shoot the Player by Mistake
+A common architectural bug occurs when point-defense targeting evaluates obstacles projected onto the **steering heading** (`chosenRay`):
+
+```javascript
+// ❌ BUGGY EVALUATION:
+const proj = threat.relX * chosenRay.dkX + threat.relY * chosenRay.dkY;
+const isDirectPath = proj > 0 && proj < threat.clearance * 1.5;
+```
+
+*What goes wrong*: If a rock is barreling in from the right, the steering system has already chosen an evasive heading pointing left. Because the rock is now perpendicular or behind the *new heading*, $\text{proj} \le 0$! The AI concludes there is no emergency on its flight path, fires an offensive shot at the player, and gets crushed by the asteroid 10 frames later!
+
+**The Golden Rule of Defensive CIWS**: *Point-defense must evaluate true radial kinematics relative to the ship's physical center ($d < R_{\text{bubble}}$ and $t_{\text{impact}} < t_{\text{danger}}$), completely independent of steering direction.*
 
 ---
 
