@@ -1293,7 +1293,7 @@
   // UFO BULLET (Alien Violet Plasma Bolt)
   // ============================================================================
   class UFOBullet {
-    constructor(x, y, dx, dy, targetType = 'player') {
+    constructor(x, y, dx, dy, targetType = 'player', aimMode = 'direct') {
       this.x = x;
       this.y = y;
       this.dx = dx;
@@ -1301,6 +1301,7 @@
       this.radius = 3.5;
       this.hit = false;
       this.targetType = targetType; // 'player' or 'rock'
+      this.aimMode = aimMode; // 'direct' or 'predictive'
       this.trail = [];
     }
 
@@ -1326,18 +1327,32 @@
       if (this.hit) return;
       ctx.save();
 
-      const isPlayerShot = this.targetType === 'player';
-      // Offensive cannon: radiant emerald green matching UFO center light (#00ff8e)
-      // Defensive CIWS: electric cyan matching right status beacon (#38bdf8)
-      const glowColor = isPlayerShot ? '#00ff8e' : '#38bdf8';
-      const outerColor = isPlayerShot ? '#00ff9d' : '#60a5fa';
+      let glowColor, outerColor, trailColor, coreColor;
+
+      if (this.targetType === 'rock') {
+        // Defensive CIWS interceptor bolt: Electric cyan/blue
+        glowColor = '#38bdf8';
+        outerColor = '#60a5fa';
+        trailColor = (a) => `rgba(56, 189, 248, ${a * 0.45})`;
+        coreColor = '#f0f9ff';
+      } else if (this.aimMode === 'predictive') {
+        // Offensive Predictive Lead: Alien Violet / Purple
+        glowColor = '#c084fc';
+        outerColor = '#e879f9';
+        trailColor = (a) => `rgba(192, 132, 252, ${a * 0.45})`;
+        coreColor = '#fdf4ff';
+      } else {
+        // Offensive Direct Shot: Emerald Green
+        glowColor = '#00ff8e';
+        outerColor = '#00ff9d';
+        trailColor = (a) => `rgba(0, 255, 142, ${a * 0.45})`;
+        coreColor = '#f0fdf4';
+      }
 
       // Plasma trail
       for (let i = 0; i < this.trail.length; i++) {
         const t = this.trail[i];
-        ctx.fillStyle = isPlayerShot
-          ? `rgba(0, 255, 142, ${t.alpha * 0.45})`
-          : `rgba(56, 189, 248, ${t.alpha * 0.45})`;
+        ctx.fillStyle = trailColor(t.alpha);
         ctx.beginPath();
         ctx.arc(t.x, t.y, this.radius * (0.6 + (i / this.trail.length) * 0.5), 0, Math.PI * 2);
         ctx.fill();
@@ -1345,14 +1360,14 @@
 
       // Radiant outer glow
       ctx.shadowColor = glowColor;
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 10;
       ctx.fillStyle = outerColor;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius * 1.8, 0, Math.PI * 2);
       ctx.fill();
 
       // Incandescent bright core
-      ctx.fillStyle = isPlayerShot ? '#f0fdf4' : '#f0f9ff';
+      ctx.fillStyle = coreColor;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.radius * 0.9, 0, Math.PI * 2);
       ctx.fill();
@@ -1435,6 +1450,7 @@
       this.shootTimer = 0;
       this.shootInterval = difficulty === 'hard' ? 85 : difficulty === 'easy' ? 140 : 110;
       this.telegraphTimer = 0;
+      this.nextAimMode = Math.random() < 0.5 ? 'predictive' : 'direct';
 
       // 2. Defensive Point-Defense CIWS (Emergency asteroid survival bubble)
       this.defenseTimer = 0;
@@ -1949,6 +1965,12 @@
       // -------------------------------------------------------------
       this.shootTimer++;
       const telegraphDuration = this.telegraphDuration || 22;
+
+      // When telegraph begins, lock in the targeting mode so the center light telegraphs it!
+      if (this.shootTimer === this.shootInterval - telegraphDuration) {
+        this.nextAimMode = Math.random() < 0.5 ? 'predictive' : 'direct';
+      }
+
       if (this.shootTimer >= this.shootInterval - telegraphDuration) {
         this.telegraphTimer = this.shootInterval - this.shootTimer;
       } else {
@@ -1959,10 +1981,10 @@
         this.shootTimer = 0;
         this.telegraphTimer = 0;
 
-        // Predictive or direct lead on player rocket
+        // Predictive or direct lead based on telegraphed nextAimMode
         let aimX = pDx;
         let aimY = pDy;
-        if (Math.random() < 0.5) {
+        if (this.nextAimMode === 'predictive') {
           const timeToHit = pDist / this.vLaser;
           aimX += player.dx * timeToHit;
           aimY += player.dy * timeToHit;
@@ -1980,7 +2002,7 @@
         const bVx = Math.cos(aimAngle) * this.vLaser;
         const bVy = Math.sin(aimAngle) * this.vLaser;
 
-        ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'player'));
+        ufoBullets.push(new UFOBullet(this.x, this.y, bVx, bVy, 'player', this.nextAimMode));
         this.soundFx.playUFOLaser();
         this.jinkTimer = 25;
       }
@@ -2011,14 +2033,18 @@
       }
 
       // -------------------------------------------------------------
-      // DIEGETIC HULL LIGHT TELEGRAPHING SYSTEM
-      // Exact pixel coordinates on enemyship.png:
+      // DIEGETIC PIXEL-ACCURATE HULL LIGHT TELEGRAPHING SYSTEM
+      // On the 32x32 sprite, each light is a 2x2 pixel square (radius = w * 0.03125).
+      // All lights are drawn tight and pixel-accurate to avoid oversized auras!
       // - LEFT LIGHT (RED): Asteroid Emergency Strobe ((-0.266w, 0.109h))
-      // - MIDDLE LIGHT (GREEN): Weapon Cannon Charge & Fire ((0w, 0.141h))
+      // - MIDDLE LIGHT (GREEN / PURPLE):
+      //     🟢 GREEN  = Direct Aim (shooting player's current position)
+      //     🟣 PURPLE = Predictive Lead (shooting player's predicted velocity path)
       // - RIGHT LIGHT (BLUE): Engine Status & Point-Defense ((0.266w, 0.109h))
       // -------------------------------------------------------------
       const w = this.width;
       const h = this.height;
+      const pixelLightR = w * 0.032; // Exactly 2x2 sprite pixels in size
 
       // 1. LEFT RED LIGHT: Asteroid Emergency Strobe (Collision avoidance beacon)
       const leftX = -0.266 * w;
@@ -2031,46 +2057,44 @@
         if (redGlow > 0.05) {
           ctx.save();
           ctx.shadowColor = '#ff1744';
-          ctx.shadowBlur = 16 * redGlow;
-          ctx.fillStyle = `rgba(255, 23, 68, ${0.92 * redGlow})`;
+          ctx.shadowBlur = 6 * redGlow;
+          ctx.fillStyle = `rgba(255, 23, 68, ${0.95 * redGlow})`;
           ctx.beginPath();
-          ctx.arc(leftX, leftY, w * 0.048, 0, Math.PI * 2);
+          ctx.arc(leftX, leftY, pixelLightR, 0, Math.PI * 2);
           ctx.fill();
 
           // Incandescent white-hot center core
-          ctx.fillStyle = `rgba(255, 235, 238, ${0.95 * redGlow})`;
+          ctx.fillStyle = `rgba(255, 240, 240, ${0.98 * redGlow})`;
           ctx.beginPath();
-          ctx.arc(leftX, leftY, w * 0.022, 0, Math.PI * 2);
+          ctx.arc(leftX, leftY, pixelLightR * 0.45, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
         }
       }
 
-      // 2. MIDDLE GREEN LIGHT: Primary Laser Cannon Charge & Fire Telegraph (Color-matched to emerald beam)
+      // 2. MIDDLE LIGHT: Primary Cannon Telegraph (Pixel-Accurate: Green = Direct, Purple = Predictive)
       const midX = 0.0;
       const midY = 0.141 * h;
       if (this.telegraphTimer > 0) {
         const pulse = Math.sin((this.telegraphTimer / (this.telegraphDuration || 22)) * Math.PI);
+        const isPredictive = this.nextAimMode === 'predictive';
+        const lightColor = isPredictive ? '#c084fc' : '#00ff8e';
+        const coreColor = isPredictive ? '#fdf4ff' : '#f0fdf4';
+
         ctx.save();
-        ctx.shadowColor = '#00ff8e';
-        ctx.shadowBlur = 20 * pulse;
+        ctx.shadowColor = lightColor;
+        ctx.shadowBlur = 8 * pulse;
 
-        // Wide emerald charging aura
-        ctx.fillStyle = `rgba(0, 255, 142, ${0.40 * pulse})`;
+        // Pixel-accurate bead (only as big as the 2x2 pixel indicator on the hull!)
+        ctx.fillStyle = lightColor;
         ctx.beginPath();
-        ctx.arc(midX, midY, w * 0.16 * pulse, 0, Math.PI * 2);
+        ctx.arc(midX, midY, pixelLightR * (0.95 + 0.20 * pulse), 0, Math.PI * 2);
         ctx.fill();
 
-        // Intense glowing lens flare at weapon muzzle
-        ctx.fillStyle = `rgba(0, 255, 142, ${0.88 * pulse})`;
+        // Incandescent center core highlight
+        ctx.fillStyle = coreColor;
         ctx.beginPath();
-        ctx.arc(midX, midY, w * 0.065 * (0.8 + 0.4 * pulse), 0, Math.PI * 2);
-        ctx.fill();
-
-        // Incandescent mint-white core
-        ctx.fillStyle = `rgba(240, 255, 244, ${0.98 * pulse})`;
-        ctx.beginPath();
-        ctx.arc(midX, midY, w * 0.03 * pulse, 0, Math.PI * 2);
+        ctx.arc(midX, midY, pixelLightR * 0.45 * pulse, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -2083,20 +2107,20 @@
         : 0.35 + 0.25 * Math.sin(this.lifetime * 0.08);
       ctx.save();
       ctx.shadowColor = '#38bdf8';
-      ctx.shadowBlur = 10 * bluePulse;
-      ctx.fillStyle = `rgba(56, 189, 248, ${0.85 * bluePulse})`;
+      ctx.shadowBlur = 5 * bluePulse;
+      ctx.fillStyle = `rgba(56, 189, 248, ${0.90 * bluePulse})`;
       ctx.beginPath();
-      ctx.arc(rightX, rightY, w * 0.035, 0, Math.PI * 2);
+      ctx.arc(rightX, rightY, pixelLightR, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
 
       // Thruster flare when overdrive or jink is engaged
       if (this.emergencyOverdrive || this.jinkTimer > 0) {
         ctx.shadowColor = '#38bdf8';
-        ctx.shadowBlur = 14;
+        ctx.shadowBlur = 10;
         ctx.fillStyle = 'rgba(56, 189, 248, 0.85)';
         ctx.beginPath();
-        ctx.arc(0, this.height * 0.22, this.width * 0.12, 0, Math.PI * 2);
+        ctx.arc(0, this.height * 0.22, this.width * 0.10, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -3138,11 +3162,12 @@
             ub.hit = true;
             this.ufoBullets.splice(i, 1);
             if (this.ship.invincible) {
-              // Shield absorbs Alien Violet laser with cyan deflection flare
+              // Shield absorbs laser with cyan deflection flare
               this.particles.addExplosion(ub.x, ub.y, '#38bdf8', 16);
               this.soundFx.playShieldSound();
             } else {
-              this.particles.addExplosion(ub.x, ub.y, '#c084fc', 18);
+              const hitColor = ub.aimMode === 'predictive' ? '#c084fc' : '#00ff8e';
+              this.particles.addExplosion(ub.x, ub.y, hitColor, 18);
               this.handlePlayerHit();
             }
             continue;
@@ -3155,7 +3180,8 @@
               r.popped = true;
               ub.hit = true;
               this.soundFx.playExplosion(false);
-              this.particles.addExplosion(r.x, r.y, '#c084fc', 20);
+              const popColor = ub.targetType === 'rock' ? '#38bdf8' : (ub.aimMode === 'predictive' ? '#c084fc' : '#00ff8e');
+              this.particles.addExplosion(r.x, r.y, popColor, 20);
               this.rocks.splice(j, 1);
               break;
             }

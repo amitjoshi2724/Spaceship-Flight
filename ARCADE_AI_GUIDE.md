@@ -750,27 +750,31 @@ Two critical architectural bugs frequently paralyze defensive weapon systems:
 ### 9.5 Diegetic Hull Light Telegraphing: Reading the AI's Brain
 The highest echelon of game AI design is **diegetic feedback**: communicating internal AI state through visual cues embedded on the physical ship model rather than external HUD text.
 
-On the 32×32 enemy saucer (`enemyship.png`), three distinct indicator lights line the hull:
+On the 32×32 enemy saucer (`enemyship.png`), three distinct pixel-accurate indicator lights line the hull (each matching the exact 2×2 pixel dimensions on the sprite):
 
 ```
-          ┌─────────────[Cockpit Dome]─────────────┐
-          │                                        │
-     [🔴 Left Light]       [🟢 Center Light]       [🔵 Right Light]
-   (-0.266w, +0.109h)       (0.000w, +0.141h)      (+0.266w, +0.109h)
-  Asteroid Hazard Strobe   Primary Cannon Charge   Engine & CIWS Status
+          ┌─────────────[Lavender Cockpit Dome]─────────────┐
+          │                                                 │
+     [🔴 Left Light]       [🟢/🟣 Center Light]        [🔵 Right Light]
+   (-0.266w, +0.109h)       (0.000w, +0.141h)         (+0.266w, +0.109h)
+  Asteroid Hazard Strobe   Primary Cannon Telegraph   Engine & CIWS Status
 ```
 
 1. **Left Light (🔴 Hazard Red - `#ff1744`)**:
    - **Trigger**: Imminent collision trajectory detected ($v_{\text{closing}} > 0.3$, $t_{\text{impact}} < 0.70\text{s}$).
-   - **Behavior**: High-frequency emergency hazard strobe.
+   - **Behavior**: High-frequency emergency hazard strobe (tight pixel-sized bead).
    - **Gameplay Read**: Alerts the human player that the UFO has spotted an obstacle and is breaking off its attack run to execute evasive retro-braking.
-2. **Center Light (🟢 Alien Emerald - `#00ff8e`)**:
-   - **Trigger**: Offensive player cannon charging ($t_{\text{telegraph}} \in [0, 22]$ frames).
-   - **Behavior**: Expanding emerald plasma lens flare perfectly color-matched to the outgoing plasma bolt.
-   - **Gameplay Read**: Gives the player a 0.35s visual warning to juke, bank, or raise shields before the laser fires.
+2. **Center Light (🟢 Alien Emerald vs. 🟣 Alien Violet Telegraph)**:
+   - **Trigger**: Offensive cannon charging ($t_{\text{telegraph}} \in [0, 22]$ frames / $\approx 0.35\text{s}$).
+   - **Dual Targeting Modes**:
+     - **🟢 Emerald Green (`#00ff8e`)**: **Direct Aim** (the UFO is aiming directly at the player's current coordinate).  
+       *Player Counter-Tactic*: **Keep moving!** The bolt will hit where you were, so maintaining velocity guarantees a clean dodge.
+     - **🟣 Alien Violet / Purple (`#c084fc`)**: **Predictive Lead** (the UFO is calculating your velocity vector and leading you with $t_{\text{lead}} = d / v_{\text{laser}}$).  
+       *Player Counter-Tactic*: **Brake, cut, or reverse!** The bolt will fly to where you were heading, so changing direction or slowing down causes the predictive shot to fly harmlessly past.
+   - **Visual Finish**: Pixel-accurate hull bead with a tight 8px glow, launching a matching emerald or purple plasma bolt.
 3. **Right Light (🔵 Sublight Cyan/Blue - `#38bdf8`)**:
    - **Trigger**: Normal flight propulsion & defensive countermeasure status.
-   - **Behavior**: Rhythmic cyan engine glow during cruising; sharp cobalt flash when defensive CIWS destroys an asteroid.
+   - **Behavior**: Rhythmic cyan engine glow during cruising; sharp cobalt flash when defensive CIWS destroys an oncoming asteroid with an electric-cyan interceptor bolt.
    - **Gameplay Read**: Indicates propulsion integrity and active point-defense operations.
 
 ---
