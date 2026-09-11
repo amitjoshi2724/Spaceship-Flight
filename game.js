@@ -716,37 +716,62 @@
       return inside;
     }
 
-    // Mathematically exact Circle vs Polygon collision:
-    // Returns true if bullet center is inside polygon OR if bullet radius touches any polygon edge
+    // Mathematically exact Continuous Collision Detection (Swept Capsule vs Polygon):
+    // Returns true if bullet body touches the polygon, or if swept trajectory crossed/grazed it
     containsBullet(bullet) {
-      const bRadius = bullet.radius || 3;
+      // Bullets are rendered at radius * 1.8 with glow aura (~6.0px - 6.5px).
+      // We use the full visible plasma radius so visual grazing hits register cleanly.
+      const bRadius = Math.max((bullet.radius || 3) * 1.8, 6.0);
+      const rSq = bRadius * bRadius;
 
-      // Quick bounding radius cull (including bullet radius threshold)
-      const distSq = (bullet.x - this.x) ** 2 + (bullet.y - this.y) ** 2;
-      const maxDist = this.radius * 1.6 + bRadius;
+      const p1x = bullet.x;
+      const p1y = bullet.y;
+      const p0x = bullet.dx !== undefined ? bullet.x - bullet.dx : p1x;
+      const p0y = bullet.dy !== undefined ? bullet.y - bullet.dy : p1y;
+
+      // Broad-phase bounding circle check against the swept segment midpoint & radius
+      const midX = (p0x + p1x) * 0.5;
+      const midY = (p0y + p1y) * 0.5;
+      const distSq = (midX - this.x) ** 2 + (midY - this.y) ** 2;
+      const stepLen = Math.hypot(bullet.dx || 0, bullet.dy || 0);
+      const maxDist = this.radius * 1.6 + bRadius + stepLen * 0.5;
       if (distSq > maxDist * maxDist) return false;
 
-      // 1. If bullet center is directly inside the polygon, it's a confirmed hit
-      if (this.containsPoint(bullet.x, bullet.y)) {
+      // 1. If current position, previous position, or midpoint is inside polygon, it's a confirmed hit
+      if (this.containsPoint(p1x, p1y) || this.containsPoint(p0x, p0y) || this.containsPoint(midX, midY)) {
         return true;
       }
 
-      // 2. Exact Circle vs Edge Distance Test:
-      // Checks if the bullet's circular body grazes or touches any polygon segment
       const pts = this.getTransformedPoints();
-      const rSq = bRadius * bRadius;
 
+      // 2. Continuous Collision Detection (CCD):
+      // Check if the bullet's travel segment (p0 -> p1) crossed ANY polygon edge in this frame
       for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-        const edgeDistSq = this.distToSegmentSquared(
-          bullet.x,
-          bullet.y,
-          pts[j].x,
-          pts[j].y,
-          pts[i].x,
-          pts[i].y
-        );
-        if (edgeDistSq <= rSq) {
+        if (this.segmentsIntersect(p0x, p0y, p1x, p1y, pts[j].x, pts[j].y, pts[i].x, pts[i].y)) {
+          return true;
+        }
+      }
+
+      // 3. Exact Circle vs Edge Distance Test:
+      // Checks if the bullet's circular body grazes or touches any polygon segment (tested at p1, mid, and p0)
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const x1 = pts[j].x, y1 = pts[j].y;
+        const x2 = pts[i].x, y2 = pts[i].y;
+
+        if (
+          this.distToSegmentSquared(p1x, p1y, x1, y1, x2, y2) <= rSq ||
+          this.distToSegmentSquared(midX, midY, x1, y1, x2, y2) <= rSq ||
+          this.distToSegmentSquared(p0x, p0y, x1, y1, x2, y2) <= rSq
+        ) {
           return true; // Tangential or grazing collision detected!
+        }
+      }
+
+      // 4. Asteroid corner graze check:
+      // Checks if any asteroid vertex lies within the bullet's swept capsule radius
+      for (let i = 0; i < pts.length; i++) {
+        if (this.distToSegmentSquared(pts[i].x, pts[i].y, p0x, p0y, p1x, p1y) <= rSq) {
+          return true;
         }
       }
 
@@ -924,26 +949,38 @@
     }
 
     containsBullet(bullet) {
-      const distSq = (this.x - bullet.x) ** 2 + (this.y - bullet.y) ** 2;
-      const maxR = this.width * 0.55;
-      if (distSq > (maxR + bullet.radius) ** 2) return false;
+      const bRadius = Math.max((bullet.radius || 3.5) * 1.8, 6.0);
+      const rSq = bRadius * bRadius;
 
-      if (this.containsPoint(bullet.x, bullet.y)) return true;
+      const p1x = bullet.x;
+      const p1y = bullet.y;
+      const p0x = bullet.dx !== undefined ? bullet.x - bullet.dx : p1x;
+      const p0y = bullet.dy !== undefined ? bullet.y - bullet.dy : p1y;
+      const midX = (p0x + p1x) * 0.5;
+      const midY = (p0y + p1y) * 0.5;
+
+      const distSq = (this.x - midX) ** 2 + (this.y - midY) ** 2;
+      const maxR = this.width * 0.55;
+      const stepLen = Math.hypot(bullet.dx || 0, bullet.dy || 0);
+      if (distSq > (maxR + bRadius + stepLen * 0.5) ** 2) return false;
+
+      if (this.containsPoint(p1x, p1y) || this.containsPoint(p0x, p0y) || this.containsPoint(midX, midY)) return true;
 
       const pts = this.getTransformedPoints();
-      const bRadiusSq = bullet.radius * bullet.radius;
       for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
         const x1 = pts[j].x, y1 = pts[j].y;
         const x2 = pts[i].x, y2 = pts[i].y;
         const dx = x2 - x1, dy = y2 - y1;
         const lenSq = dx * dx + dy * dy;
         if (lenSq === 0) continue;
-        let t = ((bullet.x - x1) * dx + (bullet.y - y1) * dy) / lenSq;
-        t = Math.max(0, Math.min(1, t));
-        const projX = x1 + t * dx;
-        const projY = y1 + t * dy;
-        const dSq = (bullet.x - projX) ** 2 + (bullet.y - projY) ** 2;
-        if (dSq <= bRadiusSq) return true;
+
+        for (const [px, py] of [[p1x, p1y], [midX, midY], [p0x, p0y]]) {
+          let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+          t = Math.max(0, Math.min(1, t));
+          const projX = x1 + t * dx;
+          const projY = y1 + t * dy;
+          if ((px - projX) ** 2 + (py - projY) ** 2 <= rSq) return true;
+        }
       }
       return false;
     }
@@ -1569,26 +1606,38 @@
     }
 
     containsBullet(bullet) {
-      const distSq = (this.x - bullet.x) ** 2 + (this.y - bullet.y) ** 2;
-      const maxR = this.width * 0.55;
-      if (distSq > (maxR + bullet.radius) ** 2) return false;
+      const bRadius = Math.max((bullet.radius || 3) * 1.8, 6.0);
+      const rSq = bRadius * bRadius;
 
-      if (this.containsPoint(bullet.x, bullet.y)) return true;
+      const p1x = bullet.x;
+      const p1y = bullet.y;
+      const p0x = bullet.dx !== undefined ? bullet.x - bullet.dx : p1x;
+      const p0y = bullet.dy !== undefined ? bullet.y - bullet.dy : p1y;
+      const midX = (p0x + p1x) * 0.5;
+      const midY = (p0y + p1y) * 0.5;
+
+      const distSq = (this.x - midX) ** 2 + (this.y - midY) ** 2;
+      const maxR = this.width * 0.55;
+      const stepLen = Math.hypot(bullet.dx || 0, bullet.dy || 0);
+      if (distSq > (maxR + bRadius + stepLen * 0.5) ** 2) return false;
+
+      if (this.containsPoint(p1x, p1y) || this.containsPoint(p0x, p0y) || this.containsPoint(midX, midY)) return true;
 
       const pts = this.getTransformedPoints();
-      const bRadiusSq = bullet.radius * bullet.radius;
       for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
         const x1 = pts[j].x, y1 = pts[j].y;
         const x2 = pts[i].x, y2 = pts[i].y;
         const dx = x2 - x1, dy = y2 - y1;
         const lenSq = dx * dx + dy * dy;
         if (lenSq === 0) continue;
-        let t = ((bullet.x - x1) * dx + (bullet.y - y1) * dy) / lenSq;
-        t = Math.max(0, Math.min(1, t));
-        const projX = x1 + t * dx;
-        const projY = y1 + t * dy;
-        const dSq = (bullet.x - projX) ** 2 + (bullet.y - projY) ** 2;
-        if (dSq <= bRadiusSq) return true;
+
+        for (const [px, py] of [[p1x, p1y], [midX, midY], [p0x, p0y]]) {
+          let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+          t = Math.max(0, Math.min(1, t));
+          const projX = x1 + t * dx;
+          const projY = y1 + t * dy;
+          if ((px - projX) ** 2 + (py - projY) ** 2 <= rSq) return true;
+        }
       }
       return false;
     }
