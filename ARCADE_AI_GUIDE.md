@@ -971,15 +971,151 @@ $$R_{\text{broad}} = R_{\text{rock}} + R_c + \frac{||\vec{v}||}{2}$$
 $$||\vec{P}_{\text{mid}} - \vec{C}_{\text{rock}}||^2 \le R_{\text{broad}}^2$$
 
 #### Stage 2: 2D Line-Segment vs. Line-Segment Crossing (Zero Tunneling)
-Does the bullet's continuous travel ray $\vec{P}_0 \to \vec{P}_1$ intersect any polygon edge $\vec{A} \to \vec{B}$?
-Using the 2D cross-product determinant $D$:
-$$D = (P_{1x} - P_{0x})(B_y - A_y) - (P_{1y} - P_{0y})(B_x - A_x)$$
-If $|D| < 10^{-9}$, segments are parallel. Otherwise:
-$$t = \frac{(P_{0x} - A_x)(B_y - A_y) - (P_{0y} - A_y)(B_x - A_x)}{D}$$
-$$u = -\frac{(P_{1x} - P_{0x})(P_{0y} - A_y) - (P_{1y} - P_{0y})(P_{0x} - A_x)}{D}$$
 
-$$\text{Edge Pierced} \iff 0 \le t \le 1 \quad \land \quad 0 \le u \le 1$$
-If true, the bullet physically sliced across the asteroid edge during this single frame tick. **Instantaneous confirmed hit.** Tunneling is mathematically impossible.
+This is the mathematical core of Continuous Collision Detection. Instead of checking if a point is inside a shape at a single instant, we ask:
+> *"Did the bullet's travel path across this 16ms frame physically cut across any edge of the asteroid, like blades of scissors closing?"*
+
+```
+                 SEGMENT INTERSECTION: THE SCISSORS TEST
+                     
+         Bullet Start P₀(x₁, y₁) [t = 0]
+                 \
+                  \       Asteroid Vertex A(x₃, y₃) [u = 0]
+                   \          /
+                    \        /
+                     \      /
+                      \    /
+                       \  /  <-- Intersection Point: (0 <= t <= 1) AND (0 <= u <= 1)
+                        \/
+                        /\
+                       /  \
+                      /    \
+                     /      \
+                    /        \
+  Asteroid Vertex B(x₄, y₄)   \
+           [u = 1]             Bullet End P₁(x₂, y₂) [t = 1]
+```
+
+##### 1. The Parametric "Timeline" Concept (Sliders $t$ and $u$)
+Why don't we use the familiar high-school line equation $y = mx + b$?
+Because if a laser fires straight up or straight down, its slope $m = \frac{\Delta y}{\Delta x} = \frac{\Delta y}{0} = \infty$. The computer divides by zero and crashes!
+
+Instead, game physics uses **parametric line equations**. Think of $t$ and $u$ as independent **progress sliders** that run from $0.0$ to $1.0$:
+
+1. **The Bullet's Travel Path (Slider $t \in [0, 1]$)**:
+   A bullet starts at $\vec{P}_0 = (x_1, y_1)$ and moves to $\vec{P}_1 = (x_2, y_2)$:
+   $$x(t) = x_1 + t(x_2 - x_1)$$
+   $$y(t) = y_1 + t(y_2 - y_1)$$
+   - When $t = 0$: The bullet is at its starting point $(x_1, y_1)$ at the beginning of the frame.
+   - When $t = 1$: The bullet is at its final point $(x_2, y_2)$ at the end of the frame.
+   - When $t = 0.5$: The bullet is halfway through its flight during this frame.
+   - If $t < 0$: The point is in the bullet's past (behind where it started).
+   - If $t > 1$: The point is in the bullet's future (it hasn't traveled that far yet).
+
+2. **The Asteroid Edge (Slider $u \in [0, 1]$)**:
+   A rock edge connects vertex $\vec{A} = (x_3, y_3)$ to vertex $\vec{B} = (x_4, y_4)$:
+   $$x(u) = x_3 + u(x_4 - x_3)$$
+   $$y(u) = y_3 + u(y_4 - y_3)$$
+   - When $u = 0$: Exactly at rock corner $A$.
+   - When $u = 1$: Exactly at rock corner $B$.
+   - When $0 \le u \le 1$: Anywhere along the physical rock edge between corners $A$ and $B$.
+   - If $u < 0$ or $u > 1$: Out in empty space, past the rock's corners along the infinite line.
+
+---
+
+##### 2. Finding Where They Cross (Setting Them Equal)
+If the bullet's flight path crosses the asteroid edge, there must exist a point where both equations yield the **exact same coordinate**:
+$$x_1 + t(x_2 - x_1) = x_3 + u(x_4 - x_3)$$
+$$y_1 + t(y_2 - y_1) = y_3 + u(y_4 - y_3)$$
+
+This is a classic system of **two linear equations with two unknowns** ($t$ and $u$).
+
+Let's group the unknowns on the left side and constants on the right side:
+1. $t(x_1 - x_2) - u(x_3 - x_4) = x_1 - x_3$
+2. $t(y_1 - y_2) - u(y_3 - y_4) = y_1 - y_3$
+
+To keep the algebra clean, let's temporarily give names to the delta coordinates:
+- $\Delta x_{\text{bullet}} = x_1 - x_2, \quad \Delta y_{\text{bullet}} = y_1 - y_2$
+- $\Delta x_{\text{rock}} = x_3 - x_4, \quad \Delta y_{\text{rock}} = y_3 - y_4$
+- $\Delta x_{\text{start}} = x_1 - x_3, \quad \Delta y_{\text{start}} = y_1 - y_3$
+
+Our equations become:
+$$\text{Eq (1):} \quad t \cdot \Delta x_{\text{bullet}} - u \cdot \Delta x_{\text{rock}} = \Delta x_{\text{start}}$$
+$$\text{Eq (2):} \quad t \cdot \Delta y_{\text{bullet}} - u \cdot \Delta y_{\text{rock}} = \Delta y_{\text{start}}$$
+
+---
+
+##### 3. Solving for $t$ by Elimination (Where the Determinant Comes From)
+To eliminate $u$, multiply Eq (1) by $\Delta y_{\text{rock}}$ and Eq (2) by $\Delta x_{\text{rock}}$:
+$$\text{Eq (1)} \times \Delta y_{\text{rock}}: \quad t \cdot (\Delta x_{\text{bullet}} \cdot \Delta y_{\text{rock}}) - u \cdot (\Delta x_{\text{rock}} \cdot \Delta y_{\text{rock}}) = \Delta x_{\text{start}} \cdot \Delta y_{\text{rock}}$$
+$$\text{Eq (2)} \times \Delta x_{\text{rock}}: \quad t \cdot (\Delta y_{\text{bullet}} \cdot \Delta x_{\text{rock}}) - u \cdot (\Delta x_{\text{rock}} \cdot \Delta y_{\text{rock}}) = \Delta y_{\text{start}} \cdot \Delta x_{\text{rock}}$$
+
+Now subtract the second equation from the first equation:
+$$t \cdot \left[ \Delta x_{\text{bullet}} \cdot \Delta y_{\text{rock}} - \Delta y_{\text{bullet}} \cdot \Delta x_{\text{rock}} \right] = \Delta x_{\text{start}} \cdot \Delta y_{\text{rock}} - \Delta y_{\text{start}} \cdot \Delta x_{\text{rock}}$$
+
+Look at the term multiplying $t$ in brackets! That bracketed term is the **system determinant** $D$:
+$$D = \Delta x_{\text{bullet}} \cdot \Delta y_{\text{rock}} - \Delta y_{\text{bullet}} \cdot \Delta x_{\text{rock}}$$
+Plugging back our original coordinate variables:
+$$D = (x_1 - x_2)(y_3 - y_4) - (y_1 - y_2)(x_3 - x_4)$$
+
+Dividing both sides by $D$ gives the exact value of $t$:
+$$t = \frac{(x_1 - x_3)(y_3 - y_4) - (y_1 - y_3)(x_3 - x_4)}{D}$$
+
+---
+
+##### 4. Solving for $u$
+Similarly, multiplying Eq (1) by $\Delta y_{\text{bullet}}$ and Eq (2) by $\Delta x_{\text{bullet}}$ eliminates $t$ and solves for $u$:
+$$u = -\frac{(x_1 - x_2)(y_1 - y_3) - (y_1 - y_2)(x_1 - x_3)}{D}$$
+
+Notice that both $t$ and $u$ share the **exact same denominator** $D$. We only calculate $D$ once!
+
+---
+
+##### 5. What Does the Determinant $D$ Physically Represent?
+In 2D vector geometry, $D$ is the **2D Cross Product** (or perpendicular dot product) between the bullet's direction vector $\vec{v}_{\text{bullet}}$ and the asteroid edge vector $\vec{v}_{\text{rock}}$:
+
+$$D = \vec{v}_{\text{bullet}} \times \vec{v}_{\text{rock}} = |\vec{v}_{\text{bullet}}| \cdot |\vec{v}_{\text{rock}}| \cdot \sin(\theta)$$
+
+Geometrically, $D$ equals the **signed area of the parallelogram** spanned by the two direction vectors:
+
+```
+                  PARALLELOGRAM SPANNED BY THE TWO VECTORS
+                         
+                           ╭────────────────────────────•
+                          ╱                            ╱
+                         ╱                            ╱
+       v_rock (Asteroid)╱                            ╱
+                       ╱       Area = |D|           ╱
+                      ╱                            ╱
+                     •────────────────────────────╯
+                               v_bullet (Laser)
+```
+
+Why is this determinant so incredibly useful?
+1. **Zero Division Guard (Parallel Lines)**:
+   If the bullet is traveling parallel to the asteroid edge, the angle between them is $\theta = 0^\circ$ (or $180^\circ$).  
+   Since $\sin(0^\circ) = 0$, the parallelogram collapses flat $\implies$ **Area $D = 0$**!  
+   In code, checking `if (Math.abs(d) < 1e-9) return false;` immediately tells us the two segments are parallel and will never intersect, saving us from a fatal division-by-zero crash.
+2. **High-Speed Execution**:
+   Evaluating $D$ requires only **4 subtractions and 2 multiplications**. No trigonometry, no square roots, and no matrix libraries needed!
+
+---
+
+##### 6. The Golden Intersection Condition: Why $0 \le t \le 1$ and $0 \le u \le 1$?
+Once we compute $t$ and $u$, the collision decision is a simple, elegant check:
+
+$$\text{Collision Confirmed} \iff (0 \le t \le 1) \quad \text{AND} \quad (0 \le u \le 1)$$
+
+| Variable Value | Physical Meaning | Collision Status |
+|---|---|---|
+| $t < 0$ | The intersection point was behind where the bullet started. | ❌ Miss (Happened in the past) |
+| $t > 1$ | The bullet hasn't reached the intersection yet. | ❌ Miss (Will happen in future frames) |
+| $0 \le t \le 1$ | **The intersection occurs during this exact 16ms frame!** | ⏳ Valid timeframe |
+| $u < 0$ or $u > 1$ | The bullet crossed the infinite line, but passed beyond the rock's corners in empty space. | ❌ Miss (Flew past the asteroid) |
+| $0 \le u \le 1$ | **The intersection struck directly on the physical rock edge between corners A and B!** | ⏳ Valid obstacle contact |
+| **Both $t, u \in [0, 1]$** | **The bullet path and the rock edge physically sliced through each other!** | ✅ **100% Guaranteed Collision!** |
+
+This guarantees that no matter how fast a laser travels—even jumping 100 pixels in a single tick—it can never leap across an asteroid boundary unnoticed. Tunneling is mathematically impossible.
 
 #### Stage 3: Swept Capsule Spine Proximity (Tangential Grazes)
 If the bullet didn't cut all the way through an edge, did its glowing plasma envelope brush against an edge?
