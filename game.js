@@ -1332,11 +1332,11 @@
 
       if (this.targetType === 'rock') {
         if (this.defensiveColor === 'red') {
-          // Port CIWS bolt: Matches left red light (#ff1744 / #ef4444)
-          glowColor = '#ff1744';
-          outerColor = '#ef4444';
-          trailColor = (a) => `rgba(239, 68, 68, ${a * 0.80})`;
-          coreColor = '#ffffff';
+          // Port CIWS bolt: Intense crimson laser (#ff0033 / #ff1744)
+          glowColor = '#ff0033';
+          outerColor = '#ff1744';
+          trailColor = (a) => `rgba(255, 23, 68, ${a * 0.90})`;
+          coreColor = '#ffebee';
         } else {
           // Starboard CIWS bolt: Exact photo royal blue from enemyship.png (#1761f2)
           glowColor = '#2563eb';
