@@ -163,6 +163,20 @@ The **closing velocity** $v_{\text{close}, i}$ represents the rate at which the 
 
 $$v_{\text{close}, i} = -\frac{\vec{r}_i \cdot \vec{v}_{\text{rel}, i}}{d_i}$$
 
+#### How We Got Here (The Calculus Derivation)
+Why is there a negative sign, and why is the dot product divided by $d_i$?
+The Euclidean distance $d(t)$ between the two bodies is:
+$$d(t) = \|\vec{r}(t)\| = \sqrt{\vec{r}(t) \cdot \vec{r}(t)}$$
+
+Using the chain rule to take the time derivative $\frac{d}{dt} d(t)$ (the rate of change of distance):
+$$\frac{d}{dt} d(t) = \frac{1}{2\sqrt{\vec{r} \cdot \vec{r}}} \cdot \frac{d}{dt}(\vec{r} \cdot \vec{r}) = \frac{2\vec{r} \cdot \frac{d\vec{r}}{dt}}{2\|\vec{r}\|} = \frac{\vec{r} \cdot \vec{v}_{\text{rel}}}{d}$$
+
+- If $\frac{d}{dt} d(t) > 0$: distance is growing (the obstacle is moving away).
+- If $\frac{d}{dt} d(t) < 0$: distance is shrinking (the obstacle is closing in).
+
+Because we want **closing speed** to be a positive number when danger is increasing, we invert the sign:
+$$v_{\text{close}} = -\frac{d}{dt} d(t) = -\frac{\vec{r} \cdot \vec{v}_{\text{rel}}}{d}$$
+
 - If $v_{\text{close}, i} \le 0$: the obstacle is drifting away or moving parallel. No immediate collision.
 - If $v_{\text{close}, i} > 0$: the obstacle is actively converging toward the ship.
 
@@ -208,6 +222,27 @@ The **lateral (perpendicular) distance** from the ray line to the obstacle cente
 
 $$d_{\text{lat}}(k, i) = \left\| \vec{r}_i - \text{proj}_{k, i} \hat{d}_k \right\| = \sqrt{d_i^2 - \text{proj}_{k, i}^2}$$
 
+```
+                RIGHT TRIANGLE LATERAL PROJECTION
+                      Asteroid Center
+                            ●
+                           ╱│
+                          ╱ │
+             Vector r_i  ╱  │ d_lat (Perpendicular Distance)
+            (Hypotenuse)╱   │
+                       ╱    │
+                      ●─────┴──────────────► Ray d_k
+                     Ship   proj = r · d_k
+```
+
+#### How We Got Here (The Pythagorean Theorem)
+The vector $\vec{r}_i$ forms the hypotenuse of a right-angled triangle.  
+The adjacent leg along the ray has length $\text{proj}_{k, i} = \vec{r}_i \cdot \hat{d}_k$.  
+By the Pythagorean theorem:
+$$(\text{proj}_{k, i})^2 + (d_{\text{lat}})^2 = \|\vec{r}_i\|^2 = d_i^2$$
+Solving for $d_{\text{lat}}$ gives the exact perpendicular distance:
+$$d_{\text{lat}}(k, i) = \sqrt{d_i^2 - (\text{proj}_{k, i})^2}$$
+
 The **safety clearance envelope** is:
 $$R_{\text{safe}, i} = R_{\text{ai}} + R_{\text{obs}, i} + \text{buffer}$$
 
@@ -230,6 +265,18 @@ $$\vec{v}_{\text{rel}, k} = \vec{v}_{\text{rock}} - \left(\hat{d}_k \cdot v_{\te
 If $\vec{r}_i \cdot \vec{v}_{\text{rel}, k} < 0$ (the obstacle is closing on the AI along this candidate path), the time of closest approach is:
 
 $$t_{\text{close}} = -\frac{\vec{r}_i \cdot \vec{v}_{\text{rel}, k}}{\|\vec{v}_{\text{rel}, k}\|^2}$$
+
+#### How We Got Here (Finding the Minimum of a Parabola)
+At any future time $t$, the relative displacement between the ship and rock along this ray is:
+$$\vec{r}(t) = \vec{r}_i + \vec{v}_{\text{rel}, k} \cdot t$$
+
+The squared distance function $f(t) = \|\vec{r}(t)\|^2$ is:
+$$f(t) = (\vec{r}_i + \vec{v}_{\text{rel}, k} t) \cdot (\vec{r}_i + \vec{v}_{\text{rel}, k} t) = \|\vec{r}_i\|^2 + 2t(\vec{r}_i \cdot \vec{v}_{\text{rel}, k}) + t^2 \|\vec{v}_{\text{rel}, k}\|^2$$
+
+This is a standard parabola $f(t) = a t^2 + b t + c$ where $a = \|\vec{v}_{\text{rel}, k}\|^2 > 0$.  
+To find the minimum distance, take the first derivative with respect to time $t$ and set it to zero:
+$$f'(t) = 2(\vec{r}_i \cdot \vec{v}_{\text{rel}, k}) + 2t \|\vec{v}_{\text{rel}, k}\|^2 = 0$$
+$$\implies t_{\text{close}} = -\frac{\vec{r}_i \cdot \vec{v}_{\text{rel}, k}}{\|\vec{v}_{\text{rel}, k}\|^2}$$
 
 If $t_{\text{close}} > 0$ and within the evasive horizon ($t < 1.25\text{s}$), the minimum future distance is:
 
@@ -259,17 +306,37 @@ Let $d_p = \|\vec{x}_{\text{player}} - \vec{x}_{\text{ai}}\|$ and let $D_{\text{
 
 $$\delta(d_p) = \tanh\left(\frac{d_p - D_{\text{combat}}}{\sigma}\right) \in (-1, 1)$$
 
-- If $d_p > D_{\text{combat}}$: $\delta(d_p) > 0 \implies$ AI seeks to close distance.
-- If $d_p < D_{\text{combat}}$: $\delta(d_p) < 0 \implies$ AI naturally kites and retreats.
-- If $d_p = D_{\text{combat}}$: $\delta(d_p) = 0 \implies$ perfectly balanced in standoff zone.
+##### Why the Hyperbolic Tangent ($\tanh$)?
+Why not a simple linear difference $(d_p - D_{\text{combat}})$ or a hard threshold `if (d > D) +1 else -1`?
+1. **The Explosion Flaw of Linear Curves**: If the player is on the far opposite side of the screen ($d_p = 1200\text{px}$), a linear difference $(1200 - 300) = +900$ produces an enormous interest score that completely overpowers obstacle avoidance. The AI charges headfirst into asteroids because its player desire is mathematically unbounded.
+2. **The Chatter Flaw of Step Functions**: A hard `if/else` flips instantly from $+1.0$ (pursue) to $-1.0$ (retreat) the moment the AI crosses $d = D_{\text{combat}}$. The AI shivers violently back and forth across the boundary on alternate frames.
+3. **The Sigmoidal Perfection of $\tanh$**:
+   $$\tanh(z) = \frac{e^z - e^{-z}}{e^z + e^{-z}} = \frac{e^{2z} - 1}{e^{2z} + 1}$$
+   - **Strictly Bounded**: For any distance, $\delta(d_p)$ is guaranteed to stay strictly within $(-1, +1)$. It can never overpower local collision avoidance.
+   - **Smooth Transitions**: At $d_p = D_{\text{combat}}$, $\delta = 0$. In the transition band controlled by $\sigma$, the gradient is smooth and continuous ($\frac{d}{dz}\tanh(z) = 1 - \tanh^2(z)$), letting the AI decelerate gracefully into orbit without twitching.
+   - **Saturation**: When far away ($d_p \gg D_{\text{combat}}$), $\delta \to +1.0$ (maximum pursuit drive). When too close ($d_p \ll D_{\text{combat}}$), $\delta \to -1.0$ (maximum kite/retreat drive).
 
 The player interest along ray $k$ is:
 $$I_{\text{player}}(k) = \delta(d_p) \cdot \left(\hat{d}_k \cdot \hat{u}_{\text{player}}\right), \quad \text{where } \hat{u}_{\text{player}} = \frac{\vec{x}_{\text{player}} - \vec{x}_{\text{ai}}}{d_p}$$
 
 #### 2. Tangential Flanking / Orbiting
-To circle around the player rather than charging head-on in a straight line, we compute the normal vector:
+To circle around the player rather than charging head-on in a straight line, we compute the normal vector perpendicular to the player direction:
 
 $$\hat{u}_{\text{perp}} = \text{dir}_{\text{orbit}} \cdot \begin{bmatrix} -\hat{u}_{\text{player}, y} \\ \hat{u}_{\text{player}, x} \end{bmatrix}, \quad \text{dir}_{\text{orbit}} \in \{+1, -1\}$$
+
+##### How We Got Here (The 2D Rotation Matrix)
+How does swapping coordinates and negating $y$ produce a mathematically exact $90^\circ$ perpendicular vector?  
+Any 2D vector $\vec{v} = [x, y]^T$ rotated by angle $\theta$ is transformed by the standard rotation matrix:
+$$R(\theta) = \begin{bmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{bmatrix}$$
+
+For a counter-clockwise $90^\circ$ ($\pi/2$ radians) rotation:
+$$\cos(90^\circ) = 0, \quad \sin(90^\circ) = 1$$
+$$R(+90^\circ) \begin{bmatrix} x \\ y \end{bmatrix} = \begin{bmatrix} 0 & -1 \\ 1 & 0 \end{bmatrix} \begin{bmatrix} x \\ y \end{bmatrix} = \begin{bmatrix} 0\cdot x - 1\cdot y \\ 1\cdot x + 0\cdot y \end{bmatrix} = \begin{bmatrix} -y \\ x \end{bmatrix}$$
+
+For a clockwise $-90^\circ$ rotation:
+$$R(-90^\circ) \begin{bmatrix} x \\ y \end{bmatrix} = \begin{bmatrix} 0 & 1 \\ -1 & 0 \end{bmatrix} \begin{bmatrix} x \\ y \end{bmatrix} = \begin{bmatrix} y \\ -x \end{bmatrix}$$
+
+Notice that multiplying $[-y, x]^T$ by $\text{dir}_{\text{orbit}} \in \{+1, -1\}$ seamlessly inverts between counter-clockwise and clockwise circling with zero trigonometry overhead!
 
 $$I_{\text{flank}}(k) = \hat{d}_k \cdot \hat{u}_{\text{perp}}$$
 
@@ -280,6 +347,16 @@ $$\vec{F}_{\text{bound}} = \begin{bmatrix}
 \max\left(0, \frac{M - x}{M}\right) - \max\left(0, \frac{x - (W - M)}{M}\right) \\
 \max\left(0, \frac{M - y}{M}\right) - \max\left(0, \frac{y - (H - M)}{M}\right)
 \end{bmatrix}$$
+
+##### How We Got Here (The Normalized Linear Ramp)
+When the ship is in the safe interior ($M \le x \le W - M$), both $\frac{M - x}{M} \le 0$ and $\frac{x - (W - M)}{M} \le 0$. The $\max(0, \cdot)$ clamps them to 0, leaving $\vec{F}_{\text{bound}} = [0, 0]^T$ (zero interference).  
+When the ship wanders into the left margin ($x < M$):
+$$\frac{M - x}{M} = 1 - \frac{x}{M}$$
+- At $x = M$: repulsion $= 0.0$.
+- At $x = M/2$: repulsion $= +0.5$ (inward push).
+- At $x = 0$ (the physical wall edge): repulsion $= +1.0$ (maximum push back into the arena).
+
+This generates a frictionless, soft spring cushion that gently steers the AI back toward the playfield before it ever touches a screen boundary.
 
 $$I_{\text{bound}}(k) = \hat{d}_k \cdot \vec{F}_{\text{bound}}$$
 
@@ -415,7 +492,24 @@ this.dy = targetDy;
 this.dx += (targetDx - this.dx) * 0.08;
 this.dy += (targetDy - this.dy) * 0.08;
 ```
-This single line introduces simulated mass, momentum, and smooth turning arcs.
+
+##### How We Got Here (The First-Order Low-Pass Filter)
+Why does `v += (target - v) * alpha` create smooth, organic motion?  
+Rearranging the equation reveals it is an **Exponential Moving Average (EMA)**:
+$$v_{t + \Delta t} = (1 - \alpha) v_t + \alpha v_{\text{target}}$$
+
+In Newtonian physics, a spaceship of mass $m$ propelled toward a target velocity against viscous drag $\gamma$ obeys the differential equation:
+$$m \frac{dv}{dt} = \gamma (v_{\text{target}} - v(t)) \implies \frac{dv}{dt} = \frac{v_{\text{target}} - v(t)}{\tau}$$
+where $\tau = m / \gamma$ is the physical **time constant** (inertia).
+
+Discretizing $\frac{dv}{dt}$ with Forward Euler over frame duration $\Delta t$:
+$$\frac{v_{t + \Delta t} - v_t}{\Delta t} = \frac{v_{\text{target}} - v_t}{\tau} \implies v_{t + \Delta t} = v_t + \left(\frac{\Delta t}{\tau}\right) (v_{\text{target}} - v_t)$$
+
+Setting $\alpha = \frac{\Delta t}{\tau}$ yields the exact code:
+$$v \leftarrow v + \alpha (v_{\text{target}} - v)$$
+- If $\alpha = 1.0$: $\tau = \Delta t$ (zero simulated mass; snaps instantly).
+- If $\alpha = 0.08$: $\tau \approx 12.5$ frames ($\approx 0.20\text{s}$ response time; feels weighty and agile).
+- The velocity approaches $v_{\text{target}}$ exponentially with half-life $t_{1/2} = \frac{\ln(2)}{\alpha} \approx 8.6$ frames. This single line introduces simulated mass, momentum, and smooth turning arcs.
 
 #### Layer 4: Banking Tilt (Visual Weight)
 In 2D top-down games, tilt the sprite slightly based on its horizontal acceleration:
@@ -433,12 +527,12 @@ When turning left, the ship banks $-15^\circ$; when turning right, it banks $+15
 
 A great enemy doesn't just navigate; it fights with believable tactics.
 
-### 7.1 Predictive Lead Targeting in LaTeX
+### 6.1 Predictive Lead Targeting in LaTeX
 
 If an enemy fires directly at the player's current position, the laser will miss as long as the player is moving. We must solve for the future intercept coordinate $\vec{x}_{\text{intercept}}$.
 
 #### The First-Order Linear Approximation
-Let bullet speed be $v_b$ and player velocity be $\vec{v}_p$. The first-order estimate of travel time is:
+Let bullet speed be $v_b$ and player velocity be $\vec{v}_p$. The first-order estimate of travel time assumes distance doesn't change drastically:
 
 $$t_h \approx \frac{\|\vec{x}_p - \vec{x}_{\text{gun}}\|}{v_b}$$
 
@@ -449,28 +543,65 @@ $$\vec{x}_{\text{aim}} = \vec{x}_p + \vec{v}_p \cdot t_h$$
 $$\theta_{\text{aim}} = \text{atan2}\left(x_{\text{aim}, y} - y_{\text{gun}}, x_{\text{aim}, x} - x_{\text{gun}}\right)$$
 
 #### The Exact Quadratic Intercept Solution
-For high-precision combat, we solve the exact kinematic intercept equation:
+For high-precision combat, we solve the exact kinematic intercept equation.
 
-$$\|\vec{x}_p + \vec{v}_p t - \vec{x}_{\text{gun}}\| = v_b t$$
+```
+                    PREDICTIVE INTERCEPT GEOMETRY
+                         Target Path
+                     P₀ ──────►──────►──────● Target Intercept P(t*)
+                      \                     ╱
+                       \                   ╱
+                        \  Vector r       ╱ Bullet Path
+                         \ (Initial)     ╱ (Distance = v_b * t*)
+                          \             ╱
+                           \           ╱
+                            ●─────────╯
+                            Gun Position
+```
 
-Let $\vec{r} = \vec{x}_p - \vec{x}_{\text{gun}}$. Squaring both sides yields the quadratic equation:
+##### 1. Physical Setup
+At any future time $t$, the target's position will be:
+$$\vec{x}_p(t) = \vec{x}_p + \vec{v}_p t$$
 
-$$\left(\|\vec{v}_p\|^2 - v_b^2\right) t^2 + 2\left(\vec{r} \cdot \vec{v}_p\right) t + \|\vec{r}\|^2 = 0$$
+Meanwhile, a laser fired from the gun at speed $v_b$ expands outward as a sphere of radius $R(t) = v_b t$.  
+For an intercept to occur at time $t$, the distance from the gun to the target must equal the bullet's travel distance:
+$$\|\vec{x}_p(t) - \vec{x}_{\text{gun}}\| = v_b t$$
 
-$$A t^2 + B t + C = 0$$
-where:
-- $A = v_{p, x}^2 + v_{p, y}^2 - v_b^2$
-- $B = 2(r_x v_{p, x} + r_y v_{p, y})$
-- $C = r_x^2 + r_y^2$
+##### 2. Vector Algebraic Expansion (Step-by-Step)
+Let $\vec{r} = \vec{x}_p - \vec{x}_{\text{gun}}$ be the initial displacement vector from gun to target.  
+Substitute $\vec{r}$ into the equation:
+$$\|\vec{r} + \vec{v}_p t\| = v_b t$$
 
-The discriminant is $\Delta = B^2 - 4AC$.
-- If $\Delta < 0$: No mathematical intercept exists (the player is outrunning the laser). Fall back to current player position.
-- If $\Delta \ge 0$: The earliest valid intercept time is the smallest positive root:
-$$t^* = \frac{-B - \sqrt{\Delta}}{2A}$$
+Square both sides to eliminate the square root inside the norm $\|\cdot\|$:
+$$\|\vec{r} + \vec{v}_p t\|^2 = (v_b t)^2$$
+
+Expand the squared vector norm using the vector dot product:
+$$(\vec{r} + \vec{v}_p t) \cdot (\vec{r} + \vec{v}_p t) = v_b^2 t^2$$
+$$(\vec{r} \cdot \vec{r}) + 2t (\vec{r} \cdot \vec{v}_p) + t^2 (\vec{v}_p \cdot \vec{v}_p) = v_b^2 t^2$$
+
+##### 3. Grouping into Quadratic Form $A t^2 + B t + C = 0$
+Collect all terms on the left side:
+$$\Big[(\vec{v}_p \cdot \vec{v}_p) - v_b^2\Big] t^2 + \Big[2(\vec{r} \cdot \vec{v}_p)\Big] t + (\vec{r} \cdot \vec{r}) = 0$$
+
+This is the standard quadratic equation $A t^2 + B t + C = 0$, where:
+- $A = \|\vec{v}_p\|^2 - v_b^2 = (v_{p, x}^2 + v_{p, y}^2) - v_b^2$
+- $B = 2(\vec{r} \cdot \vec{v}_p) = 2(r_x v_{p, x} + r_y v_{p, y})$
+- $C = \|\vec{r}\|^2 = r_x^2 + r_y^2$
+
+##### 4. Solving with the Discriminant $\Delta = B^2 - 4AC$
+- **If $\Delta < 0$**: The square root $\sqrt{\Delta}$ is imaginary. No real intercept time exists (the player is outrunning the bullet or flying away too fast). In this case, fall back to the first-order approximation or shoot directly at the player.
+- **If $A = 0$**: The player speed exactly equals bullet speed ($\|\vec{v}_p\| = v_b$). The equation reduces to a linear equation $B t + C = 0 \implies t^* = -C / B$.
+- **If $\Delta \ge 0$**: The quadratic formula gives two mathematical roots:
+  $$t = \frac{-B \pm \sqrt{\Delta}}{2A}$$
+  *Why two roots?* Geometrically, the target's trajectory line intersects the expanding bullet sphere twice: once upon entry, and once upon exit.  
+  We want the **earliest positive time** ($t > 0$) so the bullet hits the target on entry:
+  $$t^* = \min\left(\{t > 0 \mid A t^2 + B t + C = 0\}\right)$$
+
+Once $t^*$ is found, the predicted target position is $\vec{x}_{\text{aim}} = \vec{x}_p + \vec{v}_p t^*$, and the firing angle is simply $\text{atan2}(y_{\text{aim}} - y_{\text{gun}}, x_{\text{aim}} - x_{\text{gun}})$.
 
 ---
 
-### 7.2 The Unified Tactical Weapon (Defend vs. Attack Opportunity Cost)
+### 6.2 The Unified Tactical Weapon (Defend vs. Attack Opportunity Cost)
 
 In classic arcade design, giving an enemy two separate independent guns (one for shooting the player and one rapid-fire gun for shooting rocks) easily breaks the game: the enemy becomes an automated vacuum cleaner that nukes asteroids and helps the player.
 
@@ -531,11 +662,42 @@ Where the standard deviation $\sigma$ adapts to difficulty:
 - **Medium difficulty**: $\sigma = 7.5^\circ$ (tight near-misses that graze the cockpit by 15–30 pixels).
 - **Hard difficulty**: $\sigma = 4.5^\circ$ (disciplined sniper fire that rewards sudden maneuvers).
 
-In JavaScript, sample this without external libraries using the **Box-Muller transform**:
+#### How We Got Here (Derivation of the Box-Muller Transform)
+Browsers provide `Math.random()`, which produces a **flat (uniform) distribution** across $[0, 1)$. But human ballistics and dogfight errors follow a **bell curve** (Gaussian normal distribution), where most shots cluster tightly around the bullseye and extreme misses are rare.
+
+How do you turn two flat random numbers $u_1, u_2 \in (0, 1)$ into an exact Gaussian bell curve?
+
+1. **The 2D Gaussian Joint Density**:  
+   If we pick two independent Gaussian random coordinates $Z_0, Z_1 \sim \mathcal{N}(0, 1)$, their joint probability density function is:
+   $$p(z_0, z_1) = \left(\frac{1}{\sqrt{2\pi}} e^{-z_0^2/2}\right) \left(\frac{1}{\sqrt{2\pi}} e^{-z_1^2/2}\right) = \frac{1}{2\pi} e^{-(z_0^2 + z_1^2)/2}$$
+
+2. **Switching from Cartesian to Polar Coordinates**:  
+   Substitute $z_0 = R \cos\theta$ and $z_1 = R \sin\theta$, where $R^2 = z_0^2 + z_1^2$. The differential area element transforms as $dz_0 dz_1 = R \, dR \, d\theta$:
+   $$p(R, \theta) \, dR \, d\theta = \left(\frac{1}{2\pi} d\theta\right) \left(R e^{-R^2/2} dR\right)$$
+   Notice how this cleanly separates into two independent, solvable single-variable distributions:
+   - **The Angle $\theta$**: Uniformly distributed over the circle $[0, 2\pi]$:
+     $$\theta = 2\pi u_2$$
+   - **The Radius $R$**: The cumulative distribution function of $R$ is:
+     $$F(R) = \int_0^R r e^{-r^2/2} dr = \left[ -e^{-r^2/2} \right]_0^R = 1 - e^{-R^2/2}$$
+
+3. **Inverting the Cumulative Distribution**:  
+   Set $F(R) = 1 - u_1$ and solve for $R$:
+   $$1 - e^{-R^2/2} = 1 - u_1 \implies e^{-R^2/2} = u_1 \implies -\frac{R^2}{2} = \ln(u_1) \implies R = \sqrt{-2\ln(u_1)}$$
+
+4. **Converting Back to Cartesian**:  
+   $$Z_0 = R \cos\theta = \sqrt{-2\ln(u_1)} \cos(2\pi u_2)$$
+   $$Z_1 = R \sin\theta = \sqrt{-2\ln(u_1)} \sin(2\pi u_2)$$
+
+$Z_0$ is a mathematically exact, pure standard normal variable $\mathcal{N}(0, 1)$!
+
+In JavaScript:
 ```javascript
+// Sample standard normal Z_0 ~ N(0, 1):
 const u1 = Math.max(1e-6, Math.random());
 const u2 = Math.random();
 const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+
+// Scale by difficulty standard deviation and clamp outliers:
 const angleOffset = Math.max(-2.2 * sigmaRad, Math.min(2.2 * sigmaRad, z0 * sigmaRad));
 const aimAngle = Math.atan2(aimY, aimX) + angleOffset;
 ```
@@ -647,28 +809,97 @@ Smart enemies don't just shoot blindly or run away in empty space; they **use th
                                   (Shadow Zone)
 ```
 
-### 10.1 The Line-of-Sight (LoS) Ray-Circle Test in LaTeX
+### 9.1 The Line-of-Sight (LoS) Ray-Circle Test in LaTeX
 To determine if an asteroid at $\vec{x}_{\text{rock}}$ with radius $R$ blocks the enemy $\vec{x}_{\text{ai}}$ from seeing the player $\vec{x}_p$:
 
-Let the sight ray vector be:
+```
+                  LINE-OF-SIGHT RAY-CIRCLE GEOMETRY
+                               Asteroid (x_rock, R)
+                                      ╭───╮
+                                      │ ● │
+                                      ╰─┬─╯
+                                        │
+                                        │ d_⊥ (Perpendicular Distance)
+                         Vector r       │
+    Enemy (x_ai) ●──────────────────────┴───────────────► Player (x_p)
+                 ╰─────── t_proj ───────╯
+                 ╰──────────────── d_LoS ───────────────╯
+```
+
+##### 1. Physical Setup
+Let the line-of-sight vector from the enemy to the player be:
 $$\vec{L} = \vec{x}_p - \vec{x}_{\text{ai}}, \quad \hat{u}_L = \frac{\vec{L}}{\|\vec{L}\|}, \quad d_{\text{LoS}} = \|\vec{L}\|$$
 
-Project the relative vector $\vec{r} = \vec{x}_{\text{rock}} - \vec{x}_{\text{ai}}$ onto the sight line:
+Let the displacement vector from the enemy to the asteroid center be:
+$$\vec{r} = \vec{x}_{\text{rock}} - \vec{x}_{\text{ai}}$$
+
+##### 2. Vector Projection (Parallel Component Along Sightline)
+We decompose $\vec{r}$ into parallel and perpendicular components:
+$$\vec{r} = \vec{r}_{\parallel} + \vec{r}_{\perp}$$
+
+The scalar projection of the asteroid's center onto the sightline is:
 $$t_{\text{proj}} = \vec{r} \cdot \hat{u}_L$$
+$$\vec{r}_{\parallel} = t_{\text{proj}} \hat{u}_L$$
 
-The rock only blocks sight if it sits strictly between the enemy and player: $0 < t_{\text{proj}} < d_{\text{LoS}}$.  
-The perpendicular distance from the asteroid center to the laser sightline is:
-$$d_{\perp} = \|\vec{r} - t_{\text{proj}} \hat{u}_L\| = \sqrt{\|\vec{r}\|^2 - t_{\text{proj}}^2}$$
+##### 3. The Betweenness Condition
+The asteroid can only block line-of-sight if its closest approach lies strictly between the enemy and the player:
+$$0 < t_{\text{proj}} < d_{\text{LoS}}$$
+- If $t_{\text{proj}} \le 0$: the asteroid is behind the enemy.
+- If $t_{\text{proj}} \ge d_{\text{LoS}}$: the asteroid is behind the player.
+In both cases, it cannot obstruct the line-of-sight.
 
-$$\text{Line of Sight is BLOCKED} \iff d_{\perp} < R + R_{\text{buffer}}$$
+##### 4. Vector Rejection & Perpendicular Distance (Pythagorean Theorem)
+The vector perpendicular from the sightline to the asteroid center (vector rejection) is:
+$$\vec{r}_{\perp} = \vec{r} - \vec{r}_{\parallel} = \vec{r} - t_{\text{proj}} \hat{u}_L$$
 
-### 10.2 Dynamic Cover Point Generation
-When the AI's shields drop low, it calculates the "shadow vector" cast by the asteroid opposite the player:
+Because $\vec{r}_{\parallel}$ and $\vec{r}_{\perp}$ form a right-angled triangle with hypotenuse $\vec{r}$:
+$$\|\vec{r}\|^2 = \|\vec{r}_{\parallel}\|^2 + \|\vec{r}_{\perp}\|^2 = t_{\text{proj}}^2 + d_{\perp}^2$$
+Solving for the perpendicular distance $d_{\perp}$:
+$$d_{\perp} = \sqrt{\|\vec{r}\|^2 - t_{\text{proj}}^2}$$
 
-$$\hat{u}_{\text{shadow}} = \frac{\vec{x}_{\text{rock}} - \vec{x}_p}{\|\vec{x}_{\text{rock}} - \vec{x}_p\|}$$
-$$\vec{x}_{\text{cover}} = \vec{x}_{\text{rock}} + (R + R_{\text{ai}} + \text{buffer}) \cdot \hat{u}_{\text{shadow}}$$
+##### 5. The Occlusion Condition
+The rock blocks line-of-sight if and only if the laser beam passes within the combined radius of the rock and laser beam buffer:
+$$\text{Line of Sight is BLOCKED} \iff (0 < t_{\text{proj}} < d_{\text{LoS}}) \quad \text{AND} \quad \left(d_{\perp} < R_{\text{rock}} + R_{\text{buffer}}\right)$$
 
-By injecting $\vec{x}_{\text{cover}}$ into the Interest Map as an attractive goal, the enemy will sprint behind the rock, break line-of-sight, and wait for its shields or weapons to recharge before re-engaging!
+---
+
+### 9.2 Dynamic Cover Point Generation
+
+```
+                     DYNAMIC SHADOW CONE COVER GEOMETRY
+                                               ╭──────────────────────────
+                                              ╱  SAFE SHADOW CONE
+                                             ╱   (Laser Fire Blocked)
+      Player (x_p)         Asteroid (x_rock)╱
+           ● ────────────►       ╭───╮     ╱       ● Cover Point (x_cover)
+              Vector S           │ 🪨 │────► u_shadow
+                                 ╰───╯     ╲
+                                            ╲
+                                             ╲──────────────────────────
+```
+
+When an enemy is under fire or recharging shields, it actively seeks **hard cover** behind an asteroid.
+
+##### 1. Calculating the Shadow Direction
+The threat vector radiating outward from the player to the rock center is:
+$$\vec{S} = \vec{x}_{\text{rock}} - \vec{x}_p$$
+
+The unit shadow vector pointing directly behind the rock away from the player is:
+$$\hat{u}_{\text{shadow}} = \frac{\vec{S}}{\|\vec{S}\|} = \frac{\vec{x}_{\text{rock}} - \vec{x}_p}{\|\vec{x}_{\text{rock}} - \vec{x}_p\|}$$
+
+##### 2. Projecting the Safe Hull Standoff
+To ensure the entire enemy ship hull is safely tucked inside the occluded shadow zone (not clipping into the rock or poking out into the line of fire):
+$$\vec{x}_{\text{cover}} = \vec{x}_{\text{rock}} + (R_{\text{rock}} + R_{\text{ai}} + \text{buffer}) \cdot \hat{u}_{\text{shadow}}$$
+
+Where:
+- $R_{\text{rock}}$: Clears the physical asteroid surface.
+- $R_{\text{ai}}$: Accounts for the enemy's physical collision radius.
+- $\text{buffer} \approx 15\text{px}$: Safety cushion preventing thruster scrape.
+
+##### 3. Tactical Injection
+By injecting $\vec{x}_{\text{cover}}$ into the Interest Map as an attraction goal:
+$$I_{\text{cover}}(k) = \hat{d}_k \cdot \frac{\vec{x}_{\text{cover}} - \vec{x}_{\text{ai}}}{\|\vec{x}_{\text{cover}} - \vec{x}_{\text{ai}}\|}$$
+The AI naturally sprints behind the nearest asteroid, breaks line-of-sight, and holds position until shields or offensive weapons are ready to re-engage!
 
 ---
 
@@ -737,15 +968,52 @@ This is solved with an **Influence Map** (a low-resolution 2D heatmap).
        🟥 🟥 🟧 🟨 🟩 🟦                          🟦 🟦 🟦 🟦 🟦 🟦
 ```
 
-### 12.1 The Mathematical Diffusion Equation
-Divide the arena into an $M \times N$ grid (e.g. $24 \times 16$ cells).  
-Every frame, obstacles, player threats, and power-ups stamp influence onto the grid, which diffuses outward like heat:
+### 11.1 The Mathematical Diffusion Equation
+Divide the arena into an $M \times N$ grid of discrete cells (e.g. $24 \times 16$ cells) with cell spacing $h$.  
+Every frame, obstacles, player threats, and power-ups stamp influence onto the grid, which diffuses outward like physical heat:
 
 $$I_{x, y}(t + \Delta t) = (1 - \lambda) I_{x, y}(t) + \frac{\lambda}{4} \sum_{(i, j) \in \text{neighbors}} I_{i, j}(t)$$
 
 where $\lambda \in (0, 1)$ is the diffusion rate.
 
-### 12.2 The Macro-to-Micro Pipeline
+#### How We Got Here (The 2D Heat/Diffusion PDE Derivation)
+In continuous physics, heat or chemical concentration $I(x, y, t)$ diffuses according to Fourier's Law and Fick's Second Law, expressed by the **2D Heat Equation**:
+
+$$\frac{\partial I}{\partial t} = \kappa \nabla^2 I = \kappa \left( \frac{\partial^2 I}{\partial x^2} + \frac{\partial^2 I}{\partial y^2} \right)$$
+
+where $\kappa$ is the thermal conductivity (diffusion coefficient) and $\nabla^2$ is the Laplace operator.
+
+##### 1. Discretizing the Spatial Derivatives (Finite Difference)
+Using Taylor series expansions, the second spatial derivative in $x$ on a grid with cell size $h$ is approximated by the second-order central difference:
+$$\frac{\partial^2 I}{\partial x^2} \approx \frac{I(x + h, y) - 2I(x, y) + I(x - h, y)}{h^2}$$
+Similarly, for the $y$ dimension:
+$$\frac{\partial^2 I}{\partial y^2} \approx \frac{I(x, y + h) - 2I(x, y) + I(x, y - h)}{h^2}$$
+
+##### 2. The 5-Point Discrete Laplacian Stencil
+Summing both directions gives the discrete 2D Laplacian operator:
+$$\nabla^2 I = \frac{\partial^2 I}{\partial x^2} + \frac{\partial^2 I}{\partial y^2} \approx \frac{1}{h^2} \left[ I(x+h, y) + I(x-h, y) + I(x, y+h) + I(x, y-h) - 4I(x, y) \right]$$
+
+Let $\sum_{\text{neighbors}} I_{\text{neighbor}}$ denote the sum of the 4 orthogonal cardinal neighbors (East, West, North, South):
+$$\nabla^2 I \approx \frac{1}{h^2} \left[ \sum_{\text{neighbors}} I_{\text{neighbor}} - 4I(x, y) \right]$$
+
+##### 3. Forward Euler Time Integration
+Approximating the time derivative $\frac{\partial I}{\partial t} \approx \frac{I(t + \Delta t) - I(t)}{\Delta t}$:
+$$\frac{I(t + \Delta t) - I(t)}{\Delta t} = \frac{\kappa}{h^2} \left[ \sum_{\text{neighbors}} I_{\text{neighbor}} - 4I(x, y) \right]$$
+
+Multiply both sides by $\Delta t$ and group terms:
+$$I(t + \Delta t) = I(x, y, t) + \frac{\kappa \Delta t}{h^2} \sum_{\text{neighbors}} I_{\text{neighbor}} - \frac{4\kappa \Delta t}{h^2} I(x, y, t)$$
+$$I(t + \Delta t) = \left( 1 - \frac{4\kappa \Delta t}{h^2} \right) I(x, y, t) + \frac{4\kappa \Delta t}{h^2} \left( \frac{1}{4} \sum_{\text{neighbors}} I_{\text{neighbor}} \right)$$
+
+##### 4. Defining the Dimensionless Diffusion Constant $\lambda$
+Let $\lambda = \frac{4\kappa \Delta t}{h^2} \in (0, 1)$. The continuous PDE simplifies directly into our game engine formula:
+$$I_{x, y}(t + \Delta t) = (1 - \lambda) I_{x, y}(t) + \frac{\lambda}{4} \sum_{(i, j) \in \text{neighbors}} I_{i, j}(t)$$
+
+##### Physical Interpretation:
+- **$(1 - \lambda) I_{x, y}(t)$**: Thermal memory retention. The cell retains a fraction $(1 - \lambda)$ of its previous heat. If an obstacle moves away, old danger decays exponentially.
+- **$\frac{\lambda}{4} \sum I_{\text{neighbor}}$**: Heat influx from surroundings. A fraction $\lambda$ of neighbor heat flows inward, divided equally by 4 across the cardinal directions.
+- **Numerical Stability (CFL Condition)**: Forward Euler is physically stable if and only if $\lambda \le 1.0$. In practice, $\lambda \in [0.15, 0.35]$ produces a buttery-smooth gradient across the screen.
+
+### 11.2 The Macro-to-Micro Pipeline
 1. **Macro Level**: The enemy scans the Influence Grid and finds the cell $\vec{C}_{\text{safe}}$ with minimum hazard heat.
 2. **Micro Level**: The enemy sets $\vec{C}_{\text{safe}}$ as an attraction target in its **Context Steering Interest Map**.
 3. **Result**: The enemy navigates smoothly across the entire screen toward the safest zone, dodging moving obstacles seamlessly along the way.
@@ -763,24 +1031,102 @@ Emits $N$ bullets in a full $360^\circ$ circle with angular offset $\theta_0$:
 
 $$\theta_i = \theta_0 + \frac{2\pi i}{N}, \quad \vec{v}_i = v_b \begin{bmatrix} \cos\theta_i \\ \sin\theta_i \end{bmatrix}, \quad i \in \{0, 1, \dots, N-1\}$$
 
-### 2. The Archimedean Spiral Stream
-By continuously incrementing the emission angle over time $\theta(t) = \omega t$, a fixed gun nozzle produces sweeping pinwheel spirals:
+##### How We Got Here:
+A complete circle contains $2\pi$ radians ($360^\circ$). To distribute $N$ projectiles with perfectly uniform spacing, divide the circle into $N$ equal angular sectors:
+$$\Delta\theta = \frac{2\pi}{N}$$
+Each bullet $i \in \{0, 1, \dots, N-1\}$ receives angle $\theta_i = \theta_0 + i \Delta\theta$.  
+Multiplying the unit circle vector $[\cos\theta_i, \sin\theta_i]^T$ by scalar speed $v_b$ ensures every projectile expands outward with identical kinetic energy, forming an expanding regular polygon.
 
-$$\theta_k(t) = \omega t + \frac{2\pi k}{M}, \quad k \in \{0, \dots, M-1\} \text{ spiral arms}$$
+---
 
-### 3. The Targeted Shotgun Fan
+### 2. The Targeted Shotgun Fan
 Shoots $M$ bullets in a spread cone centered directly on the player:
 
 $$\theta_{\text{center}} = \text{atan2}(y_p - y_{\text{ai}}, x_p - x_{\text{ai}})$$
-$$\theta_k = \theta_{\text{center}} + \left(k - \frac{M - 1}{2}\right) \cdot \Delta\theta, \quad k \in \{0, \dots, M-1\}$$
+$$\theta_k = \theta_{\text{center}} + \left(k - \frac{M - 1}{2}\right) \cdot \Delta\theta, \quad k \in \{0, 1, \dots, M-1\}$$
 
-Where $\Delta\theta = 8^\circ$ creates a tight spread, forcing the player to weave between bullet lanes.
+```
+                   SHOTGUN FAN PATTERN CENTERING
+                          (M = 3 Bullets)
+                                       k = 2: θ_center + Δθ
+                                      ╱
+        Enemy AI 🛸 ═════════════════● k = 1: θ_center (Bullseye)
+                                      ╲
+                                       k = 0: θ_center - Δθ
+```
 
-### 4. Curving / Swirling Lasers (Angular Velocity)
-If a bullet updates its direction by angular velocity $\omega_{\text{curve}}$ every frame:
+##### How We Got Here (The Symmetric Centering Offset):
+Why do we multiply $\Delta\theta$ by $\left(k - \frac{M - 1}{2}\right)$?  
+Suppose we want $M$ bullets indexed $k \in \{0, 1, \dots, M-1\}$ spaced by interval $\Delta\theta$. We want the entire burst to be centered symmetrically on $\theta_{\text{center}}$, meaning the average offset of all bullets must equal zero:
+$$\sum_{k=0}^{M-1} \text{offset}_k = 0$$
+
+The arithmetic midpoint (average value) of the indices $\{0, 1, \dots, M-1\}$ is:
+$$\bar{k} = \frac{0 + (M - 1)}{2} = \frac{M - 1}{2}$$
+
+Subtracting this midpoint from each index shifts the index range so it is centered precisely at $0$:
+$$\text{offset}_k = \left(k - \frac{M - 1}{2}\right) \Delta\theta$$
+
+Let's test this formula with concrete numbers:
+- **Case 1: Odd Count ($M = 3$)**: Midpoint $\bar{k} = \frac{3 - 1}{2} = 1$.
+  - $k = 0 \implies (0 - 1) = \mathbf{-1}$ (Left flank: $\theta_{\text{center}} - \Delta\theta$)
+  - $k = 1 \implies (1 - 1) = \phantom{-}\mathbf{0}$ (Center laser directly at player!)
+  - $k = 2 \implies (2 - 1) = \mathbf{+1}$ (Right flank: $\theta_{\text{center}} + \Delta\theta$)
+- **Case 2: Even Count ($M = 4$)**: Midpoint $\bar{k} = \frac{4 - 1}{2} = 1.5$.
+  - $k = 0 \implies (0 - 1.5) = \mathbf{-1.5}$
+  - $k = 1 \implies (1 - 1.5) = \mathbf{-0.5}$
+  - $k = 2 \implies (2 - 1.5) = \mathbf{+0.5}$
+  - $k = 3 \implies (3 - 1.5) = \mathbf{+1.5}$
+
+Notice that for even $M$, **no bullet travels at offset $0.0$**! The bullets straddle the player symmetrically on both sides, creating a natural escape lane right down the middle—a hallmark of fair bullet-hell game design. And this single formula handles both odd and even counts without any `if/else` logic!
+
+---
+
+### 3. The Archimedean Spiral Stream
+By continuously firing bullets while incrementing the gun's emission angle at constant angular velocity $\omega$:
+
+$$\theta_k(t) = \omega t + \frac{2\pi k}{M}, \quad k \in \{0, \dots, M-1\} \text{ spiral arms}$$
+
+```
+                     ARCHIMEDEAN PINWHEEL SPIRAL
+                                      ● Bullet fired at t - 3Δt (Far away)
+                                     ╱
+                                    ● Bullet fired at t - 2Δt
+                                   ╱
+                                  ● Bullet fired at t - Δt
+                                 ╱
+                       Turret 🛸● (Firing at angle ωt)
+```
+
+##### How We Got Here (Kinematics of Spiral Formation):
+Why does rotating a gun at constant speed naturally create an **Archimedean spiral** $r = a\theta$ in mid-air?
+
+1. **Turret Rotation**: At emission time $\tau$, the gun points at angle:
+   $$\theta(\tau) = \omega \tau \implies \tau = \frac{\theta}{\omega}$$
+2. **Radial Bullet Flight**: Each bullet leaves the nozzle at constant linear speed $v_b$. At current time $t$, a bullet fired at past time $\tau$ has been flying for duration $\Delta t = (t - \tau)$.  
+   Its radial distance from the gun is:
+   $$r(t, \tau) = v_b (t - \tau)$$
+3. **Eliminating Time $\tau$**: Substitute $\tau = \theta / \omega$ into the distance equation:
+   $$r(\theta) = v_b \left(t - \frac{\theta}{\omega}\right) = v_b t - \left(\frac{v_b}{\omega}\right) \theta$$
+4. **The Archimedean Form**: At any frozen instant of time $t$, $v_b t$ is a constant $r_0$. The equation relating radius and angle across all flying bullets is:
+   $$r(\theta) = r_0 - a \theta, \quad \text{where } a = \frac{v_b}{\omega}$$
+
+The distance from the center is directly proportional to the angle! This is the classical polar definition of an **Archimedean spiral**. The constant spacing between consecutive spiral arms is $\Delta r = 2\pi a = \frac{2\pi v_b}{\omega}$.
+
+---
+
+### 4. Curving / Swirling Lasers (Circular Kinematics)
+If a bullet continuously rotates its velocity vector by angular velocity $\omega_{\text{curve}}$ every frame:
 $$\theta_{t + \Delta t} = \theta_t + \omega_{\text{curve}} \Delta t$$
 $$\vec{v}_{t + \Delta t} = v_b \begin{bmatrix} \cos\theta_{t + \Delta t} \\ \sin\theta_{t + \Delta t} \end{bmatrix}$$
-The bullets curve in mid-air like laser whips!
+
+##### How We Got Here:
+When a projectile maintains constant speed $v_b$ while its direction rotates at constant rate $\omega_{\text{curve}} = \frac{d\theta}{dt}$, its trajectory curves along a **circular arc**.  
+From classical circular kinematics, the centripetal acceleration is:
+$$a_c = v_b \omega_{\text{curve}} = \frac{v_b^2}{R_{\text{turn}}}$$
+Solving for the radius of curvature $R_{\text{turn}}$:
+$$R_{\text{turn}} = \frac{v_b}{\omega_{\text{curve}}}$$
+- High bullet speed $v_b$ or low $\omega_{\text{curve}} \implies$ wide, sweeping circular scythes.
+- Low bullet speed $v_b$ or high $\omega_{\text{curve}} \implies$ tight corkscrews.
 
 ---
 
@@ -799,19 +1145,44 @@ Enemies feel infinitely more lifelike when they can be **snuck up on** or **aler
                            (  👂 Sound Radius    )
 ```
 
-### 14.1 The Field-of-View (FOV) Dot Product
-Let $\hat{v}_{\text{facing}}$ be the enemy's facing direction and $\vec{r} = \vec{x}_p - \vec{x}_{\text{ai}}$ be the vector to the player:
+### 13.1 The Field-of-View (FOV) Dot Product
+Let $\hat{v}_{\text{facing}}$ be the enemy's unit facing direction and $\vec{r} = \vec{x}_p - \vec{x}_{\text{ai}}$ be the displacement vector to the player:
 
 $$\cos\alpha = \hat{v}_{\text{facing}} \cdot \frac{\vec{r}}{\|\vec{r}\|}$$
 
 $$\text{Player is IN Sight Cone} \iff \cos\alpha \ge \cos\left(\frac{\text{FOV}}{2}\right) \quad \text{and} \quad \|\vec{r}\| \le R_{\text{vision}}$$
 
-For a $120^\circ$ vision cone, $\cos(60^\circ) = 0.5$. If the dot product is $< 0.5$, the player is in the enemy's blind spot!
+#### How We Got Here (The Cosine Monotonicity & Inequality Flip):
+A common pitfall for developers is writing `if (cosAlpha <= cosFOV)` because "we want the angle to be less than the FOV." Why does the inequality sign **flip** to $\ge$?
 
-### 14.2 Acoustic Audio Bubbles
-When the player fires a weapon or activates afterburners, emit an acoustic bubble $R_{\text{sound}}$:
-$$\text{Enemy Hears Player} \iff \|\vec{x}_p - \vec{x}_{\text{ai}}\| \le R_{\text{sound}}$$
-This allows players to sneak behind dormant enemies unless they make sudden noise.
+1. **The Dot Product Definition**:
+   $$\vec{A} \cdot \vec{B} = \|\vec{A}\| \|\vec{B}\| \cos\alpha \implies \cos\alpha = \hat{A} \cdot \hat{B}$$
+2. **The Monotonically Decreasing Cosine**:  
+   On the angle interval $[0, \pi]$ ($0^\circ$ to $180^\circ$), the cosine function is strictly decreasing:
+   $$\frac{d}{d\alpha} \cos\alpha = -\sin\alpha < 0 \quad \text{for } \alpha \in (0, \pi)$$
+   - When the player is directly in front of the enemy ($\alpha = 0^\circ$): $\cos(0^\circ) = \mathbf{+1.0}$ (Maximum!).
+   - When the player is at the half-cone edge ($\alpha = 60^\circ$): $\cos(60^\circ) = \mathbf{+0.50}$.
+   - When the player is at the flank ($\alpha = 90^\circ$): $\cos(90^\circ) = \mathbf{0.0}$.
+   - When the player is directly behind ($\alpha = 180^\circ$): $\cos(180^\circ) = \mathbf{-1.0}$.
+3. **The Reversal**:  
+   Because smaller angles yield **larger** cosines:
+   $$\alpha \le \frac{\text{FOV}}{2} \iff \cos\alpha \ge \cos\left(\frac{\text{FOV}}{2}\right)$$
+   For a $120^\circ$ cone, $\cos(60^\circ) = 0.50$. If the dot product is $\ge 0.50$, the player is inside the cone!
+
+#### The 50x CPU Performance Advantage:
+Calculating $\alpha = \arccos(\hat{v}_{\text{facing}} \cdot \hat{u}_r)$ requires the transcendental inverse trigonometric function `Math.acos()`, which consumes 50–100 CPU clock cycles.  
+By precalculating $C_{\text{thresh}} = \cos(\text{FOV} / 2)$ once in the enemy constructor, the per-frame vision test becomes:
+```javascript
+// Precalculated once: this.cosHalfFOV = Math.cos((fovDegrees * Math.PI / 180) * 0.5);
+const dot = vFacingX * uRayX + vFacingY * uRayY;
+const inCone = (dot >= this.cosHalfFOV) && (distSq <= this.visionRangeSq);
+```
+This reduces the perception test to **2 multiplications, 1 addition, and 1 comparison**, enabling hundreds of stealth guards to run at a solid 60 FPS without dropping a single frame!
+
+### 13.2 Acoustic Audio Bubbles
+When the player fires a weapon, boosts afterburners, or collides with an asteroid, emit an acoustic bubble $R_{\text{sound}}$:
+$$\text{Enemy Hears Player} \iff (x_p - x_{\text{ai}})^2 + (y_p - y_{\text{ai}})^2 \le R_{\text{sound}}^2$$
+Testing squared distance avoids expensive `Math.sqrt()` or `Math.hypot()` operations. Dormant or patrolling enemies immediately investigate the sound origin $\vec{x}_{\text{sound}}$, allowing stealth gameplay.
 
 ---
 
@@ -832,10 +1203,20 @@ To select an action dynamically, score each action using multiplied response cur
 
 $$U(\text{Action}) = \prod_{j=1}^{M} \left[f_j(x_j)\right]^{w_j}$$
 
-- For `Action: Retaliate`:
-  $$U_{\text{Retaliate}} = \left(\frac{\text{Health}_{\text{ai}}}{100}\right)^{0.5} \times \left(1 - \frac{\text{Distance}}{D_{\text{max}}}\right)^{1.2}$$
-- When Health is 100% and distance is short, $U_{\text{Retaliate}} \approx 1.0$.
-- When Health drops to 5%, $U_{\text{Retaliate}} \to 0.2$, causing `Action: FleeToCover` to supersede it automatically!
+#### Why Multiplicative Utility Beats Additive Utility:
+In naive AI design, developers often add utility factors together: $U = w_1 f_1 + w_2 f_2$.
+- **The "Compensation Trap"**:  
+  Suppose an enemy evaluates `Action: MeleeAttack`:
+  $$U_{\text{Melee}} = 0.5 \cdot \text{Proximity} + 0.5 \cdot \text{HasWeapon}$$
+  If the enemy has **no weapon** ($\text{HasWeapon} = 0$), but is right next to the player ($\text{Proximity} = 1.0$), its score is $0.5(1.0) + 0.5(0) = \mathbf{0.50}$. If other actions score $0.40$, the AI tries to attack with an empty weapon! High proximity "compensated" for having zero weapons.
+- **The Strict Veto Property of Multiplication**:  
+  In multiplicative utility:
+  $$U_{\text{Melee}} = (\text{Proximity})^{w_1} \times (\text{HasWeapon})^{w_2}$$
+  If $\text{HasWeapon} = 0$, then $U = 1.0 \times 0.0 = \mathbf{0.0}$! The entire action is instantly vetoed, regardless of how close the enemy is.
+- **Tuning Exponents ($w_j$)**:
+  - $w = 1.0$: Linear response.
+  - $w < 1.0$ (e.g. $w = 0.5$, square root): Concave curve with diminishing returns; tolerant of lower readiness.
+  - $w > 1.0$ (e.g. $w = 2.0$, quadratic): Convex curve; drops off sharply if conditions are not near-perfect.
 
 ---
 
@@ -847,30 +1228,69 @@ Keep these handy in every 2D game project:
 
 ### 1. Vector Dot Product (Alignment & Projection)
 $$\vec{A} \cdot \vec{B} = A_x B_x + A_y B_y$$
-- **$+1.0$**: Both vectors point in the exact same direction.
-- **$0.0$**: Vectors are perpendicular ($90^\circ$).
-- **$-1.0$**: Vectors point in opposite directions ($180^\circ$).
+- **$+1.0$**: Both vectors point in the exact same direction ($\theta = 0^\circ$).
+- **$0.0$**: Vectors are perpendicular ($\theta = 90^\circ$).
+- **$-1.0$**: Vectors point in opposite directions ($\theta = 180^\circ$).
+
+#### Proof (From the Law of Cosines):
+Consider a triangle formed by vectors $\vec{A}$ and $\vec{B}$. The third side connecting their tips is $\vec{C} = \vec{B} - \vec{A}$.  
+By the geometric Law of Cosines:
+$$\|\vec{C}\|^2 = \|\vec{A}\|^2 + \|\vec{B}\|^2 - 2\|\vec{A}\|\|\vec{B}\|\cos\theta$$
+
+Expand $\|\vec{C}\|^2$ algebraically in 2D Cartesian coordinates:
+$$\|\vec{C}\|^2 = (B_x - A_x)^2 + (B_y - A_y)^2$$
+$$= (B_x^2 - 2A_x B_x + A_x^2) + (B_y^2 - 2A_y B_y + A_y^2)$$
+$$= (A_x^2 + A_y^2) + (B_x^2 + B_y^2) - 2(A_x B_x + A_y B_y)$$
+$$= \|\vec{A}\|^2 + \|\vec{B}\|^2 - 2(A_x B_x + A_y B_y)$$
+
+Equating the geometric and algebraic formulas:
+$$\|\vec{A}\|^2 + \|\vec{B}\|^2 - 2(A_x B_x + A_y B_y) = \|\vec{A}\|^2 + \|\vec{B}\|^2 - 2\|\vec{A}\|\|\vec{B}\|\cos\theta$$
+Subtract $\|\vec{A}\|^2 + \|\vec{B}\|^2$ from both sides:
+$$-2(A_x B_x + A_y B_y) = -2\|\vec{A}\|\|\vec{B}\|\cos\theta$$
+Divide by $-2$:
+$$A_x B_x + A_y B_y = \|\vec{A}\|\|\vec{B}\|\cos\theta$$
+
+Dividing by the product of lengths yields the angle cosine directly from coordinates:
+$$\cos\theta = \frac{A_x B_x + A_y B_y}{\|\vec{A}\|\|\vec{B}\|}$$
+
+---
 
 ### 2. Normalizing a Vector (Unit Direction)
+Transforms any velocity or offset vector into a pure direction vector with length $1.0$:
 ```javascript
-const length = Math.hypot(dx, dy) || 1;
+const length = Math.hypot(dx, dy) || 1e-6; // 1e-6 guards against division by zero!
 const unitX = dx / length;
 const unitY = dy / length;
 ```
 
+---
+
 ### 3. Perpendicular (Normal) Vector
-To get a $90^\circ$ vector (for circling or flanking):
+To get a $90^\circ$ vector (for circling, flanking, or surface normals):
 ```javascript
+// Rotate 90 degrees counter-clockwise:
+const perpCCWX = -unitY;
+const perpCCWY =  unitX;
+
 // Rotate 90 degrees clockwise:
-const perpX = -unitY;
-const perpY =  unitX;
+const perpCWX =  unitY;
+const perpCWY = -unitX;
 ```
 
+#### Derivation (From the 2D Rotation Matrix):
+Multiplying by rotation matrix $R(\theta) = \begin{bmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{bmatrix}$:
+- At $\theta = +90^\circ$: $\cos(90^\circ) = 0$, $\sin(90^\circ) = 1$:
+  $$\begin{bmatrix} 0 & -1 \\ 1 & 0 \end{bmatrix} \begin{bmatrix} x \\ y \end{bmatrix} = \begin{bmatrix} -y \\ x \end{bmatrix}$$
+- At $\theta = -90^\circ$: $\cos(-90^\circ) = 0$, $\sin(-90^\circ) = -1$:
+  $$\begin{bmatrix} 0 & 1 \\ -1 & 0 \end{bmatrix} \begin{bmatrix} x \\ y \end{bmatrix} = \begin{bmatrix} y \\ -x \end{bmatrix}$$
+
+---
+
 ### 4. Hyperbolic Tangent Curve (Combat Range Softener)
-$$\delta(d) = \tanh\left(\frac{d - D_{\text{ideal}}}{\sigma}\right)$$
-- If $d > D_{\text{ideal}}$: returns positive (attraction).
-- If $d < D_{\text{ideal}}$: returns negative (repulsion).
-- Smoothly transitions through zero at $D_{\text{ideal}}$.
+$$\delta(d) = \tanh\left(\frac{d - D_{\text{ideal}}}{\sigma}\right) = \frac{e^{\frac{d - D_{\text{ideal}}}{\sigma}} - e^{-\frac{d - D_{\text{ideal}}}{\sigma}}}{e^{\frac{d - D_{\text{ideal}}}{\sigma}} + e^{-\frac{d - D_{\text{ideal}}}{\sigma}}}$$
+- **Asymptotic Limits**: Approaches $+1.0$ as $d \to \infty$; approaches $-1.0$ as $d \to 0$.
+- **Smooth Equilibrium**: Smoothly passes through $0.0$ at $d = D_{\text{ideal}}$ with derivative $\frac{d}{dd}\delta = \frac{1}{\sigma}\text{sech}^2\left(\frac{d - D_{\text{ideal}}}{\sigma}\right)$.
+- **No Explosion**: Unlike linear proportional control $(d - D_{\text{ideal}})$, $\tanh$ can never grow past $\pm 1$, ensuring distant objectives never overwhelm local obstacle avoidance.
 
 ---
 
@@ -901,10 +1321,24 @@ The textbook approach taught in most introductory game physics courses uses a si
 Before testing polygon geometry, test whether the distance between the bullet center and the asteroid center is within their combined maximum radii:
 $$(x_{\text{bullet}} - x_{\text{rock}})^2 + (y_{\text{bullet}} - y_{\text{rock}})^2 \le (R_{\text{rock}} + R_{\text{bullet}})^2$$
 
-#### Phase 2: Point-in-Polygon (Jordan Curve Theorem)
+#### Phase 2: Point-in-Polygon (Jordan Curve Theorem & Ray Casting)
 If broadphase passes, determine whether the bullet's center point $(P_x, P_y)$ lies inside the rock's $N$-vertex polygon by casting a horizontal ray to infinity:
+
 $$\text{intersects} = (y_i > P_y \neq y_j > P_y) \land \left(P_x < \frac{(x_j - x_i)(P_y - y_i)}{y_j - y_i} + x_i\right)$$
+
 Every edge crossed toggles an `inside = !inside` boolean. An odd number of crossings means the point is inside.
+
+##### How We Got Here (Deriving the Horizontal Ray Intersection):
+1. **The Horizontal Ray**: Cast an imaginary ray starting at $(P_x, P_y)$ extending horizontally rightward toward $(+\infty, P_y)$.
+2. **Straddle Test (Height Check)**: For an edge connecting vertex $(x_i, y_i)$ to $(x_j, y_j)$, the horizontal ray at height $P_y$ can only intersect the edge if one endpoint lies above $P_y$ and the other lies at or below $P_y$:
+   $$(y_i > P_y) \neq (y_j > P_y)$$
+3. **X-Crossing Coordinate**: The linear equation of the line passing through both vertices is:
+   $$\frac{x_{\text{cross}} - x_i}{x_j - x_i} = \frac{y_{\text{cross}} - y_i}{y_j - y_i}$$
+   Setting $y_{\text{cross}} = P_y$ and solving for $x_{\text{cross}}$:
+   $$x_{\text{cross}} = x_i + \frac{(x_j - x_i)(P_y - y_i)}{y_j - y_i}$$
+4. **Rightward Ray Condition**: Because our ray points rightward toward $+\infty$, the intersection must be to the right of the test point:
+   $$P_x < x_{\text{cross}} \implies P_x < x_i + \frac{(x_j - x_i)(P_y - y_i)}{y_j - y_i}$$
+5. **The Jordan Curve Theorem**: In topology, any closed loop divides the plane into an interior and exterior. Any ray starting from an interior point must cross the boundary an **odd number of times** to reach infinity. If the total crossing count is odd, the bullet is inside the rock!
 
 #### Phase 3: Point-to-Segment Distance (Edge Tangent Check)
 To test if a circular bullet of radius $R_b$ grazes an edge $AB$:
@@ -913,6 +1347,22 @@ To test if a circular bullet of radius $R_b$ grazes an edge $AB$:
 2. Find the closest point $\vec{Q} = \vec{A} + t\vec{AB}$.
 3. Check Euclidean distance:
    $$||\vec{P} - \vec{Q}||^2 \le R_b^2$$
+
+##### How We Got Here (Parabolic Minimization of Distance Squared):
+1. Any point $\vec{Q}(t)$ along the edge segment $AB$ is given parametrically by:
+   $$\vec{Q}(t) = \vec{A} + t \vec{AB} \quad \text{for } t \in [0, 1]$$
+2. The squared Euclidean distance from test point $\vec{P}$ to $\vec{Q}(t)$ is:
+   $$f(t) = \|\vec{Q}(t) - \vec{P}\|^2 = \|(\vec{A} - \vec{P}) + t\vec{AB}\|^2 = \|-\vec{AP} + t\vec{AB}\|^2$$
+   Expanding the vector norm:
+   $$f(t) = \|\vec{AP}\|^2 - 2t(\vec{AP} \cdot \vec{AB}) + t^2 \|\vec{AB}\|^2$$
+3. This is a quadratic parabola $f(t) = a t^2 + b t + c$ opening upwards ($a = \|\vec{AB}\|^2 > 0$). To find the value of $t$ that minimizes distance, take the derivative with respect to $t$ and set it to zero:
+   $$f'(t) = -2(\vec{AP} \cdot \vec{AB}) + 2t \|\vec{AB}\|^2 = 0$$
+   $$\implies t = \frac{\vec{AP} \cdot \vec{AB}}{\|\vec{AB}\|^2}$$
+4. Clamping $t \in [0, 1]$ constrains the closest point to the physical segment bounds rather than extending infinitely past corners $A$ or $B$:
+   - If $t < 0 \implies t^* = 0$: Corner $A$ is the closest point.
+   - If $t > 1 \implies t^* = 1$: Corner $B$ is the closest point.
+   - If $0 \le t \le 1$: The perpendicular projection falls cleanly onto the edge segment.
+5. The closest point coordinate is $\vec{Q} = \vec{A} + t^* \vec{AB}$, and the bullet grazes the edge if $\|\vec{P} - \vec{Q}\|^2 \le R_b^2$.
 
 ---
 
