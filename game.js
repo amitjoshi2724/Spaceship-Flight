@@ -2263,6 +2263,7 @@
         btnSizeVal: document.getElementById('btnSizeVal'),
         settingStars: document.getElementById('settingStars'),
         settingDifficulty: document.getElementById('settingDifficulty'),
+        settingUFO: document.getElementById('settingUFO'),
         powerModeSelector: document.getElementById('powerModeSelector'),
         settingStatusBars: document.getElementById('settingStatusBars'),
         settingUnlimitedShield: document.getElementById('settingUnlimitedShield'),
@@ -2286,6 +2287,9 @@
       }
       this.powerMode = savedPowerMode;
       this.ship.powerMode = this.powerMode;
+
+      const savedUFO = localStorage.getItem('spaceship_flight_enable_ufo');
+      this.enableUFO = savedUFO !== null ? savedUFO === 'true' : true;
 
       this.showStatusBars = localStorage.getItem('spaceship_flight_show_status_bars') === 'true';
       this.ship.showStatusBars = this.showStatusBars;
@@ -2680,6 +2684,20 @@
         });
       }
 
+      // Alien UFO / Saucer toggle
+      if (this.domElements.settingUFO) {
+        this.domElements.settingUFO.checked = this.enableUFO;
+        this.domElements.settingUFO.addEventListener('change', (e) => {
+          this.enableUFO = e.target.checked;
+          if (!this.enableUFO && this.ufo) {
+            this.ufo = null;
+          }
+          try {
+            localStorage.setItem('spaceship_flight_enable_ufo', this.enableUFO.toString());
+          } catch (err) { }
+        });
+      }
+
       // Power Mode / Energy System Selector
       if (this.domElements.powerModeSelector) {
         const cards = this.domElements.powerModeSelector.querySelectorAll('.power-mode-card');
@@ -2907,6 +2925,7 @@
     }
 
     spawnUFO() {
+      if (!this.enableUFO) return;
       this.ufo = new UFO(this.canvas, this.soundFx, this.particles, this.difficulty, this.ship);
       this.soundFx.playUFOWarning();
     }
@@ -3128,7 +3147,7 @@
         }
 
         // UFO Spawning based on difficulty interval
-        if (!this.ufo) {
+        if (this.enableUFO && !this.ufo) {
           this.ufoSpawnTimer++;
           if (this.ufoSpawnTimer > this.ufoSpawnInterval) {
             this.ufoSpawnTimer = 0;
