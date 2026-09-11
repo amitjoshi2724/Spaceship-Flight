@@ -471,7 +471,10 @@
     constructor(x, y, angle, shipDx, shipDy) {
       this.x = x;
       this.y = y;
-      this.radius = 3;
+      this.coreRadius = 3;
+      this.visualRadius = 5.5; // Outer glowing plasma envelope
+      this.collisionRadius = this.visualRadius; // Physical hitbox matches rendered plasma envelope
+      this.radius = this.coreRadius;
       this.hit = false;
 
       // In Android Bullet: angle is in degrees; moves along ship vector
@@ -505,13 +508,13 @@
       ctx.shadowBlur = 10;
       ctx.fillStyle = '#fef08a';
       ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius * 1.8, 0, Math.PI * 2);
+      ctx.arc(this.x, this.y, this.visualRadius, 0, Math.PI * 2);
       ctx.fill();
 
-      // Solid vibrant yellow core (removed test blue dot)
+      // Solid vibrant yellow core
       ctx.fillStyle = '#facc15';
       ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius * 1.0, 0, Math.PI * 2);
+      ctx.arc(this.x, this.y, this.coreRadius, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
@@ -719,9 +722,8 @@
     // Mathematically exact Continuous Collision Detection (Swept Capsule vs Polygon):
     // Returns true if bullet body touches the polygon, or if swept trajectory crossed/grazed it
     containsBullet(bullet) {
-      // Bullets are rendered at radius * 1.8 with glow aura (~6.0px - 6.5px).
-      // We use the full visible plasma radius so visual grazing hits register cleanly.
-      const bRadius = Math.max((bullet.radius || 3) * 1.8, 6.0);
+      // Physical hitbox radius queried directly from bullet object (matches rendered outer plasma)
+      const bRadius = bullet.collisionRadius || bullet.radius || 3;
       const rSq = bRadius * bRadius;
 
       const p1x = bullet.x;
@@ -949,7 +951,7 @@
     }
 
     containsBullet(bullet) {
-      const bRadius = Math.max((bullet.radius || 3.5) * 1.8, 6.0);
+      const bRadius = bullet.collisionRadius || bullet.radius || 3.5;
       const rSq = bRadius * bRadius;
 
       const p1x = bullet.x;
@@ -1335,7 +1337,10 @@
       this.y = y;
       this.dx = dx;
       this.dy = dy;
-      this.radius = 3.5;
+      this.coreRadius = 3.5;
+      this.visualRadius = 6.3; // Outer plasma body radius (~1.8x core)
+      this.collisionRadius = this.visualRadius; // Physical hitbox strictly matches rendered plasma
+      this.radius = this.coreRadius;
       this.hit = false;
       this.targetType = targetType; // 'player' or 'rock'
       this.aimMode = aimMode; // 'direct' or 'predictive'
@@ -1400,7 +1405,7 @@
         const t = this.trail[i];
         ctx.fillStyle = trailColor(t.alpha);
         ctx.beginPath();
-        ctx.arc(t.x, t.y, this.radius * (0.6 + (i / this.trail.length) * 0.5), 0, Math.PI * 2);
+        ctx.arc(t.x, t.y, this.coreRadius * (0.6 + (i / this.trail.length) * 0.5), 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -1409,13 +1414,13 @@
       ctx.shadowBlur = 10;
       ctx.fillStyle = outerColor;
       ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius * 1.8, 0, Math.PI * 2);
+      ctx.arc(this.x, this.y, this.visualRadius, 0, Math.PI * 2);
       ctx.fill();
 
       // Incandescent bright core
       ctx.fillStyle = coreColor;
       ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius * 0.9, 0, Math.PI * 2);
+      ctx.arc(this.x, this.y, this.coreRadius * 0.9, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
@@ -1606,7 +1611,7 @@
     }
 
     containsBullet(bullet) {
-      const bRadius = Math.max((bullet.radius || 3) * 1.8, 6.0);
+      const bRadius = bullet.collisionRadius || bullet.radius || 3;
       const rSq = bRadius * bRadius;
 
       const p1x = bullet.x;
