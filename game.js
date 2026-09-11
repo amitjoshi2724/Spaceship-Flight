@@ -464,22 +464,35 @@
   }
 
   // ============================================================================
+  // RESPONSIVE SCREEN METRIC HELPER
+  // Dynamically scales physical and visual dimensions across phones, tablets, and 4K displays
+  // ============================================================================
+  function getScreenScale(canvas) {
+    if (!canvas) return 1.0;
+    const baseDimension = Math.min(canvas.width, Math.max(450, canvas.height * 1.6));
+    return Math.max(0.6, Math.min(2.0, baseDimension / 1000));
+  }
+
+  // ============================================================================
   // BULLET CLASS
   // Matches Bullet.java from Android and Swing implementations
   // ============================================================================
   class Bullet {
-    constructor(x, y, angle, shipDx, shipDy) {
+    constructor(x, y, angle, shipDx, shipDy, sizeFactor = 1.0) {
       this.x = x;
       this.y = y;
-      this.coreRadius = 3;
-      this.visualRadius = 5.5; // Outer glowing plasma envelope
+      this.sizeFactor = sizeFactor;
+
+      // Dynamic responsive scaling: never hardcode pixel sizes
+      this.coreRadius = 3.0 * sizeFactor;
+      this.visualRadius = 5.5 * sizeFactor; // Outer glowing plasma envelope
       this.collisionRadius = this.visualRadius; // Physical hitbox matches rendered plasma envelope
       this.radius = this.coreRadius;
       this.hit = false;
 
       // In Android Bullet: angle is in degrees; moves along ship vector
       const rad = ((angle - 90) * Math.PI) / 180;
-      const speed = 14;
+      const speed = 14 * Math.max(0.85, Math.min(1.25, sizeFactor));
       this.dx = Math.cos(rad) * speed + shipDx * 0.25;
       this.dy = Math.sin(rad) * speed + shipDy * 0.25;
     }
@@ -1068,7 +1081,8 @@
       const bx = this.x + Math.cos(rad) * noseDist;
       const by = this.y + Math.sin(rad) * noseDist;
 
-      bullets.push(new Bullet(bx, by, this.angle, this.dx, this.dy));
+      const scale = getScreenScale(this.canvas);
+      bullets.push(new Bullet(bx, by, this.angle, this.dx, this.dy, scale));
       this.soundFx.playLaser();
       return true;
     }
@@ -1332,13 +1346,16 @@
   // UFO BULLET (Alien Violet Plasma Bolt)
   // ============================================================================
   class UFOBullet {
-    constructor(x, y, dx, dy, targetType = 'player', aimMode = 'direct', defensiveColor = 'blue') {
+    constructor(x, y, dx, dy, targetType = 'player', aimMode = 'direct', defensiveColor = 'blue', sizeFactor = 1.0) {
       this.x = x;
       this.y = y;
       this.dx = dx;
       this.dy = dy;
-      this.coreRadius = 3.5;
-      this.visualRadius = 6.3; // Outer plasma body radius (~1.8x core)
+      this.sizeFactor = sizeFactor;
+
+      // Dynamic responsive scaling: never hardcode pixel sizes
+      this.coreRadius = 3.5 * sizeFactor;
+      this.visualRadius = 6.3 * sizeFactor; // Outer plasma body radius (~1.8x core) scaled dynamically
       this.collisionRadius = this.visualRadius; // Physical hitbox strictly matches rendered plasma
       this.radius = this.coreRadius;
       this.hit = false;
@@ -2023,18 +2040,19 @@
         const localX = leadX * cosA + leadY * sinA;
         const isPort = localX < 0;
 
+        const bulletScale = getScreenScale(this.canvas);
         let muzzleX, muzzleY;
         if (isPort) {
           // Left (Port) Red emitter & light flash
           muzzleX = this.x + (-0.2656 * this.width * cosA - 0.1094 * this.height * sinA);
           muzzleY = this.y + (-0.2656 * this.width * sinA + 0.1094 * this.height * cosA);
-          ufoBullets.push(new UFOBullet(muzzleX, muzzleY, bVx, bVy, 'rock', 'direct', 'red'));
+          ufoBullets.push(new UFOBullet(muzzleX, muzzleY, bVx, bVy, 'rock', 'direct', 'red', bulletScale));
           this.leftDefenseFlashTimer = 22;
         } else {
           // Right (Starboard) Blue emitter & light flash
           muzzleX = this.x + (0.2656 * this.width * cosA - 0.1094 * this.height * sinA);
           muzzleY = this.y + (0.2656 * this.width * sinA + 0.1094 * this.height * cosA);
-          ufoBullets.push(new UFOBullet(muzzleX, muzzleY, bVx, bVy, 'rock', 'direct', 'blue'));
+          ufoBullets.push(new UFOBullet(muzzleX, muzzleY, bVx, bVy, 'rock', 'direct', 'blue', bulletScale));
           this.rightDefenseFlashTimer = 22;
         }
 
@@ -2092,7 +2110,8 @@
         const centerMuzzleX = this.x + (0.0156 * this.width * cosA - 0.1406 * this.height * sinA);
         const centerMuzzleY = this.y + (0.0156 * this.width * sinA + 0.1406 * this.height * cosA);
 
-        ufoBullets.push(new UFOBullet(centerMuzzleX, centerMuzzleY, bVx, bVy, 'player', this.nextAimMode));
+        const bulletScale = getScreenScale(this.canvas);
+        ufoBullets.push(new UFOBullet(centerMuzzleX, centerMuzzleY, bVx, bVy, 'player', this.nextAimMode, 'blue', bulletScale));
         this.soundFx.playUFOLaser();
         this.jinkTimer = 25;
       }
