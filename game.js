@@ -1455,9 +1455,9 @@
       // Channel 1: Offensive Laser Cannon (Player Hunting)
       // Channel 2: Defensive Point-Defense CIWS (Asteroid Survival)
       // -------------------------------------------------------------
-      // 1. Offensive Laser Cannon (Deliberate, enjoyable player combat rhythm)
+      // 1. Offensive Laser Cannon (Deliberate, enjoyable player combat rhythm - tuned to 0.7x frequency)
       this.shootTimer = 0;
-      this.shootInterval = difficulty === 'hard' ? 85 : difficulty === 'easy' ? 140 : 110;
+      this.shootInterval = difficulty === 'hard' ? 121 : difficulty === 'easy' ? 200 : 157;
       this.telegraphTimer = 0;
       this.nextAimMode = Math.random() < 0.5 ? 'predictive' : 'direct';
 
@@ -2332,7 +2332,7 @@
       this.applyDifficultySettings();
       if (this.ufo) {
         this.ufo.difficulty = level;
-        this.ufo.shootInterval = level === 'hard' ? 85 : level === 'easy' ? 140 : 110;
+        this.ufo.shootInterval = level === 'hard' ? 121 : level === 'easy' ? 200 : 157;
         this.ufo.defenseInterval = level === 'hard' ? 32 : level === 'easy' ? 52 : 40;
         this.ufo.recalculateSize();
       }
@@ -3213,22 +3213,21 @@
           }
 
           // UFO bullet hits asteroid:
-          // Defensive CIWS interceptor bolts pop the asteroid in a neon cyan blast!
-          // Offensive bullets aimed at the player deflect off the asteroid (rock acts as cover for player).
+          // Intercepting defensive CIWS or offensive bullets explode the asteroid!
           for (let j = this.rocks.length - 1; j >= 0; j--) {
             const r = this.rocks[j];
             if (!r.popped && r.containsBullet(ub)) {
               ub.hit = true;
+              r.popped = true;
+              this.soundFx.playExplosion(false);
+              let popColor;
               if (ub.targetType === 'rock') {
-                r.popped = true;
-                this.soundFx.playExplosion(false);
-                const popColor = ub.defensiveColor === 'red' ? '#ff1744' : '#1761f2';
-                this.particles.addExplosion(r.x, r.y, popColor, 24);
-                this.rocks.splice(j, 1);
+                popColor = ub.defensiveColor === 'red' ? '#ff1744' : '#1761f2';
               } else {
-                // Rock absorbs offensive shot; emits small kinetic dust puff
-                this.particles.addExplosion(ub.x, ub.y, '#94a3b8', 8);
+                popColor = ub.aimMode === 'predictive' ? '#c084fc' : '#00ff8e';
               }
+              this.particles.addExplosion(r.x, r.y, popColor, 24);
+              this.rocks.splice(j, 1);
               break;
             }
           }

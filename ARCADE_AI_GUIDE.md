@@ -553,7 +553,7 @@ Attempting to force a single weapon to serve both offensive player combat and de
                  ┌───────────────────────┴───────────────────────┐
                  ▼                                               ▼
    [Offensive Player Laser]                       [Defensive CIWS Point-Defense]
-   - Cooldown: 85–140 frames (~1.4s - 2.3s)       - Cooldown: 32–52 frames (~0.5s - 0.8s)
+   - Cooldown: 121–200 frames (~2.0s - 3.3s)      - Cooldown: 32–52 frames (~0.5s - 0.8s)
    - Long-range player hunting                    - Extended radar bubble (d <= 220px)
    - Gaussian spread (sigma = 7.5 deg)            - True radial collision check (t_impact < 1.3s)
    - Green muzzle flare telegraph (22 frames)     - Predictive intercept lead targeting
@@ -1090,7 +1090,7 @@ class ContextSteeringBrain {
                      ┌───────────────────────┴───────────────────────┐
                      ▼                                               ▼
        [Offensive Player Laser]                       [Defensive Dual-Sided CIWS]
-       - Cooldown: 85–140 frames (~1.4s–2.3s)         - Cooldown: 45 frames (~0.75s)
+       - Cooldown: 121–200 frames (~2.0s–3.3s)        - Cooldown: 45 frames (~0.75s)
        - Targets the player rocket                    - Targets imminent asteroid collisions
        - Ventral emitter (+0.0156w, +0.1406h)         - Dual Port/Starboard emitters
        - 50% Emerald Direct / 50% Violet Lead         - Red (Port) / Blue (Starboard)
@@ -1146,7 +1146,7 @@ ufoBullets.push(new UFOBullet(muzzleX, muzzleY, bVx, bVy, 'rock', 'direct', 'red
 ---
 
 ### 19.3 Channel 2: Offensive Laser Cannon (50% Emerald Direct / 50% Violet Lead)
-The UFO's primary offensive weapon fires at the player with deliberate combat pacing ($1.4\text{s} - 2.3\text{s}$ cooldown), preceded by a 22-frame ($0.35\text{s}$) charging telegraph on the central aperture:
+The UFO's primary offensive weapon fires at the player with deliberate, forgiving combat pacing ($2.0\text{s} - 3.3\text{s}$ cooldown, tuned to ~0.7x frequency), preceded by a 22-frame ($0.35\text{s}$) charging telegraph on the central aperture:
 
 * **🟢 Emerald Green Mode (`#00ff8e`) — 50% of Shots**:
   - **Aim**: Direct tracking of player coordinates.
@@ -1210,6 +1210,6 @@ Shooting down an enemy UFO rewards skillful play through score and the **Energy 
   * **Shield Charger (Shield-Only) Mode**: **+10%** shield capacitor energy (`shieldEnergy += 10`).
   * **Dual Capacitor Mode**: **+5%** weapon energy and **+5%** shield energy (`energy += 5, shieldEnergy += 5`).
 
-### Tactical Cover & Interception Dynamics
-- **Asteroids as Player Cover**: Offensive UFO lasers aimed at the player are absorbed by intervening asteroids with a small kinetic dust puff (`#94a3b8`), allowing skilled players to use asteroids as shields.
+### Tactical Interception & Cover Dynamics
+- **Asteroid Obliteration**: All UFO bullets—including direct emerald green lasers (`#00ff8e`), predictive violet lasers (`#c084fc`), port red CIWS bolts (`#ff1744`), and starboard blue CIWS bolts (`#1761f2`)—detonate any asteroid they hit upon impact with matching colored spark explosions.
 - **Defensive CIWS Interceptions**: When an asteroid closes in on the UFO, its CIWS bolts vaporize the rock with matching red or blue particle explosions, clearing space in dramatic fashion.
