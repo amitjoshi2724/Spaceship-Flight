@@ -1,17 +1,17 @@
-const CACHE_NAME = 'spaceship-flight-1.8.6';
+const CACHE_NAME = 'spaceship-flight-1.9.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './style.css',
   './game.js',
   './manifest.json',
-  './newspaceship.png',
-  './newspaceshipmoving.png',
-  './newspaceshipmoving2.png',
-  './bluenewspaceship.png',
-  './bluenewspaceshipmoving2.png',
-  './enemyship.png',
-  './amitjoshi2724_pfp.png'
+  './images/newspaceship.png',
+  './images/newspaceshipmoving.png',
+  './images/newspaceshipmoving2.png',
+  './images/bluenewspaceship.png',
+  './images/bluenewspaceshipmoving2.png',
+  './images/enemyship.png',
+  './images/amitjoshi2724_pfp.png'
 ];
 
 // Install Event: Pre-cache all core game assets

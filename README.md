@@ -111,14 +111,29 @@ Built using the Web Audio API with zero external audio assets:
 - Retro 8-bit descending arpeggio on game over
 
 ### 10. Customization & Persistence
-- **Ship Skin Selection:** Choose between Classic Crimson (`newspaceship.png`) and Cobalt Blue (`bluenewspaceship.png`).
+- **Ship Skin Selection:** Choose between Classic Crimson (`images/newspaceship.png`) and Cobalt Blue (`images/bluenewspaceship.png`).
 - **On-Ship Status Bars Toggle:** Toggle real-time vertical ammo and shield status bars flanking your ship on or off.
 - **High Score Tracking:** Automatically persists your personal best record in browser `localStorage`.
 - **Favicon:** Configured with the classic red spaceship icon.
 
 ---
 
-## 📂 Repository Contents
+## 📚 Technical Documentation & AI Guides
+
+The repository includes comprehensive, mathematical textbook-grade engineering guides designed for both game development and machine learning research:
+
+1. 🎮 **[Arcade AI & Physics Mathematics Guide](docs/ARCADE_AI_GUIDE.md):**
+   - 16 detailed mathematical sections with complete step-by-step derivations.
+   - Topics include **Unified Context Steering**, **Ray-Cast Horizon Avoidance**, **Quadratic Lead-Pursuit Interception**, **Danmaku Bullet Patterns**, and **12-Point Polygon SAT Collision Detection**.
+2. 🧠 **[Reinforcement Learning for Spaceship Flight](docs/REINFORCEMENT_LEARNING_GUIDE.md):**
+   - Deep dive into autonomous agent training via Deep Reinforcement Learning.
+   - Theoretical comparison of **SARSA (On-Policy)** vs. **Q-Learning / DQN (Off-Policy)** vs. **PPO (Actor-Critic)** with the classic Cliff Walking intuition.
+   - Solutions to the **Toroidal Screen-Wrapping Trap** (minimum image convention), **Egocentric Coordinate Transforms**, and **LIDAR Observation Spaces**.
+   - Complete end-to-end code for a headless **Python Gymnasium Simulator** (`spaceship_env.py`), **Stable-Baselines3 PPO Training**, and **ONNX / TensorFlow.js In-Browser Inference**.
+
+---
+
+## 📂 Repository Structure
 
 ```
 Spaceship-Flight/
@@ -127,17 +142,27 @@ Spaceship-Flight/
 ├── game.js                      # Core game loop, physics engine, audio synth, & controls
 ├── sw.js                        # Offline-first Service Worker cache engine
 ├── manifest.json                # PWA web app manifest for home screen install
-├── README.md                    # Project documentation & guides
-├── .gitignore                   # Git configuration excluding OS and build caches
+├── README.md                    # Project overview & documentation
+├── LICENSE                      # MIT License
 │
-├── newspaceship.png             # Original 2016 Red/White spaceship sprite
-├── newspaceshipmoving.png       # Original 2016 Thrust sprite with extended fire
-├── newspaceshipmoving2.png      # Original 2016 Thrust sprite with fire
-├── bluenewspaceship.png         # Original 2016 Blue spaceship sprite
-├── bluenewspaceshipmoving2.png  # Original 2016 Blue thrust sprite with fire
+├── docs/                        # Comprehensive technical guides & mathematical documentation
+│   ├── ARCADE_AI_GUIDE.md       # Complete 16-section mathematical guide to classical arcade AI
+│   ├── REINFORCEMENT_LEARNING_GUIDE.md # Deep RL guide: MDP math, SARSA vs Q-Learning, PPO, & PyTorch code
+│   └── archive/                 # Implementation plans & development logs
 │
-├── SpaceshipDriver.java         # Original 2016 Java Swing desktop source code
-└── SpaceshipFlight/             # Original 2016 Android Studio project
+├── images/                      # Sprites, icons, and visual assets
+│   ├── newspaceship.png         # Classic Crimson spaceship sprite
+│   ├── newspaceshipmoving.png   # Animated thrust fire frame 1
+│   ├── newspaceshipmoving2.png  # Animated thrust fire frame 2
+│   ├── bluenewspaceship.png     # Cobalt Blue spaceship sprite
+│   ├── bluenewspaceshipmoving2.png # Cobalt Blue thrust sprite
+│   ├── enemyship.png            # Hostile UFO sprite
+│   └── amitjoshi2724_pfp.png    # Author avatar
+│
+├── java-swing/                  # Original 2016 Java Swing desktop edition
+│   └── SpaceshipDriver.java     # Complete standalone Java desktop game
+│
+└── android-2017/                # Original 2016-2017 native Android Studio mobile project
     ├── app/src/main/java/       # Android Java source (MainActivity, RockMaker, etc.)
     └── app/src/main/res/        # Android layouts, drawables, and mipmap icons
 ```

@@ -904,11 +904,11 @@
         blueMoving: new Image()
       };
 
-      this.sprites.redNormal.src = 'newspaceship.png';
-      this.sprites.redMoving1.src = 'newspaceshipmoving.png';
-      this.sprites.redMoving2.src = 'newspaceshipmoving2.png';
-      this.sprites.blueNormal.src = 'bluenewspaceship.png';
-      this.sprites.blueMoving.src = 'bluenewspaceshipmoving2.png';
+      this.sprites.redNormal.src = 'images/newspaceship.png';
+      this.sprites.redMoving1.src = 'images/newspaceshipmoving.png';
+      this.sprites.redMoving2.src = 'images/newspaceshipmoving2.png';
+      this.sprites.blueNormal.src = 'images/bluenewspaceship.png';
+      this.sprites.blueMoving.src = 'images/bluenewspaceshipmoving2.png';
     }
 
     recalculateSize() {
@@ -1284,31 +1284,21 @@
         ctx.save();
         const bubbleRadius = Math.round(this.width * 0.86);
 
-        // Flashing effect when shield is about to expire (< ~0.9s / 55 frames remaining)
+        // Gentle, soft epilepsy-safe shield expiration warning (< ~1.0s / 60 frames remaining)
+        // Strictly adheres to WCAG 2.1 (< 3 Hz threshold) with smooth sinusoidal breathing (no harsh strobe or stark contrast cuts)
         let auraAlpha = 0.13;
         let ringAlpha = 1.0;
-        let ringColor = '#00f0ff';
         let innerRingAlpha = 0.45;
 
-        if (!this.unlimitedShield && this.invincibleTimer <= 55) {
-          // Accelerating strobe: rhythmic warning from 55 down to 25 frames, then rapid emergency strobe under 25 frames
-          const strobeFreq = this.invincibleTimer < 25 ? 0.85 : 0.45;
-          const strobeVal = Math.sin(this.invincibleTimer * strobeFreq);
-
-          if (strobeVal < 0) {
-            // Flash-off phase: faint ghostly outline
-            auraAlpha = 0.02;
-            ringAlpha = 0.15;
-            innerRingAlpha = 0.05;
-            ringColor = 'rgba(0, 240, 255, 0.25)';
-          } else {
-            // Flash-on phase: brilliant bright surge
-            auraAlpha = 0.24;
-            ringAlpha = 1.0;
-            innerRingAlpha = 0.70;
-            ringColor = this.invincibleTimer < 25 ? '#ffffff' : '#a5f3fc';
-          }
+        if (!this.unlimitedShield && this.invincibleTimer <= 60) {
+          // Smooth sine pulse at ~1.9 Hz (well below the 3 Hz safety threshold)
+          const pulse = 0.5 + 0.5 * Math.sin((60 - this.invincibleTimer) * 0.20);
+          auraAlpha = 0.05 + 0.12 * pulse;
+          ringAlpha = 0.35 + 0.65 * pulse;
+          innerRingAlpha = 0.15 + 0.35 * pulse;
         }
+
+        const ringColor = `rgba(0, 240, 255, ${ringAlpha})`;
 
         // Forcefield aura fill
         ctx.fillStyle = `rgba(0, 240, 255, ${auraAlpha})`;
@@ -1500,7 +1490,7 @@
       this.ship = ship;
 
       this.sprite = new Image();
-      this.sprite.src = 'enemyship.png';
+      this.sprite.src = 'images/enemyship.png';
 
       this.recalculateSize();
 
@@ -2806,11 +2796,11 @@
         if (skin === 'blue') {
           this.domElements.selectBlueShip.classList.add('active');
           this.domElements.selectRedShip.classList.remove('active');
-          this.domElements.menuShipPreview.src = 'bluenewspaceship.png';
+          this.domElements.menuShipPreview.src = 'images/bluenewspaceship.png';
         } else {
           this.domElements.selectRedShip.classList.add('active');
           this.domElements.selectBlueShip.classList.remove('active');
-          this.domElements.menuShipPreview.src = 'newspaceship.png';
+          this.domElements.menuShipPreview.src = 'images/newspaceship.png';
         }
       };
 
