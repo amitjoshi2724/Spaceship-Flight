@@ -142,15 +142,29 @@
       } catch (e) { }
     }
 
-    stopThrust() {
-      if (!this.isThrustingSound || !this.ctx || !this.thrustGain) return;
+    stopThrust(immediate = false) {
+      if (!this.ctx) {
+        this.isThrustingSound = false;
+        return;
+      }
       try {
         const now = this.ctx.currentTime;
-        this.thrustGain.gain.linearRampToValueAtTime(0.001, now + 0.1);
+        if (this.thrustGain) {
+          if (immediate) {
+            this.thrustGain.gain.cancelScheduledValues(now);
+            this.thrustGain.gain.setValueAtTime(0.0001, now);
+          } else {
+            this.thrustGain.gain.linearRampToValueAtTime(0.001, now + 0.1);
+          }
+        }
         if (this.thrustOsc) {
-          this.thrustOsc.stop(now + 0.1);
+          try {
+            this.thrustOsc.stop(immediate ? now : now + 0.1);
+          } catch (_) { }
         }
       } catch (e) { }
+      this.thrustOsc = null;
+      this.thrustGain = null;
       this.isThrustingSound = false;
     }
 
@@ -1007,6 +1021,7 @@
       this.dy = 0;
       this.angle = 0;
       this.thrusting = false;
+      this.soundFx.stopThrust(true);
       this.invincible = true;
       this.invincibleTimer = 150; // ~2.5 seconds at 60fps
       this.energy = this.maxEnergy;
@@ -1025,9 +1040,11 @@
     }
 
     setThrust(active) {
-      if (active && !this.thrusting) {
-        this.soundFx.startThrust();
-      } else if (!active && this.thrusting) {
+      if (active) {
+        if (!this.thrusting) {
+          this.soundFx.startThrust();
+        }
+      } else {
         this.soundFx.stopThrust();
       }
       this.thrusting = active;
@@ -1267,23 +1284,49 @@
         ctx.save();
         const bubbleRadius = Math.round(this.width * 0.86);
 
+        // Flashing effect when shield is about to expire (< ~0.9s / 55 frames remaining)
+        let auraAlpha = 0.13;
+        let ringAlpha = 1.0;
+        let ringColor = '#00f0ff';
+        let innerRingAlpha = 0.45;
+
+        if (!this.unlimitedShield && this.invincibleTimer <= 55) {
+          // Accelerating strobe: rhythmic warning from 55 down to 25 frames, then rapid emergency strobe under 25 frames
+          const strobeFreq = this.invincibleTimer < 25 ? 0.85 : 0.45;
+          const strobeVal = Math.sin(this.invincibleTimer * strobeFreq);
+
+          if (strobeVal < 0) {
+            // Flash-off phase: faint ghostly outline
+            auraAlpha = 0.02;
+            ringAlpha = 0.15;
+            innerRingAlpha = 0.05;
+            ringColor = 'rgba(0, 240, 255, 0.25)';
+          } else {
+            // Flash-on phase: brilliant bright surge
+            auraAlpha = 0.24;
+            ringAlpha = 1.0;
+            innerRingAlpha = 0.70;
+            ringColor = this.invincibleTimer < 25 ? '#ffffff' : '#a5f3fc';
+          }
+        }
+
         // Forcefield aura fill
-        ctx.fillStyle = 'rgba(0, 240, 255, 0.13)';
+        ctx.fillStyle = `rgba(0, 240, 255, ${auraAlpha})`;
         ctx.beginPath();
         ctx.arc(0, 0, bubbleRadius, 0, Math.PI * 2);
         ctx.fill();
 
         // Glowing outer electric ring
-        ctx.strokeStyle = '#00f0ff';
+        ctx.strokeStyle = ringColor;
         ctx.lineWidth = 2;
-        ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 12;
+        ctx.shadowColor = ringColor;
+        ctx.shadowBlur = ringAlpha > 0.5 ? 12 : 2;
         ctx.beginPath();
         ctx.arc(0, 0, bubbleRadius, 0, Math.PI * 2);
         ctx.stroke();
 
         // Faint concentric interior resonance ring
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+        ctx.strokeStyle = `rgba(56, 189, 248, ${innerRingAlpha})`;
         ctx.lineWidth = 1;
         ctx.shadowBlur = 0;
         ctx.beginPath();
@@ -1461,10 +1504,8 @@
 
       this.recalculateSize();
 
-      // Safe perimeter spawn selection:
-      // Evaluate 8 candidate spawn locations around the screen perimeter and select
-      // the position furthest away from all active asteroids. This prevents the UFO
-      // from spawning directly on top of or in the flight path of an incoming asteroid!
+      /*
+      // Smart safe perimeter spawn selection (commented out per user request):
       const candidates = [
         // Left edge (top-left & bottom-left)
         { x: -this.width, y: this.canvas.height * 0.30, dx: this.vCruise, dy: 0.15 * this.vCruise },
@@ -1505,6 +1546,38 @@
       this.y = bestCand.y;
       this.dx = bestCand.dx;
       this.dy = bestCand.dy;
+      */
+
+      // Classic random perimeter spawn:
+      const side = Math.floor(Math.random() * 4);
+      if (side === 0) {
+        // Left
+        this.x = -this.width;
+        this.y = this.canvas.height * (0.2 + Math.random() * 0.6);
+        this.dx = this.vCruise;
+        this.dy = (Math.random() - 0.5) * this.vCruise;
+      } else if (side === 1) {
+        // Right
+        this.x = this.canvas.width + this.width;
+        this.y = this.canvas.height * (0.2 + Math.random() * 0.6);
+        this.dx = -this.vCruise;
+        this.dy = (Math.random() - 0.5) * this.vCruise;
+      } else if (side === 2) {
+        // Top - flank spawns
+        const leftZone = Math.random() < 0.5;
+        this.x = leftZone
+          ? this.canvas.width * (0.08 + Math.random() * 0.22)
+          : this.canvas.width * (0.70 + Math.random() * 0.22);
+        this.y = -this.height;
+        this.dx = (Math.random() - 0.5) * this.vCruise;
+        this.dy = this.vCruise;
+      } else {
+        // Bottom
+        this.x = this.canvas.width * (0.2 + Math.random() * 0.6);
+        this.y = this.canvas.height + this.height;
+        this.dx = (Math.random() - 0.5) * this.vCruise;
+        this.dy = -this.vCruise;
+      }
 
       this.drawAngle = 0;
       this.alive = true;
@@ -2909,6 +2982,8 @@
     startGame() {
       this.soundFx.init();
       this.soundFx.resume();
+      this.soundFx.stopThrust(true);
+      this.keys.up = false;
       this.hideModals();
       this.domElements.startScreen.classList.remove('active');
 
@@ -3209,6 +3284,9 @@
     }
 
     handlePlayerHit() {
+      this.soundFx.stopThrust(true);
+      this.ship.setThrust(false);
+      this.keys.up = false;
       this.soundFx.playExplosion(true);
       this.screenShake = 16;
       this.particles.addExplosion(this.ship.x, this.ship.y, '#f43f5e', 35);
@@ -3228,7 +3306,9 @@
 
     gameOver() {
       this.state = 'GAMEOVER';
-      this.soundFx.stopThrust();
+      this.soundFx.stopThrust(true);
+      this.ship.setThrust(false);
+      this.keys.up = false;
       this.soundFx.playGameOver();
 
       this.domElements.finalScoreVal.textContent = this.score;
