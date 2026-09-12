@@ -539,7 +539,7 @@
   // Features 5 distinct polygon shapes, accurate ray-cast collision & auto-cleanup
   // ============================================================================
   class Rock {
-    constructor(canvasWidth, canvasHeight, speedMultiplier = 1.0) {
+    constructor(canvasWidth, canvasHeight, speedMultiplier = 1.0, spawnOffset = 10) {
       this.popped = false;
 
       // Responsive scale based on screen dimension (pro game dev formula)
@@ -554,7 +554,7 @@
       this.hasEntered = false;
       this.age = 0;
 
-      // Spawn location from screen perimeter
+      // Spawn location from screen perimeter with custom offset distance
       const side = Math.random();
       const maxSpeed = (1.2 + Math.random() * 1.8) * speedMultiplier * Math.max(0.75, Math.min(1.25, sizeFactor * 1.1));
 
@@ -564,20 +564,20 @@
 
       if (side < 0.25) {
         // From left edge
-        this.x = -this.radius - 10;
+        this.x = -this.radius - spawnOffset;
         this.y = Math.random() * canvasHeight;
       } else if (side < 0.5) {
         // From top edge
         this.x = Math.random() * canvasWidth;
-        this.y = -this.radius - 10;
+        this.y = -this.radius - spawnOffset;
       } else if (side < 0.75) {
         // From right edge
-        this.x = canvasWidth + this.radius + 10;
+        this.x = canvasWidth + this.radius + spawnOffset;
         this.y = Math.random() * canvasHeight;
       } else {
         // From bottom edge
         this.x = Math.random() * canvasWidth;
-        this.y = canvasHeight + this.radius + 10;
+        this.y = canvasHeight + this.radius + spawnOffset;
       }
 
       // Calculate velocity vector towards target inside the screen
@@ -1449,7 +1449,7 @@
   // Uses enemyship.png with exact 20-point collision polygon & Unified Context Steering
   // ============================================================================
   class UFO {
-    constructor(canvas, soundFx, particleSystem, difficulty = 'medium', ship = null) {
+    constructor(canvas, soundFx, particleSystem, difficulty = 'medium', ship = null, rocks = []) {
       this.canvas = canvas;
       this.soundFx = soundFx;
       this.particles = particleSystem;
@@ -1461,42 +1461,60 @@
 
       this.recalculateSize();
 
-      // Spawn location from screen perimeter
-      const side = Math.floor(Math.random() * 4);
-      if (side === 0) {
-        // Left
-        this.x = -this.width;
-        this.y = this.canvas.height * (0.2 + Math.random() * 0.6);
-        this.dx = this.vCruise;
-        this.dy = (Math.random() - 0.5) * this.vCruise;
-      } else if (side === 1) {
-        // Right
-        this.x = this.canvas.width + this.width;
-        this.y = this.canvas.height * (0.2 + Math.random() * 0.6);
-        this.dx = -this.vCruise;
-        this.dy = (Math.random() - 0.5) * this.vCruise;
-      } else if (side === 2) {
-        // Top: avoid center HUD cluster (spawn on left or right flank)
-        const leftZone = Math.random() < 0.5;
-        this.x = leftZone
-          ? this.canvas.width * (0.08 + Math.random() * 0.22)
-          : this.canvas.width * (0.70 + Math.random() * 0.22);
-        this.y = -this.height;
-        this.dx = (Math.random() - 0.5) * this.vCruise;
-        this.dy = this.vCruise;
-      } else {
-        // Bottom
-        this.x = this.canvas.width * (0.2 + Math.random() * 0.6);
-        this.y = this.canvas.height + this.height;
-        this.dx = (Math.random() - 0.5) * this.vCruise;
-        this.dy = -this.vCruise;
+      // Safe perimeter spawn selection:
+      // Evaluate 8 candidate spawn locations around the screen perimeter and select
+      // the position furthest away from all active asteroids. This prevents the UFO
+      // from spawning directly on top of or in the flight path of an incoming asteroid!
+      const candidates = [
+        // Left edge (top-left & bottom-left)
+        { x: -this.width, y: this.canvas.height * 0.30, dx: this.vCruise, dy: 0.15 * this.vCruise },
+        { x: -this.width, y: this.canvas.height * 0.70, dx: this.vCruise, dy: -0.15 * this.vCruise },
+        // Right edge (top-right & bottom-right)
+        { x: this.canvas.width + this.width, y: this.canvas.height * 0.30, dx: -this.vCruise, dy: 0.15 * this.vCruise },
+        { x: this.canvas.width + this.width, y: this.canvas.height * 0.70, dx: -this.vCruise, dy: -0.15 * this.vCruise },
+        // Top edge (left flank & right flank, avoiding top-center HUD)
+        { x: this.canvas.width * 0.20, y: -this.height, dx: 0.15 * this.vCruise, dy: this.vCruise },
+        { x: this.canvas.width * 0.80, y: -this.height, dx: -0.15 * this.vCruise, dy: this.vCruise },
+        // Bottom edge (left flank & right flank)
+        { x: this.canvas.width * 0.25, y: this.canvas.height + this.height, dx: 0.15 * this.vCruise, dy: -this.vCruise },
+        { x: this.canvas.width * 0.75, y: this.canvas.height + this.height, dx: -0.15 * this.vCruise, dy: -this.vCruise }
+      ];
+
+      // Shuffle candidates slightly for organic randomness when space is clear
+      candidates.sort(() => Math.random() - 0.5);
+
+      let bestCand = candidates[0];
+      let maxDistToNearestRock = -1;
+
+      for (let c = 0; c < candidates.length; c++) {
+        const cand = candidates[c];
+        let minDist = 99999;
+        for (let i = 0; i < rocks.length; i++) {
+          const r = rocks[i];
+          if (r.popped) continue;
+          const d = Math.hypot(r.x - cand.x, r.y - cand.y);
+          if (d < minDist) minDist = d;
+        }
+        if (minDist > maxDistToNearestRock) {
+          maxDistToNearestRock = minDist;
+          bestCand = cand;
+        }
       }
+
+      this.x = bestCand.x;
+      this.y = bestCand.y;
+      this.dx = bestCand.dx;
+      this.dy = bestCand.dy;
 
       this.drawAngle = 0;
       this.alive = true;
       this.lifetime = 0;
       this.maxLifetime = 1500; // ~25 seconds at 60fps
       this.exiting = false;
+
+      // Spawn Protection / Deflector Shield:
+      // Protects the UFO for ~1.3 seconds upon entry so asteroids cannot instantly crush it on arrival
+      this.spawnProtectionTimer = 80;
 
       // Steering State (Unified Algorithm 2)
       this.currentHeadingIndex = 0;
@@ -1521,8 +1539,9 @@
       this.nextAimMode = Math.random() < 0.5 ? 'predictive' : 'direct';
 
       // 2. Defensive Point-Defense CIWS (Dual Port/Starboard interceptors)
-      this.defenseTimer = 0;
+      // Arm immediately upon entry so the saucer can vaporize any asteroid in its path on tick 1!
       this.defenseInterval = 45; // Responsive ~0.75s defensive cadence
+      this.defenseTimer = this.defenseInterval;
       this.leftDefenseFlashTimer = 0; // Port Red light flash timer
       this.rightDefenseFlashTimer = 0; // Starboard Blue light flash timer
     }
@@ -1725,6 +1744,7 @@
       if (this.jinkTimer > 0) this.jinkTimer--;
       if (this.defenseJinkTimer > 0) this.defenseJinkTimer--;
       if (this.emergencyAlertTimer > 0) this.emergencyAlertTimer--;
+      if (this.spawnProtectionTimer > 0) this.spawnProtectionTimer--;
 
       // Orbit direction toggle
       this.orbitTimer++;
@@ -2232,6 +2252,25 @@
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
         ctx.arc(rightX, rightY, lightRadius * 0.45 * blueGlow, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // 4. DEFLECTOR ENTRY SHIELD (Radiant violet/cyan deflector ring on entry)
+      if (this.spawnProtectionTimer > 0) {
+        const shieldAlpha = Math.min(1.0, this.spawnProtectionTimer / 25) * (0.65 + 0.35 * Math.sin(this.lifetime * 0.4));
+        ctx.save();
+        ctx.shadowColor = '#c084fc';
+        ctx.shadowBlur = 15 * shieldAlpha;
+        ctx.strokeStyle = `rgba(192, 132, 252, ${0.9 * shieldAlpha})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 1.35, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = `rgba(192, 132, 252, ${0.12 * shieldAlpha})`;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius * 1.35, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -2877,6 +2916,7 @@
       this.updateScore(0);
       this.bullets = [];
       this.rocks = [];
+      this.rockSpawnTimer = -150; // Grace period: ~2.5s before continuous spawning kicks in
       this.ufo = null;
       this.ufoBullets = [];
       this.ufoSpawnTimer = 0;
@@ -2885,10 +2925,13 @@
       this.updateLivesDisplay();
       this.updateEnergyDisplay();
 
-      // Initial rocks spawn based on difficulty
-      const initialCount = this.difficulty === 'easy' ? 3 : this.difficulty === 'hard' ? 7 : 5;
+      // Initial rocks spawn based on difficulty with staggered distances
+      // Rather than a sudden wall of 5-7 rocks entering simultaneously,
+      // 2-4 rocks glide in progressively, giving a fair and polished opening
+      const initialCount = this.difficulty === 'easy' ? 2 : this.difficulty === 'hard' ? 4 : 3;
       for (let i = 0; i < initialCount; i++) {
-        this.rocks.push(new Rock(this.canvas.width, this.canvas.height, this.rockSpeedMultiplier));
+        const spawnOffset = 15 + i * 90;
+        this.rocks.push(new Rock(this.canvas.width, this.canvas.height, this.rockSpeedMultiplier, spawnOffset));
       }
 
       this.state = 'PLAYING';
@@ -2934,6 +2977,8 @@
       this.ufo = null;
       this.ufoBullets = [];
       this.ufoSpawnTimer = 0;
+      this.rocks = [];
+      this.rockSpawnTimer = 0;
       this.state = 'START';
       if (this.domElements.pauseBtn) {
         this.domElements.pauseBtn.textContent = '| |';
@@ -2999,8 +3044,11 @@
 
     spawnUFO() {
       if (!this.enableUFO) return;
-      this.ufo = new UFO(this.canvas, this.soundFx, this.particles, this.difficulty, this.ship);
+      this.ufo = new UFO(this.canvas, this.soundFx, this.particles, this.difficulty, this.ship, this.rocks);
       this.soundFx.playUFOWarning();
+      // Visual warp-in shockwave effect to ensure player notices UFO arrival
+      this.particles.addExplosion(this.ufo.x, this.ufo.y, '#c084fc', 22);
+      this.particles.addExplosion(this.ufo.x, this.ufo.y, '#38bdf8', 14);
     }
 
     updateEnergyDisplay() {
@@ -3340,6 +3388,16 @@
 
           // Exact Polygon-vs-Polygon collision with UFO (mutual destruction)
           if (this.ufo && this.ufo.alive && !r.popped && r.collidesWithShip(this.ufo)) {
+            if (this.ufo.spawnProtectionTimer > 0) {
+              // Spawn deflector shield absorbs and vaporizes the asteroid!
+              r.popped = true;
+              this.soundFx.playRockExplosion();
+              this.particles.addExplosion(r.x, r.y, '#c084fc', 26);
+              this.particles.addExplosion(r.x, r.y, '#38bdf8', 18);
+              this.rocks.splice(j, 1);
+              continue;
+            }
+
             r.popped = true;
             this.soundFx.playUFOExplosion();
             this.particles.addExplosion(this.ufo.x, this.ufo.y, '#c084fc', 30);
