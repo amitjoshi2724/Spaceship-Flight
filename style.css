@@ -1368,3 +1368,284 @@ html, body {
     padding: 1px 5px;
   }
 }
+
+/* ==========================================================================
+   REINFORCEMENT LEARNING & AI AUTOPILOT HUD STYLES
+   ========================================================================== */
+
+/* RL Menu Action Buttons */
+.rl-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  letter-spacing: 1.5px;
+  font-size: 12.5px;
+}
+
+.rl-trained-btn {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(14, 116, 144, 0.3) 100%);
+  border-color: rgba(6, 182, 212, 0.5);
+  color: #67e8f9;
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.2);
+}
+
+.rl-trained-btn:hover {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.4) 0%, rgba(14, 116, 144, 0.5) 100%);
+  border-color: #22d3ee;
+  color: #ffffff;
+  box-shadow: 0 0 25px rgba(34, 211, 238, 0.45);
+  transform: translateY(-2px);
+}
+
+.rl-train-btn {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(126, 34, 206, 0.3) 100%);
+  border-color: rgba(168, 85, 247, 0.5);
+  color: #d8b4fe;
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.2);
+}
+
+.rl-train-btn:hover {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.4) 0%, rgba(126, 34, 206, 0.5) 100%);
+  border-color: #c084fc;
+  color: #ffffff;
+  box-shadow: 0 0 25px rgba(192, 132, 252, 0.45);
+  transform: translateY(-2px);
+}
+
+/* Floating AI HUD Layout */
+.ai-hud {
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  pointer-events: auto;
+  max-width: 94vw;
+  width: 540px;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.ai-hud.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-10px);
+}
+
+.ai-hud-card {
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.15);
+}
+
+.rl-train-card {
+  border-color: rgba(192, 132, 252, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 20px rgba(168, 85, 247, 0.2);
+  width: 560px;
+}
+
+/* AI Header Bar */
+.ai-hud-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ai-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-badge-text {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--neon-cyan-bright);
+}
+
+.rl-train-card .ai-badge-text {
+  color: #c084fc;
+}
+
+/* Pulse animation indicator */
+.ai-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  animation: aiPulse 1.5s infinite;
+}
+
+.ai-pulse-dot.cyan {
+  background: #00f0ff;
+  box-shadow: 0 0 8px #00f0ff;
+}
+
+.ai-pulse-dot.purple {
+  background: #c084fc;
+  box-shadow: 0 0 8px #c084fc;
+}
+
+@keyframes aiPulse {
+  0% { transform: scale(0.85); opacity: 0.6; }
+  50% { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(0.85); opacity: 0.6; }
+}
+
+.ai-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-exit-btn, .ai-btn-sm {
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  color: #fda4af;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ai-exit-btn:hover {
+  background: rgba(244, 63, 94, 0.4);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.5);
+}
+
+.ai-btn-sm {
+  background: rgba(148, 163, 184, 0.15);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: var(--text-primary);
+}
+
+.ai-btn-sm:hover {
+  background: rgba(148, 163, 184, 0.35);
+  border-color: #ffffff;
+}
+
+/* AI Metrics Grid */
+.ai-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+}
+
+.ai-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.ai-metric-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.8px;
+}
+
+.ai-metric-value {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+}
+
+.ai-metric-value.highlight {
+  color: var(--neon-cyan-bright);
+}
+
+.rl-train-card .ai-metric-value.highlight {
+  color: #c084fc;
+}
+
+/* Training Turbo Speed Controls */
+.rl-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rl-control-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  letter-spacing: 0.8px;
+}
+
+.rl-speed-btn-group {
+  display: flex;
+  gap: 6px;
+}
+
+.rl-speed-btn {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rl-speed-btn:hover {
+  border-color: #c084fc;
+  color: #ffffff;
+}
+
+.rl-speed-btn.active {
+  background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);
+  border-color: #c084fc;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.5);
+}
+
+@media (max-width: 600px) {
+  .ai-hud {
+    top: 66px;
+    width: 96vw;
+  }
+  .ai-hud-card {
+    padding: 10px 12px;
+  }
+  .ai-metrics-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .rl-controls-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .rl-speed-btn {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+}
+

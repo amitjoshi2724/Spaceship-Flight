@@ -92,6 +92,78 @@
       </div>
     </header>
 
+    <!-- AI Autopilot Telemetry HUD (Active when Trained AI is piloting) -->
+    <div id="aiTelemetryHud" class="ai-hud hidden">
+      <div class="ai-hud-card glass-panel">
+        <div class="ai-hud-header">
+          <div class="ai-header-left">
+            <span class="ai-pulse-dot cyan"></span>
+            <span class="ai-badge-text">NEURAL AUTOPILOT ACTIVE</span>
+          </div>
+          <button id="exitAiBtn" class="ai-exit-btn" title="Return to Main Menu">EXIT [ESC]</button>
+        </div>
+        <div class="ai-metrics-grid">
+          <div class="ai-metric">
+            <span class="ai-metric-label">STATUS</span>
+            <span id="aiStatusVal" class="ai-metric-value highlight">PATROL / HUNT</span>
+          </div>
+          <div class="ai-metric">
+            <span class="ai-metric-label">NEAREST THREAT</span>
+            <span id="aiThreatDistVal" class="ai-metric-value">--</span>
+          </div>
+          <div class="ai-metric">
+            <span class="ai-metric-label">AIM ALIGNMENT</span>
+            <span id="aiAimVal" class="ai-metric-value">--</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RL Training Lab HUD (Active when AI is training live from random seed) -->
+    <div id="rlTrainingHud" class="ai-hud hidden">
+      <div class="ai-hud-card glass-panel rl-train-card">
+        <div class="ai-hud-header">
+          <div class="ai-header-left">
+            <span class="ai-pulse-dot purple"></span>
+            <span class="ai-badge-text">PPO TRAINING LAB (LIVE)</span>
+          </div>
+          <div class="ai-header-actions">
+            <button id="reseedRlBtn" class="ai-btn-sm" title="Reset weights to random seed">RE-SEED</button>
+            <button id="exitTrainBtn" class="ai-exit-btn" title="Return to Main Menu">EXIT [ESC]</button>
+          </div>
+        </div>
+
+        <div class="ai-metrics-grid">
+          <div class="ai-metric">
+            <span class="ai-metric-label">EPISODE</span>
+            <span id="rlEpVal" class="ai-metric-value highlight">1</span>
+          </div>
+          <div class="ai-metric">
+            <span class="ai-metric-label">TOTAL STEPS</span>
+            <span id="rlStepsVal" class="ai-metric-value">0</span>
+          </div>
+          <div class="ai-metric">
+            <span class="ai-metric-label">EPISODE REWARD</span>
+            <span id="rlEpRewardVal" class="ai-metric-value">+0.00</span>
+          </div>
+          <div class="ai-metric">
+            <span class="ai-metric-label">50-EP ROLLING AVG</span>
+            <span id="rlAvgRewardVal" class="ai-metric-value">+0.00</span>
+          </div>
+        </div>
+
+        <div class="rl-controls-row">
+          <span class="rl-control-label">TURBO SPEED:</span>
+          <div class="rl-speed-btn-group">
+            <button class="rl-speed-btn active" data-speed="1">1x</button>
+            <button class="rl-speed-btn" data-speed="2">2x</button>
+            <button class="rl-speed-btn" data-speed="5">5x</button>
+            <button class="rl-speed-btn" data-speed="10">10x</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- On-screen Controls for Touch & Mobile -->
     <div id="touchControls">
       <div class="touch-group-left">
@@ -162,6 +234,8 @@
 
         <nav class="menu-nav">
           <button id="playBtn" class="menu-btn primary-btn">PLAY</button>
+          <button id="watchTrainedBtn" class="menu-btn secondary-btn rl-menu-btn rl-trained-btn">🤖 WATCH TRAINED AI PLAY</button>
+          <button id="watchTrainBtn" class="menu-btn secondary-btn rl-menu-btn rl-train-btn">🧬 WATCH AI TRAIN (FROM SEED)</button>
           <button id="settingsBtn" class="menu-btn secondary-btn">SETTINGS</button>
           <button id="instructionsBtn" class="menu-btn secondary-btn">INSTRUCTIONS</button>
           <button id="creditsBtn" class="menu-btn secondary-btn">CREDITS</button>
@@ -443,7 +517,8 @@
     </div>
   </div>
 
-  <script src="game.js?v=1.8.4"></script>
+  <script src="rl_agent.js"></script>
+  <script src="game.js?v=2.0.0"></script>
 </body>
 
 </html>

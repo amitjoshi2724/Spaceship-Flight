@@ -2453,8 +2453,34 @@
         // Results
         finalScoreVal: document.getElementById('finalScoreVal'),
         bestScoreVal: document.getElementById('bestScoreVal'),
-        newHighScoreBanner: document.getElementById('newHighScoreBanner')
+        newHighScoreBanner: document.getElementById('newHighScoreBanner'),
+
+        // Reinforcement Learning & Autopilot Elements
+        watchTrainedBtn: document.getElementById('watchTrainedBtn'),
+        watchTrainBtn: document.getElementById('watchTrainBtn'),
+
+        aiTelemetryHud: document.getElementById('aiTelemetryHud'),
+        aiStatusVal: document.getElementById('aiStatusVal'),
+        aiThreatDistVal: document.getElementById('aiThreatDistVal'),
+        aiAimVal: document.getElementById('aiAimVal'),
+        exitAiBtn: document.getElementById('exitAiBtn'),
+
+        rlTrainingHud: document.getElementById('rlTrainingHud'),
+        rlEpVal: document.getElementById('rlEpVal'),
+        rlStepsVal: document.getElementById('rlStepsVal'),
+        rlEpRewardVal: document.getElementById('rlEpRewardVal'),
+        rlAvgRewardVal: document.getElementById('rlAvgRewardVal'),
+        reseedRlBtn: document.getElementById('reseedRlBtn'),
+        exitTrainBtn: document.getElementById('exitTrainBtn'),
+        rlSpeedBtns: document.querySelectorAll('.rl-speed-btn')
       };
+
+      // Reinforcement Learning Controller
+      this.rlAgent = (typeof RLSpaceship !== 'undefined' && RLSpaceship.RLAgent) ? new RLSpaceship.RLAgent() : null;
+      this.rlMode = null; // null, 'trained', or 'training'
+      this.trainingSpeed = 1;
+      this.lastStepDecision = null;
+      this.rlHudUpdateCounter = 0;
 
       let savedPowerMode = localStorage.getItem('spaceship_flight_power_mode');
       if (!savedPowerMode) {
@@ -2566,10 +2592,13 @@
 
         accumulator += frameTime;
 
-        // Run fixed 60Hz physics updates
+        // Run fixed 60Hz physics updates (with multi-tick turbo speed during RL training)
         const dtSeconds = FIXED_TIMESTEP / 1000; // Exact seconds per physics step (e.g. 0.016667s)
         while (accumulator >= FIXED_TIMESTEP) {
-          this.update(dtSeconds);
+          const ticks = (this.state === 'PLAYING' && this.rlMode === 'training') ? this.trainingSpeed : 1;
+          for (let s = 0; s < ticks; s++) {
+            this.update(dtSeconds);
+          }
           accumulator -= FIXED_TIMESTEP;
         }
 
@@ -2632,7 +2661,11 @@
           }
         }
         if (e.code === 'KeyP' || e.code === 'Escape') {
-          this.togglePause();
+          if (this.rlMode) {
+            this.exitRLMode();
+          } else {
+            this.togglePause();
+          }
         }
         if (e.code === 'KeyU') {
           if (this.state === 'PLAYING') {
@@ -2762,9 +2795,40 @@
     bindUI() {
       // Menu Navigation
       this.domElements.playBtn.addEventListener('click', () => this.startGame());
+      if (this.domElements.watchTrainedBtn) {
+        this.domElements.watchTrainedBtn.addEventListener('click', () => this.startWatchTrainedAI());
+      }
+      if (this.domElements.watchTrainBtn) {
+        this.domElements.watchTrainBtn.addEventListener('click', () => this.startWatchAITraining());
+      }
       this.domElements.settingsBtn.addEventListener('click', () => this.showModal('settings'));
       this.domElements.instructionsBtn.addEventListener('click', () => this.showModal('instructions'));
       this.domElements.creditsBtn.addEventListener('click', () => this.showModal('credits'));
+
+      // AI & Training HUD Controls
+      if (this.domElements.exitAiBtn) {
+        this.domElements.exitAiBtn.addEventListener('click', () => this.exitRLMode());
+      }
+      if (this.domElements.exitTrainBtn) {
+        this.domElements.exitTrainBtn.addEventListener('click', () => this.exitRLMode());
+      }
+      if (this.domElements.reseedRlBtn) {
+        this.domElements.reseedRlBtn.addEventListener('click', () => {
+          if (this.rlAgent) {
+            this.rlAgent.resetForNewTraining();
+            this.finishTrainingEpisode(0);
+          }
+        });
+      }
+      if (this.domElements.rlSpeedBtns) {
+        this.domElements.rlSpeedBtns.forEach(btn => {
+          btn.addEventListener('click', () => {
+            this.domElements.rlSpeedBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            this.trainingSpeed = parseInt(btn.dataset.speed, 10) || 1;
+          });
+        });
+      }
 
       // Modals Close
       this.domElements.closeInstructionsBtn.addEventListener('click', () => this.hideModals());
@@ -2779,7 +2843,13 @@
       this.domElements.quitBtn.addEventListener('click', () => this.quitToMainMenu());
 
       // Game Over
-      this.domElements.retryBtn.addEventListener('click', () => this.startGame());
+      this.domElements.retryBtn.addEventListener('click', () => {
+        if (this.rlMode === 'trained') {
+          this.startWatchTrainedAI();
+        } else {
+          this.startGame();
+        }
+      });
       this.domElements.gameOverQuitBtn.addEventListener('click', () => this.quitToMainMenu());
 
       // Sound Toggle
@@ -2974,6 +3044,12 @@
     }
 
     startGame() {
+      this.rlMode = null;
+      if (this.rlAgent) this.rlAgent.mode = 'idle';
+      this.lastStepDecision = null;
+      if (this.domElements.aiTelemetryHud) this.domElements.aiTelemetryHud.classList.add('hidden');
+      if (this.domElements.rlTrainingHud) this.domElements.rlTrainingHud.classList.add('hidden');
+
       this.soundFx.init();
       this.soundFx.resume();
       this.soundFx.stopThrust(true);
@@ -2995,8 +3071,6 @@
       this.updateEnergyDisplay();
 
       // Initial rocks spawn based on difficulty with staggered distances
-      // Rather than a sudden wall of 5-7 rocks entering simultaneously,
-      // 2-4 rocks glide in progressively, giving a fair and polished opening
       const initialCount = this.difficulty === 'easy' ? 2 : this.difficulty === 'hard' ? 4 : 3;
       for (let i = 0; i < initialCount; i++) {
         const spawnOffset = 15 + i * 90;
@@ -3004,6 +3078,127 @@
       }
 
       this.state = 'PLAYING';
+    }
+
+    startWatchTrainedAI() {
+      if (!this.rlAgent) return;
+      this.rlMode = 'trained';
+      this.rlAgent.mode = 'play';
+      this.lastStepDecision = null;
+
+      this.soundFx.init();
+      this.soundFx.resume();
+      this.soundFx.stopThrust(true);
+      this.keys.up = false;
+      this.hideModals();
+      this.domElements.startScreen.classList.remove('active');
+
+      if (this.domElements.aiTelemetryHud) this.domElements.aiTelemetryHud.classList.remove('hidden');
+      if (this.domElements.rlTrainingHud) this.domElements.rlTrainingHud.classList.add('hidden');
+      if (this.domElements.touchControls) this.domElements.touchControls.classList.add('hidden');
+
+      this.score = 0;
+      this.updateScore(0);
+      this.bullets = [];
+      this.rocks = [];
+      this.rockSpawnTimer = -150;
+      this.ufo = null;
+      this.ufoBullets = [];
+      this.ufoSpawnTimer = 0;
+      this.particles.clear();
+      this.ship.reset(true);
+      this.updateLivesDisplay();
+      this.updateEnergyDisplay();
+
+      const initialCount = this.difficulty === 'easy' ? 2 : this.difficulty === 'hard' ? 4 : 3;
+      for (let i = 0; i < initialCount; i++) {
+        const spawnOffset = 15 + i * 90;
+        this.rocks.push(new Rock(this.canvas.width, this.canvas.height, this.rockSpeedMultiplier, spawnOffset));
+      }
+
+      this.state = 'PLAYING';
+    }
+
+    startWatchAITraining() {
+      if (!this.rlAgent) return;
+      this.rlMode = 'training';
+      this.rlAgent.mode = 'train';
+      this.rlAgent.resetForNewTraining();
+      this.lastStepDecision = null;
+
+      this.soundFx.init();
+      this.soundFx.resume();
+      this.soundFx.stopThrust(true);
+      this.keys.up = false;
+      this.hideModals();
+      this.domElements.startScreen.classList.remove('active');
+
+      if (this.domElements.aiTelemetryHud) this.domElements.aiTelemetryHud.classList.add('hidden');
+      if (this.domElements.rlTrainingHud) this.domElements.rlTrainingHud.classList.remove('hidden');
+      if (this.domElements.touchControls) this.domElements.touchControls.classList.add('hidden');
+
+      this.score = 0;
+      this.updateScore(0);
+      this.bullets = [];
+      this.rocks = [];
+      this.rockSpawnTimer = -150;
+      this.ufo = null;
+      this.ufoBullets = [];
+      this.ufoSpawnTimer = 0;
+      this.particles.clear();
+      this.ship.reset(true);
+      this.updateLivesDisplay();
+      this.updateEnergyDisplay();
+
+      const initialCount = this.difficulty === 'easy' ? 2 : this.difficulty === 'hard' ? 4 : 3;
+      for (let i = 0; i < initialCount; i++) {
+        const spawnOffset = 15 + i * 90;
+        this.rocks.push(new Rock(this.canvas.width, this.canvas.height, this.rockSpeedMultiplier, spawnOffset));
+      }
+
+      this.state = 'PLAYING';
+    }
+
+    finishTrainingEpisode(terminalReward = -15) {
+      if (this.rlAgent && this.lastStepDecision) {
+        this.rlAgent.recordStep(this.lastStepDecision, terminalReward, true);
+        this.lastStepDecision = null;
+      }
+
+      // Soft reset ship state without triggering game over screens
+      this.ship.reset(false);
+      this.ship.energy = this.ship.maxEnergy;
+      this.ship.shieldEnergy = this.ship.maxShieldEnergy;
+      this.ship.invincible = false;
+      this.bullets = [];
+      this.ufoBullets = [];
+
+      // Keep rocks population healthy
+      if (this.rocks.length < 2 || this.rocks.length > 8) {
+        this.rocks = [];
+        const count = 3;
+        for (let i = 0; i < count; i++) {
+          this.rocks.push(new Rock(this.canvas.width, this.canvas.height, this.rockSpeedMultiplier, 40 + i * 80));
+        }
+      }
+    }
+
+    exitRLMode() {
+      this.rlMode = null;
+      if (this.rlAgent) this.rlAgent.mode = 'idle';
+      this.lastStepDecision = null;
+      if (this.domElements.aiTelemetryHud) this.domElements.aiTelemetryHud.classList.add('hidden');
+      if (this.domElements.rlTrainingHud) this.domElements.rlTrainingHud.classList.add('hidden');
+
+      // Restore touch controls setting
+      if (this.domElements.settingTouchControls && this.domElements.touchControls) {
+        const val = this.domElements.settingTouchControls.value;
+        this.domElements.touchControls.classList.remove('hidden', 'auto-hide');
+        if (val === 'hidden') this.domElements.touchControls.classList.add('hidden');
+        else if (val === 'auto') this.domElements.touchControls.classList.add('auto-hide');
+      }
+
+      this.quitToMainMenu();
     }
 
     togglePause() {
@@ -3037,10 +3232,22 @@
         this.domElements.pauseBtn.setAttribute('title', 'Pause Game');
         this.domElements.pauseBtn.setAttribute('aria-label', 'Pause Game');
       }
-      this.startGame();
+      if (this.rlMode === 'trained') {
+        this.startWatchTrainedAI();
+      } else if (this.rlMode === 'training') {
+        this.startWatchAITraining();
+      } else {
+        this.startGame();
+      }
     }
 
     quitToMainMenu() {
+      this.rlMode = null;
+      if (this.rlAgent) this.rlAgent.mode = 'idle';
+      this.lastStepDecision = null;
+      if (this.domElements.aiTelemetryHud) this.domElements.aiTelemetryHud.classList.add('hidden');
+      if (this.domElements.rlTrainingHud) this.domElements.rlTrainingHud.classList.add('hidden');
+
       this.hideModals();
       this.ship.setThrust(false);
       this.ufo = null;
@@ -3285,6 +3492,11 @@
       this.screenShake = 16;
       this.particles.addExplosion(this.ship.x, this.ship.y, '#f43f5e', 35);
 
+      if (this.rlMode === 'training') {
+        this.finishTrainingEpisode(-15);
+        return;
+      }
+
       this.ship.lives--;
       this.updateLivesDisplay();
 
@@ -3324,9 +3536,42 @@
       }
 
       if (this.state === 'PLAYING') {
-        // Continuous keyboard rotation
-        if (this.keys.left) this.ship.rotateLeft();
-        if (this.keys.right) this.ship.rotateRight();
+        const prevScore = this.score;
+
+        // Autonomous RL Agent Action Selection
+        if (this.rlMode && this.rlAgent) {
+          const decision = this.rlAgent.act(this);
+          this.lastStepDecision = decision;
+
+          // Steer action (0: Left, 1: None, 2: Right)
+          if (decision.steer === 0) {
+            this.ship.rotateLeft();
+          } else if (decision.steer === 2) {
+            this.ship.rotateRight();
+          }
+
+          // Thrust action (0: Off, 1: On)
+          if (decision.thrust === 1) {
+            this.ship.setThrust(true);
+          } else {
+            this.ship.setThrust(false);
+          }
+
+          // Fire action (0: Off, 1: Fire)
+          if (decision.fire === 1) {
+            this.ship.fire(this.bullets);
+          }
+
+          // Shield action (0: Off, 1: Deploy)
+          if (decision.shield === 1) {
+            this.ship.triggerEmergencyShield();
+            this.updateEnergyDisplay();
+          }
+        } else {
+          // Continuous human keyboard rotation
+          if (this.keys.left) this.ship.rotateLeft();
+          if (this.keys.right) this.ship.rotateRight();
+        }
 
         // Ship update (movement, thrust, kinetic battery recharge with dynamic dt)
         this.ship.update(dtSeconds);
@@ -3505,6 +3750,28 @@
             this.handlePlayerHit();
           }
         }
+
+        // In RL Training Mode, calculate and record step reward
+        if (this.rlMode === 'training' && this.rlAgent && this.lastStepDecision) {
+          let stepReward = 0.01; // Baseline survival reward
+          const scoreDelta = this.score - prevScore;
+          if (scoreDelta > 0) {
+            stepReward += scoreDelta * 2.0; // Asteroid / UFO destruction reward
+          }
+          if (this.lastStepDecision.telemetry) {
+            if (this.lastStepDecision.telemetry.closestDist < 75) {
+              stepReward -= 0.02; // Proximity hazard danger penalty
+            }
+            if (Math.abs(this.lastStepDecision.telemetry.aimError || 0) < 0.15) {
+              stepReward += 0.005; // Accurate cannon alignment incentive
+            }
+          }
+          if (this.lastStepDecision.fire === 1 && this.ship.energy < 15) {
+            stepReward -= 0.01; // Energy waste / dry fire penalty
+          }
+
+          this.rlAgent.recordStep(this.lastStepDecision, stepReward, false);
+        }
       }
 
       // Starfield parallax & particles update
@@ -3516,6 +3783,35 @@
     }
 
     render() {
+      // Throttle DOM HUD updates to every 4 frames (prevents DOM thrashing in turbo speed)
+      this.rlHudUpdateCounter = (this.rlHudUpdateCounter || 0) + 1;
+      if (this.rlHudUpdateCounter % 4 === 0) {
+        if (this.rlMode === 'trained' && this.lastStepDecision && this.domElements.aiTelemetryHud) {
+          const t = this.lastStepDecision.telemetry || {};
+          if (this.domElements.aiStatusVal) this.domElements.aiStatusVal.textContent = t.status || 'PATROL / HUNT';
+          if (this.domElements.aiThreatDistVal) {
+            this.domElements.aiThreatDistVal.textContent = (t.closestDist < 900) ? `${Math.round(t.closestDist)} px` : 'CLEAR';
+          }
+          if (this.domElements.aiAimVal) {
+            const alignPct = Math.max(0, Math.round((1 - Math.min(1, Math.abs(t.aimError || 0))) * 100));
+            this.domElements.aiAimVal.textContent = `${alignPct}%`;
+          }
+        } else if (this.rlMode === 'training' && this.rlAgent && this.domElements.rlTrainingHud) {
+          if (this.domElements.rlEpVal) this.domElements.rlEpVal.textContent = this.rlAgent.episodes + 1;
+          if (this.domElements.rlStepsVal) this.domElements.rlStepsVal.textContent = this.rlAgent.totalSteps;
+          if (this.domElements.rlEpRewardVal) {
+            const r = this.rlAgent.currentEpisodeReward;
+            this.domElements.rlEpRewardVal.textContent = (r >= 0 ? '+' : '') + r.toFixed(2);
+            this.domElements.rlEpRewardVal.style.color = r >= 0 ? '#4ade80' : '#f87171';
+          }
+          if (this.domElements.rlAvgRewardVal) {
+            const avg = this.rlAgent.averageReward;
+            this.domElements.rlAvgRewardVal.textContent = (avg >= 0 ? '+' : '') + avg.toFixed(2);
+            this.domElements.rlAvgRewardVal.style.color = avg >= 0 ? '#4ade80' : '#f87171';
+          }
+        }
+      }
+
       this.ctx.save();
 
       // Screen shake effect
