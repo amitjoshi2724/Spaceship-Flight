@@ -3648,6 +3648,10 @@
         // Bullets update & Rock/UFO collisions
         for (let i = this.bullets.length - 1; i >= 0; i--) {
           const b = this.bullets[i];
+          if (!b || typeof b.update !== 'function') {
+            this.bullets.splice(i, 1);
+            continue;
+          }
           b.update(this.canvas.width, this.canvas.height);
 
           if (b.hit) {
@@ -3672,7 +3676,7 @@
           // Check bullet against rocks
           for (let j = this.rocks.length - 1; j >= 0; j--) {
             const r = this.rocks[j];
-            if (!r.popped && r.containsBullet(b)) {
+            if (r && !r.popped && r.containsBullet(b)) {
               r.popped = true;
               b.hit = true;
 
@@ -3690,6 +3694,10 @@
         // UFO Bullets update & Player/Rock collisions
         for (let i = this.ufoBullets.length - 1; i >= 0; i--) {
           const ub = this.ufoBullets[i];
+          if (!ub || typeof ub.update !== 'function') {
+            this.ufoBullets.splice(i, 1);
+            continue;
+          }
           ub.update(this.canvas.width, this.canvas.height);
 
           if (ub.hit) {
@@ -3709,6 +3717,8 @@
               const hitColor = ub.aimMode === 'predictive' ? '#c084fc' : '#00ff8e';
               this.particles.addExplosion(ub.x, ub.y, hitColor, 18);
               this.handlePlayerHit();
+              // If player was destroyed (Game Over or Training Reset), halt further updates this frame!
+              if (this.state !== 'PLAYING') return;
             }
             continue;
           }
@@ -3717,7 +3727,7 @@
           // Intercepting defensive CIWS or offensive bullets explode the asteroid!
           for (let j = this.rocks.length - 1; j >= 0; j--) {
             const r = this.rocks[j];
-            if (!r.popped && r.containsBullet(ub)) {
+            if (r && !r.popped && r.containsBullet(ub)) {
               ub.hit = true;
               r.popped = true;
               this.soundFx.playExplosion(false);
@@ -3741,6 +3751,10 @@
         // Rocks update & Ship/UFO collision
         for (let j = this.rocks.length - 1; j >= 0; j--) {
           const r = this.rocks[j];
+          if (!r || typeof r.update !== 'function') {
+            this.rocks.splice(j, 1);
+            continue;
+          }
           const alive = r.update(this.canvas.width, this.canvas.height);
           if (!alive) {
             this.rocks.splice(j, 1);
@@ -3773,6 +3787,7 @@
             r.popped = true;
             this.rocks.splice(j, 1);
             this.handlePlayerHit();
+            if (this.state !== 'PLAYING') return;
             break;
           }
         }
@@ -3790,6 +3805,7 @@
           } else {
             this.particles.addExplosion(this.ship.x, this.ship.y, '#ef4444', 25);
             this.handlePlayerHit();
+            if (this.state !== 'PLAYING') return;
           }
         }
 
@@ -3911,15 +3927,15 @@
       this.particles.draw(this.ctx);
 
       for (const rock of this.rocks) {
-        rock.draw(this.ctx);
+        if (rock && typeof rock.draw === 'function') rock.draw(this.ctx);
       }
 
       for (const bullet of this.bullets) {
-        bullet.draw(this.ctx);
+        if (bullet && typeof bullet.draw === 'function') bullet.draw(this.ctx);
       }
 
       for (const uBullet of this.ufoBullets) {
-        uBullet.draw(this.ctx);
+        if (uBullet && typeof uBullet.draw === 'function') uBullet.draw(this.ctx);
       }
 
       if (this.ufo && this.ufo.alive) {

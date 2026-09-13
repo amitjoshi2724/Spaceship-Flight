@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spaceship-flight-2.0.1';
+const CACHE_NAME = 'spaceship-flight-2.0.2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const ASSETS_TO_CACHE = [
   './rl_agent.js',
   './game.js',
   './manifest.json',
+  './newspaceship.png',
   './images/newspaceship.png',
   './images/newspaceshipmoving.png',
   './images/newspaceshipmoving2.png',
@@ -51,6 +52,17 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
+
+  // Transparent fallback for legacy cached manifests requesting root /newspaceship.png
+  if (url.pathname.endsWith('/newspaceship.png')) {
+    event.respondWith(
+      caches.match('./images/newspaceship.png').then((res) => {
+        return res || fetch('./images/newspaceship.png');
+      })
+    );
+    return;
+  }
+
   const isCodeOrDoc = event.request.mode === 'navigate' ||
                       event.request.destination === 'script' ||
                       url.pathname.endsWith('.js') ||
