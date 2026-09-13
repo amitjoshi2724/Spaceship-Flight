@@ -32,7 +32,7 @@
    - [4.4 Spaceship Kinematics & The Angle Discontinuity Problem](#44-spaceship-kinematics--the-angle-discontinuity-problem)
    - [4.5 Weapons, Shield Capacitors, & Defensive States](#45-weapons-shield-capacitors--defensive-states)
    - [4.6 Inductive Biases & Targeting Aids](#46-inductive-biases--targeting-aids)
-   - [4.7 Production In-Browser Architecture: The 32-Dimensional State Vector (`rl_agent.js`)](#47-production-in-browser-architecture-the-32-dimensional-state-vector-rl_agentjs)
+   - [4.7 Production In-Browser Architecture: The 38-Dimensional Grandmaster Attention Hybrid Vector (`rl_agent.js`)](#47-production-in-browser-architecture-the-38-dimensional-grandmaster-attention-hybrid-vector-rl_agentjs)
 5. [Action Space Design & Kinematic Execution](#5-action-space-design--kinematic-execution)
 6. [Reward Function Engineering & Credit Assignment](#6-reward-function-engineering--credit-assignment)
    - [6.1 The Danger of Reward Hacking](#61-the-danger-of-reward-hacking)
@@ -833,37 +833,49 @@ You can accelerate learning by orders of magnitude by providing two simple geome
 
 ---
 
-### 4.7 Production In-Browser Architecture: The 32-Dimensional State Vector (`rl_agent.js`)
+### 4.7 Production In-Browser Architecture: The 38-Dimensional Grandmaster Attention Hybrid Vector (`rl_agent.js`)
 
-In the live web implementation (`rl_agent.js`), to enable fast $600\text{ Hz}$ in-browser CPU simulation (10x turbo mode) without frame drops, we engineered an optimal **32-dimensional continuous state vector** $\mathbf{s}_t \in [-1, 1]^{32}$.
+In the live web implementation (`rl_agent.js`), to achieve super-human dogfighting accuracy while maintaining complete situational awareness of all active asteroids, the system operates on the **38-dimensional Grandmaster Attention Hybrid continuous state vector** $\mathbf{s}_t \in [-2, 2]^{38}$.
 
 Every feature is strictly normalized and dimensionless—**no raw pixel coordinates are ever fed to the policy network**:
 
-| Feature Index | Symbol / Code | Normalized Range | Description |
-| :--- | :--- | :--- | :--- |
-| **`obs[0]`** | $v_{x,\text{ship}} / v_{\max}$ | $[-1.0, 1.0]$ | Ship horizontal velocity ($v_{\max} = 6.0\text{ px/tick}$) |
-| **`obs[1]`** | $v_{y,\text{ship}} / v_{\max}$ | $[-1.0, 1.0]$ | Ship vertical velocity ($v_{\max} = 6.0\text{ px/tick}$) |
-| **`obs[2]`** | $\cos\theta$ | $[-1.0, 1.0]$ | Heading direction cosine (continuous orientation) |
-| **`obs[3]`** | $\sin\theta$ | $[-1.0, 1.0]$ | Heading direction sine (continuous orientation) |
-| **`obs[4]`** | $E_{\text{ammo}} / 100$ | $[0.0, 1.0]$ | Weapon Battery / Shared Reactor energy level |
-| **`obs[5]`** | $E_{\text{shield}} / 100$ | $[0.0, 1.0]$ | Dedicated Shield Capacitor charge (in Dual / Shield-Only modes) |
-| **`obs[6]`** | $t_{\text{invincible}} / 150$ | $[0.0, 1.0]$ | Remaining forcefield duration ($150\text{ ticks} = 2.5\text{s}$) |
-| **`obs[7]`** | $x_{\text{ufo,body}} / (W/2)$ | $[-1.0, 1.0]$ | Alien saucer relative position (Forward axis) |
-| **`obs[8]`** | $y_{\text{ufo,body}} / (H/2)$ | $[-1.0, 1.0]$ | Alien saucer relative position (Starboard axis) |
-| **`obs[9]`** | $v_{x,\text{ufo,body}} / 6.0$ | $[-1.0, 1.0]$ | Alien saucer relative closing velocity (Forward axis) |
-| **`obs[10]`** | $v_{y,\text{ufo,body}} / 6.0$ | $[-1.0, 1.0]$ | Alien saucer relative closing velocity (Starboard axis) |
-| **`obs[11]`** | $\mathbb{I}_{\text{ufo\_alive}}$ | $\{0.0, 1.0\}$ | Flag indicating if alien UFO is active on screen |
-| **`obs[12..16]`** | Asteroid 1 ($\text{Rock}_1$) | $[-1.0, 1.0]$ | Nearest rock: $[x_{\text{body}}/(W/2), \; y_{\text{body}}/(H/2), \; v_{x,\text{body}}/6.0, \; v_{y,\text{body}}/6.0, \; r/36.0]$ |
-| **`obs[17..21]`** | Asteroid 2 ($\text{Rock}_2$) | $[-1.0, 1.0]$ | 2nd nearest rock kinematics in egocentric body frame |
-| **`obs[22..26]`** | Asteroid 3 ($\text{Rock}_3$) | $[-1.0, 1.0]$ | 3rd nearest rock kinematics in egocentric body frame |
-| **`obs[27]`** | $\Delta\psi_{\text{aim}} / \pi$ | $[-1.0, 1.0]$ | Aim error angle to primary target ($0.0 = \text{dead center nose lock}$) |
-| **`obs[28]`** | $d_{\text{threat}} / (W/2)$ | $[0.0, 1.0]$ | Normalized distance to closest threat ($1.0 = \text{clear}$, $0.0 = \text{impact}$) |
-| **`obs[29]`** | $\mathbb{I}_{\text{danger}}$ | $\{0.0, 1.0\}$ | Imminent collision hazard alert flag ($d_{\text{threat}} < 1.8 \times \text{width}$) |
-| **`obs[30]`** | $\mathbb{I}_{\text{shield\_ready}}$ | $\{0.0, 1.0\}$ | **Power Mode Invariant Shield Readiness** ($1.0$ if shield deployable now) |
-| **`obs[31]`** | $N_{\text{bullets}} / 10.0$ | $[0.0, 1.0]$ | Active friendly laser projectile density |
+| Feature Index | Symbol / Code | Normalized Range | Architectural Component | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| **`obs[0]`** | $v_{x,\text{ship}} / v_{\max}$ | $[-1.0, 1.0]$ | Ship Kinematics | Forward body-axis velocity ($v_{\max} = 6.0\text{ px/tick}$) |
+| **`obs[1]`** | $v_{y,\text{ship}} / v_{\max}$ | $[-1.0, 1.0]$ | Ship Kinematics | Starboard body-axis velocity ($v_{\max} = 6.0\text{ px/tick}$) |
+| **`obs[2]`** | $\cos\theta$ | $[-1.0, 1.0]$ | Ship Orientation | Heading direction cosine (continuous angle unit vector) |
+| **`obs[3]`** | $\sin\theta$ | $[-1.0, 1.0]$ | Ship Orientation | Heading direction sine (continuous angle unit vector) |
+| **`obs[4]`** | $E_{\text{ammo}} / 100$ | $[0.0, 1.0]$ | Energy Reserves | Weapon Battery / Shared Reactor energy level |
+| **`obs[5]`** | $E_{\text{shield}} / 100$ | $[0.0, 1.0]$ | Energy Reserves | Dedicated Shield Capacitor charge (Dual / Shield-Only) |
+| **`obs[6]`** | $t_{\text{invincible}} / 150$ | $[0.0, 1.0]$ | Defensive Timer | Remaining forcefield duration ($150\text{ ticks} = 2.5\text{s}$) |
+| **`obs[7]`** | $x_{\text{ufo,body}} / (W/2)$ | $[-1.0, 1.0]$ | Alien UFO (Egocentric) | Alien saucer relative position (Forward axis) |
+| **`obs[8]`** | $y_{\text{ufo,body}} / (H/2)$ | $[-1.0, 1.0]$ | Alien UFO (Egocentric) | Alien saucer relative position (Starboard axis) |
+| **`obs[9]`** | $v_{x,\text{ufo,body}} / 6.0$ | $[-1.0, 1.0]$ | Alien UFO (Egocentric) | Alien saucer relative closing velocity (Forward axis) |
+| **`obs[10]`** | $v_{y,\text{ufo,body}} / 6.0$ | $[-1.0, 1.0]$ | Alien UFO (Egocentric) | Alien saucer relative closing velocity (Starboard axis) |
+| **`obs[11]`** | $\mathbb{I}_{\text{ufo\_alive}}$ | $\{0.0, 1.0\}$ | Alien UFO (Egocentric) | Flag indicating if alien saucer is active on battlefield |
+| **`obs[12]`** | $x_{\text{target,body}} / (W/2)$ | $[-1.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest primary rock position along forward nose axis |
+| **`obs[13]`** | $y_{\text{target,body}} / (H/2)$ | $[-1.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest primary rock position along starboard axis |
+| **`obs[14]`** | $v_{x,\text{target,body}} / 6.0$ | $[-1.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest primary rock relative velocity along forward axis |
+| **`obs[15]`** | $v_{y,\text{target,body}} / 6.0$ | $[-1.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest primary rock relative velocity along starboard axis |
+| **`obs[16]`** | $r_{\text{target}} / 36.0$ | $[0.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest primary rock physical radius / collision hull |
+| **`obs[17..24]`** | $\mathbf{c}_{\text{threat}} \in \mathbb{R}^8$ | $[-2.0, 2.0]$ | **Attention Context Field** | **Attention-Weighted Threat Vector** across **all active rocks** |
+| **`obs[25..32]`** | $\mathbf{m}_{\text{threat}} \in \mathbb{R}^8$ | $[-2.0, 2.0]$ | **Attention Peak Hazard** | **Element-wise Maximum Threat** across all active rocks |
+| **`obs[33]`** | $\Delta\psi_{\text{aim}} / \pi$ | $[-1.0, 1.0]$ | Tactical Biases | Angular aim alignment error to primary target |
+| **`obs[34]`** | $d_{\text{threat}} / (W/2)$ | $[0.0, 1.0]$ | Tactical Biases | Normalized distance to closest threat ($0.0 = \text{impact}$) |
+| **`obs[35]`** | $\mathbb{I}_{\text{danger}}$ | $\{0.0, 1.0\}$ | Tactical Biases | Imminent collision alarm ($d_{\text{threat}} < 1.8 \times \text{width}$) |
+| **`obs[36]`** | $\mathbb{I}_{\text{shield\_ready}}$ | $\{0.0, 1.0\}$ | Tactical Biases | **Power-Mode Invariant Shield Readiness** |
+| **`obs[37]`** | $N_{\text{bullets}} / 10.0$ | $[0.0, 1.0]$ | Tactical Biases | Active friendly laser projectile density |
+
+#### The Cross-Attention Engine Behind `obs[17..32]`:
+Instead of discarding asteroids beyond the 3 closest, the ship executes a continuous attention pass:
+1. **Ship Query ($\mathbf{q} \in \mathbb{R}^8$):** Formulated from the ship's forward velocity, lateral drift, and battery depletion urgency.
+2. **Asteroid Keys & Values ($\mathbf{k}_i, \mathbf{v}_i \in \mathbb{R}^8$):** Formulated for every asteroid $i \in \{1, \dots, N\}$.
+3. **Scaled Dot-Product Softmax:** $\alpha_i = \operatorname{softmax}\left(\frac{\mathbf{q} \cdot \mathbf{k}_i}{\sqrt{8}}\right)$.
+4. **Context Vector $\mathbf{c}_{\text{threat}} = \sum \alpha_i \mathbf{v}_i$:** Captures the dynamic weighted center of incoming danger.
+5. **Peak Vector $\mathbf{m}_{\text{threat}} = \max_i \mathbf{v}_i$:** Captures the single most extreme hazard, preventing high-speed small asteroids from ever being diluted by distant background rocks.
 
 #### Power Mode Invariance:
-By providing $\mathbb{I}_{\text{shield\_ready}}$ (`obs[30]`) alongside battery levels, the agent does not need three separate neural network models for **Shared Reactor**, **Dual Capacitors**, and **Unlimited Ammo**:
+By providing $\mathbb{I}_{\text{shield\_ready}}$ (`obs[36]`) alongside battery levels, the agent does not need three separate neural network models for **Shared Reactor**, **Dual Capacitors**, and **Unlimited Ammo**:
 - In **Shared Reactor**: $\mathbb{I}_{\text{shield\_ready}} = 1$ when $E \ge 50\%$.
 - In **Dual Capacitors**: $\mathbb{I}_{\text{shield\_ready}} = 1$ when $E_{\text{shield}} \ge 100\%$.
 - In **Unlimited Ammo**: $\mathbb{I}_{\text{shield\_ready}} = 1$ when $E_{\text{shield}} \ge 100\%$, and weapon battery (`obs[4]`) stays locked at $1.0$.
