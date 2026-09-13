@@ -205,6 +205,10 @@
       } catch (e) { }
     }
 
+    playRockExplosion() {
+      this.playExplosion(false);
+    }
+
     playGameOver() {
       if (!this.enabled) return;
       this.init();
@@ -3461,7 +3465,7 @@
             if (this.ufo.spawnProtectionTimer > 0) {
               // Spawn deflector shield absorbs and vaporizes the asteroid!
               r.popped = true;
-              this.soundFx.playRockExplosion();
+              this.soundFx.playExplosion(false);
               this.particles.addExplosion(r.x, r.y, '#c084fc', 26);
               this.particles.addExplosion(r.x, r.y, '#38bdf8', 18);
               this.rocks.splice(j, 1);

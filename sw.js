@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spaceship-flight-1.9.0';
+const CACHE_NAME = 'spaceship-flight-1.9.3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -11,7 +11,9 @@ const ASSETS_TO_CACHE = [
   './images/bluenewspaceship.png',
   './images/bluenewspaceshipmoving2.png',
   './images/enemyship.png',
-  './images/amitjoshi2724_pfp.png'
+  './images/amitjoshi2724_pfp.png',
+  './images/icon-192.png',
+  './images/icon-512.png'
 ];
 
 // Install Event: Pre-cache all core game assets
