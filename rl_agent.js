@@ -393,7 +393,7 @@
       let thrustAction = 0;
       let fireAction = 0;
       let shieldAction = 0;
-      let telemetryStatus = "PATROL / HUNT";
+      let telemetryStatus = "PATROL";
       let primaryAimError = 0;
 
       const closest = threats[0] || null;
@@ -424,14 +424,14 @@
       if (closest && closest.dist < (ship.width * 0.95 + closest.radius)) {
         if (canShieldDeploy) {
           shieldAction = 1;
-          telemetryStatus = "EMERGENCY SHIELD DEPLOYED";
+          telemetryStatus = "SHIELD ACTIVE";
         }
       }
 
       // 4. Tactical Evasion vs. Predictive Aiming
       if (dangerLevel > 0.45 && !ship.invincible) {
         // High danger: evasive burn
-        telemetryStatus = "EVADING IMMINENT HAZARD";
+        telemetryStatus = "EVADING HAZARD";
         const bodyEscape = MathUtils.toBodyFrame(escapeVectorX, escapeVectorY, shipAngle);
         const escapeAngle = Math.atan2(bodyEscape.y, bodyEscape.x);
 
@@ -444,7 +444,7 @@
         }
       } else if (closest) {
         // Safe to target: calculate quadratic lead pursuit for cannon aim
-        telemetryStatus = closest.type === 'ufo' ? "UFO TARGET LOCKED" : "TARGET ACQUIRED";
+        telemetryStatus = closest.type === 'ufo' ? "ENGAGING UFO" : "ENGAGING ROCK";
 
         // Predictive lead intercept
         const BULLET_SPEED = 12.0;
@@ -474,6 +474,9 @@
         }
       }
 
+      const arenaHalfW = Math.max(1, game.canvas.width * 0.5);
+      const normDist = closest ? MathUtils.clamp(closest.dist / arenaHalfW, 0, 1) : 1.0;
+
       return {
         steer: steerAction,
         thrust: thrustAction,
@@ -481,8 +484,10 @@
         shield: shieldAction,
         status: telemetryStatus,
         closestDist: closest ? closest.dist : 999,
+        normalizedDist: normDist,
         aimError: primaryAimError,
-        danger: dangerLevel > 0.4
+        danger: dangerLevel > 0.4,
+        shieldReady: canShieldDeploy
       };
     }
   }

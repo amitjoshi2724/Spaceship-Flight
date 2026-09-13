@@ -87,79 +87,56 @@
       </div>
 
       <div class="hud-right">
-        <button id="soundToggleBtn" class="hud-btn sound-btn" aria-label="Toggle Sound" title="Toggle Sound">🔊</button>
+        <button id="soundToggleBtn" class="hud-btn sound-btn" aria-label="Toggle Sound" title="Toggle Sound">🔇</button>
         <button id="pauseBtn" class="hud-btn" aria-label="Pause Game" title="Pause Game">| |</button>
       </div>
     </header>
 
-    <!-- AI Autopilot Telemetry HUD (Active when Trained AI is piloting) -->
-    <div id="aiTelemetryHud" class="ai-hud hidden">
-      <div class="ai-hud-card glass-panel">
-        <div class="ai-hud-header">
-          <div class="ai-header-left">
-            <span class="ai-pulse-dot cyan"></span>
-            <span class="ai-badge-text">NEURAL AUTOPILOT ACTIVE</span>
-          </div>
-          <button id="exitAiBtn" class="ai-exit-btn" title="Return to Main Menu">EXIT [ESC]</button>
-        </div>
-        <div class="ai-metrics-grid">
-          <div class="ai-metric">
-            <span class="ai-metric-label">STATUS</span>
-            <span id="aiStatusVal" class="ai-metric-value highlight">PATROL / HUNT</span>
-          </div>
-          <div class="ai-metric">
-            <span class="ai-metric-label">NEAREST THREAT</span>
-            <span id="aiThreatDistVal" class="ai-metric-value">--</span>
-          </div>
-          <div class="ai-metric">
-            <span class="ai-metric-label">AIM ALIGNMENT</span>
-            <span id="aiAimVal" class="ai-metric-value">--</span>
+    <!-- AI Autopilot Telemetry HUD (Compact, non-intrusive pill with hoverable state details) -->
+    <div id="aiTelemetryHud" class="ai-compact-pill hidden">
+      <div class="ai-pill-bar">
+        <span class="ai-pulse-dot cyan"></span>
+        <span class="ai-pill-badge">AUTOPILOT</span>
+        <span id="aiStatusVal" class="ai-pill-status">PATROL</span>
+        <span class="ai-pill-sep">&bull;</span>
+        <span class="ai-pill-metric">PROX: <b id="aiThreatDistVal">1.00</b></span>
+        <span class="ai-pill-sep">&bull;</span>
+        <span class="ai-pill-metric">AIM: <b id="aiAimVal">100%</b></span>
+        <div class="ai-tooltip-trigger">
+          ⓘ
+          <div class="ai-telemetry-tooltip">
+            <div class="tooltip-title">NEURAL STATE VECTOR (32-D)</div>
+            <div class="tooltip-item"><span>State Features:</span> <b>32 Dimension Continuous</b></div>
+            <div class="tooltip-item"><span>Threat Proximity:</span> <b id="aiThreatDetailVal">1.00 (Clear)</b></div>
+            <div class="tooltip-item"><span>Aim Angle Error:</span> <b id="aiAimDetailVal">0.00 rad</b></div>
+            <div class="tooltip-item"><span>Deflector Shield:</span> <b id="aiShieldDetailVal">Standby</b></div>
           </div>
         </div>
+        <button id="exitAiBtn" class="ai-pill-exit" title="Exit Autopilot [ESC]">EXIT [ESC]</button>
       </div>
     </div>
 
-    <!-- RL Training Lab HUD (Active when AI is training live from random seed) -->
-    <div id="rlTrainingHud" class="ai-hud hidden">
-      <div class="ai-hud-card glass-panel rl-train-card">
-        <div class="ai-hud-header">
-          <div class="ai-header-left">
-            <span class="ai-pulse-dot purple"></span>
-            <span class="ai-badge-text">PPO TRAINING LAB (LIVE)</span>
-          </div>
-          <div class="ai-header-actions">
-            <button id="reseedRlBtn" class="ai-btn-sm" title="Reset weights to random seed">RE-SEED</button>
-            <button id="exitTrainBtn" class="ai-exit-btn" title="Return to Main Menu">EXIT [ESC]</button>
-          </div>
+    <!-- RL Training Lab (Compact, unobtrusive floating toolbar) -->
+    <div id="rlTrainingHud" class="rl-compact-hud hidden">
+      <div class="rl-compact-bar">
+        <div class="rl-compact-left">
+          <span class="ai-pulse-dot purple"></span>
+          <span class="rl-compact-title">PPO LAB</span>
+          <span class="rl-compact-stat">EP <b id="rlEpVal">1</b></span>
+          <span class="rl-compact-stat">STEPS <b id="rlStepsVal">0</b></span>
+          <span class="rl-compact-stat">RWD <b id="rlEpRewardVal">+0.00</b></span>
+          <span class="rl-compact-stat">AVG50 <b id="rlAvgRewardVal">+0.00</b></span>
         </div>
 
-        <div class="ai-metrics-grid">
-          <div class="ai-metric">
-            <span class="ai-metric-label">EPISODE</span>
-            <span id="rlEpVal" class="ai-metric-value highlight">1</span>
-          </div>
-          <div class="ai-metric">
-            <span class="ai-metric-label">TOTAL STEPS</span>
-            <span id="rlStepsVal" class="ai-metric-value">0</span>
-          </div>
-          <div class="ai-metric">
-            <span class="ai-metric-label">EPISODE REWARD</span>
-            <span id="rlEpRewardVal" class="ai-metric-value">+0.00</span>
-          </div>
-          <div class="ai-metric">
-            <span class="ai-metric-label">50-EP ROLLING AVG</span>
-            <span id="rlAvgRewardVal" class="ai-metric-value">+0.00</span>
-          </div>
-        </div>
-
-        <div class="rl-controls-row">
-          <span class="rl-control-label">TURBO SPEED:</span>
+        <div class="rl-compact-controls">
           <div class="rl-speed-btn-group">
             <button class="rl-speed-btn active" data-speed="1">1x</button>
             <button class="rl-speed-btn" data-speed="2">2x</button>
             <button class="rl-speed-btn" data-speed="5">5x</button>
             <button class="rl-speed-btn" data-speed="10">10x</button>
           </div>
+          <button id="reseedRlBtn" class="ai-btn-sm" title="Reset neural weights to random seed">RE-SEED</button>
+          <button id="exitTrainBtn" class="ai-exit-btn" title="Exit Training [ESC]">EXIT [ESC]</button>
         </div>
       </div>
     </div>
@@ -352,7 +329,7 @@
         <div class="setting-group">
           <div class="toggle-row">
             <label for="settingSound" class="setting-label">SOUND EFFECTS</label>
-            <input type="checkbox" id="settingSound" checked class="custom-toggle">
+            <input type="checkbox" id="settingSound" class="custom-toggle">
           </div>
         </div>
 

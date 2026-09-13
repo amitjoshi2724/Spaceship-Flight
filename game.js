@@ -14,7 +14,7 @@
   // ============================================================================
   class SoundFX {
     constructor() {
-      this.enabled = true;
+      this.enabled = false; // Defaulted to off as requested
       this.ctx = null;
       this.thrustOsc = null;
       this.thrustGain = null;
@@ -2364,6 +2364,8 @@
       this.applyDifficultySettings();
 
       this.soundFx = new SoundFX();
+      const savedSound = localStorage.getItem('spaceship_flight_sound');
+      this.soundFx.enabled = (savedSound === 'true'); // Default to false (muted)
       this.particles = new ParticleSystem();
       this.starfield = new Starfield(this.canvas);
       this.ship = new Spaceship(this.canvas, this.soundFx, this.particles);
@@ -2463,6 +2465,9 @@
         aiStatusVal: document.getElementById('aiStatusVal'),
         aiThreatDistVal: document.getElementById('aiThreatDistVal'),
         aiAimVal: document.getElementById('aiAimVal'),
+        aiThreatDetailVal: document.getElementById('aiThreatDetailVal'),
+        aiAimDetailVal: document.getElementById('aiAimDetailVal'),
+        aiShieldDetailVal: document.getElementById('aiShieldDetailVal'),
         exitAiBtn: document.getElementById('exitAiBtn'),
 
         rlTrainingHud: document.getElementById('rlTrainingHud'),
@@ -2574,6 +2579,12 @@
       }
 
       this.domElements.highScoreDisplay.textContent = this.highScore;
+      if (this.domElements.soundToggleBtn) {
+        this.domElements.soundToggleBtn.textContent = this.soundFx.enabled ? '🔊' : '🔇';
+      }
+      if (this.domElements.settingSound) {
+        this.domElements.settingSound.checked = this.soundFx.enabled;
+      }
       this.bindInputs();
       this.bindUI();
 
@@ -2856,13 +2867,21 @@
       this.domElements.soundToggleBtn.addEventListener('click', () => {
         this.soundFx.enabled = !this.soundFx.enabled;
         this.domElements.soundToggleBtn.textContent = this.soundFx.enabled ? '🔊' : '🔇';
-        this.domElements.settingSound.checked = this.soundFx.enabled;
+        if (this.domElements.settingSound) this.domElements.settingSound.checked = this.soundFx.enabled;
+        try {
+          localStorage.setItem('spaceship_flight_sound', this.soundFx.enabled.toString());
+        } catch (e) { }
       });
 
-      this.domElements.settingSound.addEventListener('change', (e) => {
-        this.soundFx.enabled = e.target.checked;
-        this.domElements.soundToggleBtn.textContent = this.soundFx.enabled ? '🔊' : '🔇';
-      });
+      if (this.domElements.settingSound) {
+        this.domElements.settingSound.addEventListener('change', (e) => {
+          this.soundFx.enabled = e.target.checked;
+          this.domElements.soundToggleBtn.textContent = this.soundFx.enabled ? '🔊' : '🔇';
+          try {
+            localStorage.setItem('spaceship_flight_sound', this.soundFx.enabled.toString());
+          } catch (e) { }
+        });
+      }
 
       // Ship Selection
       const updateShipChoice = (skin) => {
@@ -3129,6 +3148,10 @@
       this.soundFx.init();
       this.soundFx.resume();
       this.soundFx.stopThrust(true);
+      // Explicitly mute audio during training so high-speed multi-tick training produces zero noise
+      this.soundFx.enabled = false;
+      if (this.domElements.soundToggleBtn) this.domElements.soundToggleBtn.textContent = '🔇';
+      if (this.domElements.settingSound) this.domElements.settingSound.checked = false;
       this.keys.up = false;
       this.hideModals();
       this.domElements.startScreen.classList.remove('active');
@@ -3789,13 +3812,26 @@
       if (this.rlHudUpdateCounter % 4 === 0) {
         if (this.rlMode === 'trained' && this.lastStepDecision && this.domElements.aiTelemetryHud) {
           const t = this.lastStepDecision.telemetry || {};
-          if (this.domElements.aiStatusVal) this.domElements.aiStatusVal.textContent = t.status || 'PATROL / HUNT';
+          if (this.domElements.aiStatusVal) this.domElements.aiStatusVal.textContent = t.status || 'PATROL';
+          
+          // Normalized proximity in [0.00, 1.00] as defined in RL guide (1.0 = clear, 0.0 = impact)
+          const normDist = (typeof t.normalizedDist === 'number') ? t.normalizedDist : 1.0;
           if (this.domElements.aiThreatDistVal) {
-            this.domElements.aiThreatDistVal.textContent = (t.closestDist < 900) ? `${Math.round(t.closestDist)} px` : 'CLEAR';
+            this.domElements.aiThreatDistVal.textContent = normDist.toFixed(2);
+            this.domElements.aiThreatDistVal.style.color = (normDist < 0.25) ? '#f43f5e' : (normDist < 0.5) ? '#facc15' : '#38bdf8';
           }
           if (this.domElements.aiAimVal) {
             const alignPct = Math.max(0, Math.round((1 - Math.min(1, Math.abs(t.aimError || 0))) * 100));
             this.domElements.aiAimVal.textContent = `${alignPct}%`;
+          }
+          if (this.domElements.aiThreatDetailVal) {
+            this.domElements.aiThreatDetailVal.textContent = `${normDist.toFixed(2)} (${normDist < 0.25 ? 'Critical' : normDist < 0.5 ? 'Elevated' : 'Clear'})`;
+          }
+          if (this.domElements.aiAimDetailVal) {
+            this.domElements.aiAimDetailVal.textContent = `${(t.aimError || 0).toFixed(3)} rad`;
+          }
+          if (this.domElements.aiShieldDetailVal) {
+            this.domElements.aiShieldDetailVal.textContent = t.shieldReady ? 'Armed & Ready' : 'Charging';
           }
         } else if (this.rlMode === 'training' && this.rlAgent && this.domElements.rlTrainingHud) {
           if (this.domElements.rlEpVal) this.domElements.rlEpVal.textContent = this.rlAgent.episodes + 1;

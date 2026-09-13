@@ -24,6 +24,7 @@
    - [4.4 Spaceship Kinematics & The Angle Discontinuity Problem](#44-spaceship-kinematics--the-angle-discontinuity-problem)
    - [4.5 Weapons, Shield Capacitors, & Defensive States](#45-weapons-shield-capacitors--defensive-states)
    - [4.6 Inductive Biases & Targeting Aids](#46-inductive-biases--targeting-aids)
+   - [4.7 Production In-Browser Architecture: The 32-Dimensional State Vector (`rl_agent.js`)](#47-production-in-browser-architecture-the-32-dimensional-state-vector-rl_agentjs)
 5. [Action Space Design & Kinematic Execution](#5-action-space-design--kinematic-execution)
 6. [Reward Function Engineering & Credit Assignment](#6-reward-function-engineering--credit-assignment)
    - [6.1 The Danger of Reward Hacking](#61-the-danger-of-reward-hacking)
@@ -400,6 +401,45 @@ You can accelerate learning by orders of magnitude by providing two simple geome
    Using the collision math derived in Section 16 of the Arcade AI Guide:
    $$t_{\text{CPA}} = -\frac{\vec{r}_{\text{rel}} \cdot \vec{v}_{\text{rel}}}{\|\vec{v}_{\text{rel}}\|^2}$$
    If $t_{\text{CPA}} > 0$ and $d_{\text{min}} < r_{\text{ship}} + r_{\text{rock}}$, a collision is guaranteed within $t_{\text{CPA}}$ seconds unless the ship burns thrust immediately!
+
+---
+
+### 4.7 Production In-Browser Architecture: The 32-Dimensional State Vector (`rl_agent.js`)
+
+In the live web implementation (`rl_agent.js`), to enable fast $600\text{ Hz}$ in-browser CPU simulation (10x turbo mode) without frame drops, we engineered an optimal **32-dimensional continuous state vector** $\mathbf{s}_t \in [-1, 1]^{32}$.
+
+Every feature is strictly normalized and dimensionless—**no raw pixel coordinates are ever fed to the policy network**:
+
+| Feature Index | Symbol / Code | Normalized Range | Description |
+| :--- | :--- | :--- | :--- |
+| **`obs[0]`** | $v_{x,\text{ship}} / v_{\max}$ | $[-1.0, 1.0]$ | Ship horizontal velocity ($v_{\max} = 6.0\text{ px/tick}$) |
+| **`obs[1]`** | $v_{y,\text{ship}} / v_{\max}$ | $[-1.0, 1.0]$ | Ship vertical velocity ($v_{\max} = 6.0\text{ px/tick}$) |
+| **`obs[2]`** | $\cos\theta$ | $[-1.0, 1.0]$ | Heading direction cosine (continuous orientation) |
+| **`obs[3]`** | $\sin\theta$ | $[-1.0, 1.0]$ | Heading direction sine (continuous orientation) |
+| **`obs[4]`** | $E_{\text{ammo}} / 100$ | $[0.0, 1.0]$ | Weapon Battery / Shared Reactor energy level |
+| **`obs[5]`** | $E_{\text{shield}} / 100$ | $[0.0, 1.0]$ | Dedicated Shield Capacitor charge (in Dual / Shield-Only modes) |
+| **`obs[6]`** | $t_{\text{invincible}} / 150$ | $[0.0, 1.0]$ | Remaining forcefield duration ($150\text{ ticks} = 2.5\text{s}$) |
+| **`obs[7]`** | $x_{\text{ufo,body}} / (W/2)$ | $[-1.0, 1.0]$ | Alien saucer relative position (Forward axis) |
+| **`obs[8]`** | $y_{\text{ufo,body}} / (H/2)$ | $[-1.0, 1.0]$ | Alien saucer relative position (Starboard axis) |
+| **`obs[9]`** | $v_{x,\text{ufo,body}} / 6.0$ | $[-1.0, 1.0]$ | Alien saucer relative closing velocity (Forward axis) |
+| **`obs[10]`** | $v_{y,\text{ufo,body}} / 6.0$ | $[-1.0, 1.0]$ | Alien saucer relative closing velocity (Starboard axis) |
+| **`obs[11]`** | $\mathbb{I}_{\text{ufo\_alive}}$ | $\{0.0, 1.0\}$ | Flag indicating if alien UFO is active on screen |
+| **`obs[12..16]`** | Asteroid 1 ($\text{Rock}_1$) | $[-1.0, 1.0]$ | Nearest rock: $[x_{\text{body}}/(W/2), \; y_{\text{body}}/(H/2), \; v_{x,\text{body}}/6.0, \; v_{y,\text{body}}/6.0, \; r/36.0]$ |
+| **`obs[17..21]`** | Asteroid 2 ($\text{Rock}_2$) | $[-1.0, 1.0]$ | 2nd nearest rock kinematics in egocentric body frame |
+| **`obs[22..26]`** | Asteroid 3 ($\text{Rock}_3$) | $[-1.0, 1.0]$ | 3rd nearest rock kinematics in egocentric body frame |
+| **`obs[27]`** | $\Delta\psi_{\text{aim}} / \pi$ | $[-1.0, 1.0]$ | Aim error angle to primary target ($0.0 = \text{dead center nose lock}$) |
+| **`obs[28]`** | $d_{\text{threat}} / (W/2)$ | $[0.0, 1.0]$ | Normalized distance to closest threat ($1.0 = \text{clear}$, $0.0 = \text{impact}$) |
+| **`obs[29]`** | $\mathbb{I}_{\text{danger}}$ | $\{0.0, 1.0\}$ | Imminent collision hazard alert flag ($d_{\text{threat}} < 1.8 \times \text{width}$) |
+| **`obs[30]`** | $\mathbb{I}_{\text{shield\_ready}}$ | $\{0.0, 1.0\}$ | **Power Mode Invariant Shield Readiness** ($1.0$ if shield deployable now) |
+| **`obs[31]`** | $N_{\text{bullets}} / 10.0$ | $[0.0, 1.0]$ | Active friendly laser projectile density |
+
+#### Power Mode Invariance:
+By providing $\mathbb{I}_{\text{shield\_ready}}$ (`obs[30]`) alongside battery levels, the agent does not need three separate neural network models for **Shared Reactor**, **Dual Capacitors**, and **Unlimited Ammo**:
+- In **Shared Reactor**: $\mathbb{I}_{\text{shield\_ready}} = 1$ when $E \ge 50\%$.
+- In **Dual Capacitors**: $\mathbb{I}_{\text{shield\_ready}} = 1$ when $E_{\text{shield}} \ge 100\%$.
+- In **Unlimited Ammo**: $\mathbb{I}_{\text{shield\_ready}} = 1$ when $E_{\text{shield}} \ge 100\%$, and weapon battery (`obs[4]`) stays locked at $1.0$.
+
+The policy learns a single generalizable rule: `if danger > 0 and shield_ready == 1: deploy_shield()`, which succeeds across all three game modes identically.
 
 ---
 
