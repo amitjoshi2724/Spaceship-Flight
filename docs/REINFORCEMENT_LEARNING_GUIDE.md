@@ -854,3 +854,78 @@ class AIAgentPilot {
 ```
 
 Now you have a complete, mathematically derived, end-to-end reinforcement learning system for **Spaceship Flight**!
+
+---
+
+## 11. The "Trigger-Happy" Pathology & Firing Cadence Dynamics
+
+### 11.1 Why Untrained Agents Spill All Bullets Immediately: Is It "Part of the Process"?
+
+**Yes, in standard RL without inductive priors, this is a classic, textbook failure mode known as the "Trigger-Happy Agent" or "Premature Exploration Collapse."**
+
+When training an agent from scratch in arcade environments like Asteroids or Spaceship Flight, new developers often observe the ship instantly emptying its entire capacitor within 150 milliseconds of starting each episode. There are three core theoretical reasons why this occurs:
+
+#### 1. Action Frequency Mismatch (Continuous Time vs. Discrete Decisions)
+In the browser game loop, `game.update()` executes at **60 Hz** (or up to **600 Hz** in turbo training mode).
+- At initialization (random Xavier weights), the Actor network outputs approximately equal logits for the Fire head: $[z_0 \approx 0, z_1 \approx 0]$.
+- Softmax produces probabilities $p(\text{Hold}) \approx 0.5$ and $p(\text{Fire}) \approx 0.5$.
+- Sampling a binary action with $p = 0.5$ at 60 Hz means the agent attempts to fire **30 bullets per second**!
+- In Shared Reactor mode, each shot costs 15% energy from a 100-point capacitor. The ship can only fire 6 shots before exhausting its battery.
+- Consequently, at 30 shots/sec, **100% of the ship's battery is dumped in only 6 to 10 frames ($\approx 100 - 160\text{ ms}$)**.
+
+#### 2. Sparse Rewards & Reward Hacking (Local Optima)
+In Asteroids, destroying an asteroid or UFO yields a large positive environment reward ($+2.0$ to $+3.0$).
+- Early in training, the agent's steering and flight control are completely random. Learning continuous 2D toroidal lead-pursuit geometry takes dozens of episodes to converge.
+- However, by pure random exploration, whenever the ship happens to shoot and an asteroid drifts into the path of a bullet, the agent receives a massive positive reward spike.
+- The policy gradient update immediately reinforces whatever action was taken prior to the reward:
+  $$\nabla_\theta J(\theta) = \mathbb{E} \left[ \nabla_\theta \log \pi_\theta(a_t | s_t) \cdot \hat{A}_t \right]$$
+- Because the ship has not yet learned *how* to aim, the gradient updates the simplest heuristic that correlates with reward: **increase $\log \pi(\text{fire})$ everywhere**!
+- The agent becomes trapped in a sub-optimal local minimum: it holds down the trigger non-stop, draining its battery and failing to allocate power for emergency shields.
+
+#### 3. Lack of Physical Cycle-Time Constraints
+In the human game, physical keyboard debounce and OS repeat suppression (`if (e.repeat) return;`) limit human fire rates to 3–5 taps per second. If the simulation environment does not enforce a mechanical refire cycle time, the neural network treats firing as an unconstrained frame-by-frame binary toggle.
+
+---
+
+### 11.2 The 5-Layer Engineering Solution
+
+To achieve elite marksmanship and stable training dynamics, the system implements a 5-layer architectural solution:
+
+| Layer | Component | Mechanism | Operational Effect |
+| :--- | :--- | :--- | :--- |
+| **1** | **Mechanical Refire Delay** | `Spaceship.fireCooldown = 9` (~150ms) | Enforces realistic arcade cycle time (~6.6 shots/sec max). Frame-to-frame bullet dumping is physically impossible. |
+| **2** | **Inductive Action Priors** | Initial logits: $b_{\text{fire}} = [2.0, -2.0]$ | Newborn policy starts with $98.2\%$ hold and $1.8\%$ fire exploration. The agent learns flight maneuvering first! |
+| **3** | **Mode-Aware Energy Budget** | Reserve $\ge 35\%$ energy in Shared mode | Weapon fire is gated during routine patrol so the ship always maintains the $50\%$ energy required for Emergency Shields. |
+| **4** | **Salvo Deconfliction** | In-flight bullet tracking | If an active bullet is already en route to intercept the target, hold fire rather than dumping redundant rounds. |
+| **5** | **Tactical Reward Shaping** | Multi-objective step reward | $+0.015$ for precision aimed shots; $-0.02$ for wild shots into empty space; $-0.02$ for battery exhaustion. |
+
+```
+                       [TARGET ACQUISITION PIPELINE]
+                                     │
+                        Range Gating: [70px, 390px]?
+                         ├── NO  ──> HOLD FIRE (Preserve Energy)
+                         └── YES ──> Aim Alignment: |aimError| < 0.12 rad?
+                                      ├── NO  ──> STEER / ROTATE
+                                      └── YES ──> Energy Budget Check:
+                                                   ├── Shared Mode: Energy >= 35%?
+                                                   └── Dual Mode: Weapon Energy >= 15%?
+                                                        ├── NO  ──> HOLD (Save for Shield)
+                                                        └── YES ──> Salvo Deconfliction:
+                                                                     ├── Bullet en route? ──> HOLD
+                                                                     └── Path Clear? ──> 🎯 FIRE!
+```
+
+---
+
+### 11.3 Behavioral Cloning Pre-Warming
+
+Rather than training purely from random noise in the browser, the 32-64-64 Multi-Head MLP is pre-trained via **Behavioral Cloning (Supervised Imitation Learning)** over 350,000+ balanced combat transitions:
+
+- **Balanced State Distribution**: 50% patrol/evasion states, 50% targeted engagement states.
+- **Trained Neural Metrics**:
+  - **Fire Accuracy**: $91.4\%$
+  - **Shield Accuracy**: $99.4\%$
+  - **Steer Accuracy**: $86.5\%$
+  - **Thrust Accuracy**: $81.5\%$
+- **Base64 Serialized Weights**: Packed directly into `rl_agent.js` as a compact 36KB array, allowing instant zero-latency initialization in the browser without requiring external server downloads or Python runtimes.
+

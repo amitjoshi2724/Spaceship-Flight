@@ -892,6 +892,7 @@
       this.shieldEnergy = 100;
       this.maxShieldEnergy = 100;
       this.powerMode = 'shared'; // 'shared', 'dual', 'shield_only'
+      this.fireCooldown = 0; // Weapon refire delay (prevents machine-gun battery exhaustion)
       this.showStatusBars = false;
       this.scalePercent = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
       this.recalculateSize();
@@ -1030,6 +1031,7 @@
       this.invincibleTimer = 150; // ~2.5 seconds at 60fps
       this.energy = this.maxEnergy;
       this.shieldEnergy = this.maxShieldEnergy;
+      this.fireCooldown = 0;
       if (full) {
         this.lives = 3;
       }
@@ -1088,6 +1090,9 @@
     fire(bullets) {
       const COST_PER_SHOT = 15;
 
+      // Rate limit / shot cooldown: enforces deliberate cadence (9 frames = ~150ms cycle)
+      if (this.fireCooldown > 0) return false;
+
       // In shield_only mode or with unlimitedAmmo/unlimitedShield (God Mode), ammo is free
       if (this.powerMode !== 'shield_only' && !this.unlimitedAmmo && !this.unlimitedShield) {
         if (this.energy < COST_PER_SHOT) {
@@ -1096,6 +1101,8 @@
         }
         this.energy -= COST_PER_SHOT;
       }
+
+      this.fireCooldown = 9; // ~6.6 shots/second maximum (realistic arcade cadence)
 
       const rad = ((this.angle - 90) * Math.PI) / 180;
       const noseDist = this.height * 0.55;
@@ -1137,6 +1144,12 @@
       this.y += this.dy;
       this.dx *= 0.992;
       this.dy *= 0.992;
+
+      // Weapon refire cooldown decrement
+      if (this.fireCooldown > 0) {
+        this.fireCooldown -= (dtSeconds * 60);
+        if (this.fireCooldown < 0) this.fireCooldown = 0;
+      }
 
       // Battery & Shield Recharge Logic:
       // Paused while temporary emergency shield is active (forces post-shield recovery phase),
@@ -2364,8 +2377,10 @@
       this.applyDifficultySettings();
 
       this.soundFx = new SoundFX();
-      const savedSound = localStorage.getItem('spaceship_flight_sound');
-      this.soundFx.enabled = (savedSound === 'true'); // Default to false (muted)
+      this.soundFx.enabled = false; // Always default sound to OFF (muted)
+      try {
+        localStorage.setItem('spaceship_flight_sound', 'false');
+      } catch (_) { }
       this.particles = new ParticleSystem();
       this.starfield = new Starfield(this.canvas);
       this.ship = new Spaceship(this.canvas, this.soundFx, this.particles);
@@ -3108,6 +3123,10 @@
       this.soundFx.init();
       this.soundFx.resume();
       this.soundFx.stopThrust(true);
+      // Explicitly mute sound for AI play as requested
+      this.soundFx.enabled = false;
+      if (this.domElements.soundToggleBtn) this.domElements.soundToggleBtn.textContent = '🔇';
+      if (this.domElements.settingSound) this.domElements.settingSound.checked = false;
       this.keys.up = false;
       this.hideModals();
       this.domElements.startScreen.classList.remove('active');
@@ -3774,24 +3793,51 @@
           }
         }
 
-        // In RL Training Mode, calculate and record step reward
+        // In RL Training Mode, calculate and record step reward with tactical marksmanship & energy shaping
         if (this.rlMode === 'training' && this.rlAgent && this.lastStepDecision) {
-          let stepReward = 0.01; // Baseline survival reward
+          let stepReward = 0.005; // Modest baseline survival reward
           const scoreDelta = this.score - prevScore;
           if (scoreDelta > 0) {
-            stepReward += scoreDelta * 2.0; // Asteroid / UFO destruction reward
+            stepReward += scoreDelta * 3.0; // Significant reward for confirmed rock/UFO destruction
           }
-          if (this.lastStepDecision.telemetry) {
-            if (this.lastStepDecision.telemetry.closestDist < 75) {
-              stepReward -= 0.02; // Proximity hazard danger penalty
-            }
-            if (Math.abs(this.lastStepDecision.telemetry.aimError || 0) < 0.15) {
-              stepReward += 0.005; // Accurate cannon alignment incentive
+
+          const telem = this.lastStepDecision.telemetry || {};
+          const aimErr = Math.abs(telem.aimError || 0);
+          const closestDist = telem.closestDist || 999;
+
+          // Proximity hazard danger penalty
+          if (closestDist < 75) {
+            stepReward -= 0.025;
+          }
+
+          // Aim alignment incentive: reward pointing nose at target
+          if (aimErr < 0.10) {
+            stepReward += 0.01;
+          } else if (aimErr < 0.20) {
+            stepReward += 0.004;
+          }
+
+          // Firing discipline & energy budgeting
+          if (this.lastStepDecision.fire === 1) {
+            const consumesAmmo = (this.powerMode !== 'shield_only' && !this.ship.unlimitedAmmo && !this.ship.unlimitedShield);
+            if (consumesAmmo && this.ship.energy < 15) {
+              stepReward -= 0.03; // Dry fire / battery depleted penalty
+            } else if (consumesAmmo && this.powerMode === 'shared' && this.ship.energy < 35 && closestDist > 90) {
+              stepReward -= 0.02; // Recklessly draining capacitor below emergency shield reserve
+            } else if (aimErr > 0.30 || closestDist > 450) {
+              stepReward -= 0.02; // Wild shot: firing into empty space / extreme distance
+            } else if (aimErr < 0.12 && closestDist <= 380) {
+              stepReward += 0.015; // Tactical marksmanship: firing lined-up shot within effective envelope!
             }
           }
-          const consumesAmmo = (this.powerMode !== 'shield_only' && !this.ship.unlimitedAmmo && !this.ship.unlimitedShield);
-          if (this.lastStepDecision.fire === 1 && consumesAmmo && this.ship.energy < 15) {
-            stepReward -= 0.01; // Energy waste / dry fire penalty
+
+          // Shield discipline
+          if (this.lastStepDecision.shield === 1) {
+            if (closestDist < 95 || telem.danger) {
+              stepReward += 0.02; // Justified emergency shield deflection
+            } else {
+              stepReward -= 0.015; // Wasteful shield deployment with no immediate threat
+            }
           }
 
           this.rlAgent.recordStep(this.lastStepDecision, stepReward, false);
