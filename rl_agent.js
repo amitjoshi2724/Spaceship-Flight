@@ -172,7 +172,13 @@
       // --- Part D: Tactical Inductive Biases & Danger Metrics (5 features) ---
       const minThreatDist = Math.min(closestRockDist, ufoDist);
       const isCriticalDanger = minThreatDist < (ship.width * 1.8) ? 1.0 : 0.0;
-      const isShieldReady = (ship.energy >= 50 && (!ship.invincible || ship.unlimitedShield)) ? 1.0 : 0.0;
+
+      // Mode-aware shield deployment readiness (Shared: energy >= 50, Dual/Shield-Only: shieldEnergy >= 100)
+      const isDedicatedCapacitor = (game.powerMode === 'dual' || game.powerMode === 'shield_only');
+      const canShieldDeploy = ship.unlimitedShield || (!ship.invincible && (
+        isDedicatedCapacitor ? ship.shieldEnergy >= 100 : ship.energy >= 50
+      ));
+      const isShieldReady = canShieldDeploy ? 1.0 : 0.0;
 
       obs[27] = MathUtils.clamp(targetAimError, -1, 1); // Aim error to primary target
       obs[28] = MathUtils.clamp(minThreatDist / (W * 0.5), 0, 1); // Distance to closest threat
@@ -409,8 +415,14 @@
       }
 
       // 3. Immediate Emergency Shield Deployment
+      const isDedicatedCapacitor = (game.powerMode === 'dual' || game.powerMode === 'shield_only');
+      const canShieldDeploy = ship.unlimitedShield || (!ship.invincible && (
+        isDedicatedCapacitor ? ship.shieldEnergy >= 100 : ship.energy >= 50
+      ));
+      const canFire = (game.powerMode === 'shield_only' || ship.unlimitedAmmo || ship.unlimitedShield || ship.energy > 15);
+
       if (closest && closest.dist < (ship.width * 0.95 + closest.radius)) {
-        if (!ship.invincible && ship.energy >= 50) {
+        if (canShieldDeploy) {
           shieldAction = 1;
           telemetryStatus = "EMERGENCY SHIELD DEPLOYED";
         }
@@ -449,7 +461,7 @@
         }
 
         // Fire cannon when nose is closely aligned with lead trajectory
-        if (Math.abs(aimErrorRad) < 0.22 && ship.energy > 15) {
+        if (Math.abs(aimErrorRad) < 0.22 && canFire) {
           fireAction = 1;
         }
 

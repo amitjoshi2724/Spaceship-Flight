@@ -3766,7 +3766,8 @@
               stepReward += 0.005; // Accurate cannon alignment incentive
             }
           }
-          if (this.lastStepDecision.fire === 1 && this.ship.energy < 15) {
+          const consumesAmmo = (this.powerMode !== 'shield_only' && !this.ship.unlimitedAmmo && !this.ship.unlimitedShield);
+          if (this.lastStepDecision.fire === 1 && consumesAmmo && this.ship.energy < 15) {
             stepReward -= 0.01; // Energy waste / dry fire penalty
           }
 
