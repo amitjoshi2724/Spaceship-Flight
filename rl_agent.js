@@ -80,6 +80,19 @@
 
     clamp(val, min, max) {
       return Math.max(min, Math.min(max, val));
+    },
+
+    // Argmax: returns index of maximum element
+    argmax(arr) {
+      let maxIdx = 0;
+      let maxVal = arr[0];
+      for (let i = 1; i < arr.length; i++) {
+        if (arr[i] > maxVal) {
+          maxVal = arr[i];
+          maxIdx = i;
+        }
+      }
+      return maxIdx;
     }
   };
 
@@ -356,9 +369,11 @@
       obs[36] = isShieldReady;
       obs[37] = (game.bullets ? game.bullets.length : 0) / 10.0;
 
+      const normDist = MathUtils.clamp(minThreatDist / (W * 0.5), 0, 1);
       return {
         features: obs,
         closestDist: minThreatDist,
+        normalizedDist: normDist,
         aimError: targetAimError,
         isDanger: isCriticalDanger > 0
       };
@@ -784,22 +799,72 @@
       const obsData = FeatureExtractor.extract(game);
       const obs = obsData.features;
 
+      // Forward pass through 38-D Grandmaster Attention Actor-Critic network
+      const output = this.network.forward(obs);
+
       if (this.mode === 'play') {
-        // Execute pre-trained expert model
-        const decision = TrainedExpertModel.decide(game);
+        // Execute the trained neural network!
+        // Steer: greedy argmax (0: Port/Left, 1: Hold, 2: Starboard/Right)
+        const steer = MathUtils.argmax(output.steerProbs);
+        // Thrust: greedy argmax (0: Off, 1: On)
+        const thrust = MathUtils.argmax(output.thrustProbs);
+
+        // Marksmanship Cadence: prevents dumping all capacitor bullets in 10 frames
+        if (typeof this.shotCooldown !== 'number') this.shotCooldown = 0;
+        if (this.shotCooldown > 0) this.shotCooldown--;
+
+        let fire = 0;
+        // Fire when neural network fires (probability >= 0.22) and burst cooldown is ready
+        if (output.fireProbs[1] >= 0.22 && this.shotCooldown === 0) {
+          fire = 1;
+          this.shotCooldown = 10; // ~160ms burst cadence to maintain energy reserves
+        }
+
+        // Emergency Shield: deploy when network confidence is elevated (>= 0.35)
+        const shield = output.shieldProbs[1] >= 0.35 ? 1 : 0;
+
+        const isDedicatedCapacitor = (game.powerMode === 'dual' || game.powerMode === 'shield_only');
+        const canShieldDeploy = game.ship.unlimitedShield || (!game.ship.invincible && (
+          isDedicatedCapacitor ? game.ship.shieldEnergy >= 100 : game.ship.energy >= 50
+        ));
+
+        const steerLabels = ['PORT ⟲', 'HOLD ⬆', 'STARBOARD ⟳'];
+        let statusText = "🧠 38-D ATTENTION NN";
+        if (shield === 1) {
+          statusText = "SHIELD ACTIVE";
+        } else if (obsData.isDanger) {
+          statusText = "EVADING HAZARD";
+        } else if (fire === 1) {
+          statusText = "ENGAGING TARGET";
+        } else if (steer !== 1) {
+          statusText = `TRACKING (${steerLabels[steer]})`;
+        } else {
+          statusText = "PATROL (CLEAR)";
+        }
+
         return {
-          steer: decision.steer,
-          thrust: decision.thrust,
-          fire: decision.fire,
-          shield: decision.shield,
-          telemetry: decision
+          steer,
+          thrust,
+          fire,
+          shield,
+          obs,
+          value: output.value,
+          telemetry: {
+            status: statusText,
+            closestDist: obsData.closestDist,
+            normalizedDist: obsData.normalizedDist,
+            aimError: obsData.aimError,
+            danger: obsData.isDanger,
+            shieldReady: canShieldDeploy,
+            steerConf: Math.round(output.steerProbs[steer] * 100),
+            thrustConf: Math.round(output.thrustProbs[thrust] * 100),
+            fireConf: Math.round(output.fireProbs[1] * 100),
+            shieldConf: Math.round(output.shieldProbs[1] * 100)
+          }
         };
       }
 
-      // In Training mode: forward pass through Actor-Critic network
-      const output = this.network.forward(obs);
-
-      // Sample actions according to policy probability distributions
+      // In Training mode: sample actions according to policy probability distributions
       const steer = MathUtils.sampleCategorical(output.steerProbs);
       const thrust = MathUtils.sampleCategorical(output.thrustProbs);
       const fire = MathUtils.sampleCategorical(output.fireProbs);
@@ -822,6 +887,7 @@
         telemetry: {
           status: `TRAINING EPISODE #${this.episodes + 1}`,
           closestDist: obsData.closestDist,
+          normalizedDist: obsData.normalizedDist,
           aimError: obsData.aimError,
           danger: obsData.isDanger
         }
