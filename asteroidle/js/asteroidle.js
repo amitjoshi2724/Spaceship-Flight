@@ -221,26 +221,39 @@ export class AsteroidleEngine {
             });
         }
 
-        // Spawn position along arena perimeter
-        const offset = 30;
-        let startX, startY;
-        if (ch.side === 0) { // Left
-            startX = -this.rock.radius - offset;
-            startY = ch.sidePos * H;
-        } else if (ch.side === 1) { // Top
-            startX = ch.sidePos * W;
-            startY = -this.rock.radius - offset;
-        } else if (ch.side === 2) { // Right
-            startX = W + this.rock.radius + offset;
-            startY = ch.sidePos * H;
-        } else { // Bottom
-            startX = ch.sidePos * W;
-            startY = H + this.rock.radius + offset;
+        // Spawn position: support arbitrary origins (center, interior quadrants, or perimeter)
+        let startX, startY, moveAngle;
+        if (ch.startX !== undefined && ch.startY !== undefined) {
+            startX = ch.startX * W;
+            startY = ch.startY * H;
+            if (ch.moveAngle !== undefined) {
+                moveAngle = ch.moveAngle;
+            } else if (ch.targetX !== undefined && ch.targetY !== undefined) {
+                moveAngle = Math.atan2(ch.targetY * H - startY, ch.targetX * W - startX);
+            } else {
+                moveAngle = Math.random() * Math.PI * 2;
+            }
+        } else {
+            // Legacy perimeter edge spawn fallback
+            const offset = 30;
+            if (ch.side === 0) { // Left
+                startX = -this.rock.radius - offset;
+                startY = ch.sidePos * H;
+            } else if (ch.side === 1) { // Top
+                startX = ch.sidePos * W;
+                startY = -this.rock.radius - offset;
+            } else if (ch.side === 2) { // Right
+                startX = W + this.rock.radius + offset;
+                startY = ch.sidePos * H;
+            } else { // Bottom
+                startX = ch.sidePos * W;
+                startY = H + this.rock.radius + offset;
+            }
+            const targetX = ch.targetX * W;
+            const targetY = ch.targetY * H;
+            moveAngle = Math.atan2(targetY - startY, targetX - startX);
         }
 
-        const targetX = ch.targetX * W;
-        const targetY = ch.targetY * H;
-        const moveAngle = Math.atan2(targetY - startY, targetX - startX);
         const speedMagnitude = (2.2 * ch.speed) * (W / 800);
 
         this.rock.x = startX;

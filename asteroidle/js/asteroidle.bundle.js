@@ -75,16 +75,44 @@
     for (let round = 1; round <= 5; round++) {
       const shapeIndex = shapes[round - 1];
       const baseRadius = 18 + rng() * 18;
-      const speed = 0.85 + rng() * 0.55;
+      const speed = 0.85 + rng() * 0.5;
       const rotSpeed = (rng() - 0.5) * 0.07;
       const tierPool = [2, 3, 4, 1, 5];
       const bulletTier = tierPool[(round - 1) % tierPool.length];
-      const side = Math.floor(rng() * 4);
-      const sidePos = 0.15 + rng() * 0.7;
-      const targetX = 0.25 + rng() * 0.5;
-      const targetY = 0.25 + rng() * 0.5;
-      const shipX = 0.2 + rng() * 0.6;
-      const shipY = 0.2 + rng() * 0.6;
+      let startX, startY, moveAngle;
+      if (round === 1) {
+        startX = 0.42 + rng() * 0.16;
+        startY = 0.42 + rng() * 0.16;
+        moveAngle = rng() * Math.PI * 2;
+      } else if (round === 2) {
+        startX = 0.2 + rng() * 0.6;
+        startY = 0.18 + rng() * 0.22;
+        moveAngle = (0.2 + rng() * 0.6) * Math.PI;
+      } else if (round === 3) {
+        const fromLeft = rng() < 0.5;
+        startX = fromLeft ? 0.15 + rng() * 0.15 : 0.7 + rng() * 0.15;
+        startY = 0.35 + rng() * 0.3;
+        moveAngle = fromLeft ? (rng() - 0.5) * 0.8 : Math.PI + (rng() - 0.5) * 0.8;
+      } else if (round === 4) {
+        startX = 0.22 + rng() * 0.56;
+        startY = 0.6 + rng() * 0.22;
+        moveAngle = (1.2 + rng() * 0.6) * Math.PI;
+      } else {
+        startX = 0.18 + rng() * 0.64;
+        startY = 0.18 + rng() * 0.64;
+        moveAngle = rng() * Math.PI * 2;
+      }
+      let shipX, shipY;
+      let attempts = 0;
+      do {
+        shipX = 0.18 + rng() * 0.64;
+        shipY = 0.18 + rng() * 0.64;
+        attempts++;
+      } while (Math.hypot(shipX - startX, shipY - startY) < 0.32 && attempts < 20);
+      if (Math.hypot(shipX - startX, shipY - startY) < 0.32) {
+        shipX = startX > 0.5 ? startX - 0.35 : startX + 0.35;
+        shipY = startY > 0.5 ? startY - 0.35 : startY + 0.35;
+      }
       challenges.push({
         round,
         shapeIndex,
@@ -92,10 +120,9 @@
         speed,
         rotSpeed,
         bulletTier,
-        side,
-        sidePos,
-        targetX,
-        targetY,
+        startX,
+        startY,
+        moveAngle,
         shipX,
         shipY,
         initialHeading: Math.floor(rng() * 360)
@@ -252,17 +279,18 @@
       const displayName = user.displayName || user.email || "Cadet";
       authContainer.innerHTML = `
             <div class="user-auth-widget">
-                <div id="user-info-btn" class="user-profile-badge" tabindex="0" aria-haspopup="true" aria-expanded="false">
+                <button id="user-info-btn" class="user-profile-badge" aria-haspopup="true" aria-expanded="false">
                     <img id="user-avatar" src="${photoUrl}" alt="${displayName}" class="user-avatar-img">
                     <span id="user-display-name" class="user-display-name">${displayName}</span>
                     <span class="dropdown-caret">\u25BC</span>
-                </div>
+                </button>
                 <div id="identity-dropdown" class="user-dropdown-menu">
-                    <div class="dropdown-header">
-                        <span class="account-title">PILOT PROFILE</span>
-                        <span class="user-email-subtitle">${user.email || ""}</span>
+                    <div class="account-title">Current Account</div>
+                    <hr class="account-divider">
+                    <div class="account-email-row">
+                        <strong>Google:</strong> <span class="user-email-text">${user.email || ""}</span>
                     </div>
-                    <button id="signout-btn" class="dropdown-item signout-btn">Sign Out</button>
+                    <button id="signout-btn" class="account-signout-btn">Sign Out</button>
                 </div>
             </div>
         `;
@@ -284,7 +312,10 @@
         });
       }
       if (signoutBtn) {
-        signoutBtn.addEventListener("click", signOutUser);
+        signoutBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          signOutUser();
+        });
       }
     }
   }
@@ -699,24 +730,36 @@
           y: (chosen.y[i] - avgY) * this.rock.scale * 1.5
         });
       }
-      const offset = 30;
-      let startX, startY;
-      if (ch.side === 0) {
-        startX = -this.rock.radius - offset;
-        startY = ch.sidePos * H;
-      } else if (ch.side === 1) {
-        startX = ch.sidePos * W;
-        startY = -this.rock.radius - offset;
-      } else if (ch.side === 2) {
-        startX = W + this.rock.radius + offset;
-        startY = ch.sidePos * H;
+      let startX, startY, moveAngle;
+      if (ch.startX !== void 0 && ch.startY !== void 0) {
+        startX = ch.startX * W;
+        startY = ch.startY * H;
+        if (ch.moveAngle !== void 0) {
+          moveAngle = ch.moveAngle;
+        } else if (ch.targetX !== void 0 && ch.targetY !== void 0) {
+          moveAngle = Math.atan2(ch.targetY * H - startY, ch.targetX * W - startX);
+        } else {
+          moveAngle = Math.random() * Math.PI * 2;
+        }
       } else {
-        startX = ch.sidePos * W;
-        startY = H + this.rock.radius + offset;
+        const offset = 30;
+        if (ch.side === 0) {
+          startX = -this.rock.radius - offset;
+          startY = ch.sidePos * H;
+        } else if (ch.side === 1) {
+          startX = ch.sidePos * W;
+          startY = -this.rock.radius - offset;
+        } else if (ch.side === 2) {
+          startX = W + this.rock.radius + offset;
+          startY = ch.sidePos * H;
+        } else {
+          startX = ch.sidePos * W;
+          startY = H + this.rock.radius + offset;
+        }
+        const targetX = ch.targetX * W;
+        const targetY = ch.targetY * H;
+        moveAngle = Math.atan2(targetY - startY, targetX - startX);
       }
-      const targetX = ch.targetX * W;
-      const targetY = ch.targetY * H;
-      const moveAngle = Math.atan2(targetY - startY, targetX - startX);
       const speedMagnitude = 2.2 * ch.speed * (W / 800);
       this.rock.x = startX;
       this.rock.y = startY;
@@ -1288,6 +1331,40 @@
       }
       this.challenges = [];
       for (let r = 1; r <= 5; r++) {
+        let startX, startY, moveAngle;
+        if (r === 1) {
+          startX = 0.42 + rng() * 0.16;
+          startY = 0.42 + rng() * 0.16;
+          moveAngle = rng() * Math.PI * 2;
+        } else if (r === 2) {
+          startX = 0.2 + rng() * 0.6;
+          startY = 0.18 + rng() * 0.22;
+          moveAngle = (0.2 + rng() * 0.6) * Math.PI;
+        } else if (r === 3) {
+          const fromLeft = rng() < 0.5;
+          startX = fromLeft ? 0.15 + rng() * 0.15 : 0.7 + rng() * 0.15;
+          startY = 0.35 + rng() * 0.3;
+          moveAngle = fromLeft ? (rng() - 0.5) * 0.8 : Math.PI + (rng() - 0.5) * 0.8;
+        } else if (r === 4) {
+          startX = 0.22 + rng() * 0.56;
+          startY = 0.6 + rng() * 0.22;
+          moveAngle = (1.2 + rng() * 0.6) * Math.PI;
+        } else {
+          startX = 0.18 + rng() * 0.64;
+          startY = 0.18 + rng() * 0.64;
+          moveAngle = rng() * Math.PI * 2;
+        }
+        let shipX, shipY;
+        let attempts = 0;
+        do {
+          shipX = 0.18 + rng() * 0.64;
+          shipY = 0.18 + rng() * 0.64;
+          attempts++;
+        } while (Math.hypot(shipX - startX, shipY - startY) < 0.32 && attempts < 20);
+        if (Math.hypot(shipX - startX, shipY - startY) < 0.32) {
+          shipX = startX > 0.5 ? startX - 0.35 : startX + 0.35;
+          shipY = startY > 0.5 ? startY - 0.35 : startY + 0.35;
+        }
         this.challenges.push({
           round: r,
           shapeIndex: shapes[r - 1],
@@ -1295,12 +1372,11 @@
           speed: 0.9 + rng() * 0.5,
           rotSpeed: (rng() - 0.5) * 0.06,
           bulletTier: 3,
-          side: Math.floor(rng() * 4),
-          sidePos: 0.2 + rng() * 0.6,
-          targetX: 0.3 + rng() * 0.4,
-          targetY: 0.3 + rng() * 0.4,
-          shipX: 0.25 + rng() * 0.5,
-          shipY: 0.25 + rng() * 0.5,
+          startX,
+          startY,
+          moveAngle,
+          shipX,
+          shipY,
           initialHeading: Math.floor(rng() * 360)
         });
       }

@@ -389,3 +389,183 @@
     font-size: 10px;
   }
 }
+
+/* ==========================================================================
+   Google Auth Widget & Account Dropdown (Exact Match to User Specs)
+   ========================================================================== */
+.auth-pill-container {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.google-btn {
+  height: 32px;
+  padding: 0 10px;
+  background: #f1f3f4;
+  color: #111827;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.google-btn:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.user-auth-widget {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Compact pill matching user screenshot and other HUD buttons */
+.user-profile-badge {
+  height: 32px;
+  padding: 0 10px;
+  background: #ececec;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  color: #111827;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.user-profile-badge:hover,
+.user-profile-badge:focus-visible {
+  background: #e2e8f0;
+  border-color: #9ca3af;
+}
+
+/* Profile thumbnail strictly matching button height */
+.user-avatar-img {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  max-width: 20px;
+  max-height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.user-display-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.dropdown-caret {
+  font-size: 8.5px;
+  color: #111827;
+  margin-left: 2px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Dropdown popover matching user screenshot */
+.user-dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 260px;
+  max-width: 320px;
+  background: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 14px 16px;
+  z-index: 100;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.user-dropdown-menu.active {
+  display: flex;
+  flex-direction: column;
+}
+
+.account-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #000000;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  letter-spacing: -0.2px;
+  margin: 0;
+}
+
+.account-divider {
+  border: 0;
+  border-top: 1.5px solid #000000;
+  margin: 6px 0 10px 0;
+  width: 100%;
+}
+
+.account-email-row {
+  font-size: 13px;
+  color: #111827;
+  margin-bottom: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.account-email-row strong {
+  font-weight: 700;
+  color: #000000;
+}
+
+.user-email-text {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+/* Red Sign Out button matching user screenshot */
+.account-signout-btn {
+  background: #dc2626;
+  border: 2px solid #000000;
+  border-radius: 6px;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 7px 16px;
+  cursor: pointer;
+  width: 100%;
+  text-align: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.account-signout-btn:hover {
+  background: #b91c1c;
+}
+
+.account-signout-btn:active {
+  transform: scale(0.98);
+}
+

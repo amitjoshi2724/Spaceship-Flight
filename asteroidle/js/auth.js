@@ -138,17 +138,18 @@ export function renderAuthUI(user) {
 
         authContainer.innerHTML = `
             <div class="user-auth-widget">
-                <div id="user-info-btn" class="user-profile-badge" tabindex="0" aria-haspopup="true" aria-expanded="false">
+                <button id="user-info-btn" class="user-profile-badge" aria-haspopup="true" aria-expanded="false">
                     <img id="user-avatar" src="${photoUrl}" alt="${displayName}" class="user-avatar-img">
                     <span id="user-display-name" class="user-display-name">${displayName}</span>
                     <span class="dropdown-caret">▼</span>
-                </div>
+                </button>
                 <div id="identity-dropdown" class="user-dropdown-menu">
-                    <div class="dropdown-header">
-                        <span class="account-title">PILOT PROFILE</span>
-                        <span class="user-email-subtitle">${user.email || ''}</span>
+                    <div class="account-title">Current Account</div>
+                    <hr class="account-divider">
+                    <div class="account-email-row">
+                        <strong>Google:</strong> <span class="user-email-text">${user.email || ''}</span>
                     </div>
-                    <button id="signout-btn" class="dropdown-item signout-btn">Sign Out</button>
+                    <button id="signout-btn" class="account-signout-btn">Sign Out</button>
                 </div>
             </div>
         `;
@@ -174,7 +175,10 @@ export function renderAuthUI(user) {
         }
 
         if (signoutBtn) {
-            signoutBtn.addEventListener('click', signOutUser);
+            signoutBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                signOutUser();
+            });
         }
     }
 }

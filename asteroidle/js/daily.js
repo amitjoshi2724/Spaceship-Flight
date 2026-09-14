@@ -170,6 +170,48 @@ export class DailyManager {
 
         this.challenges = [];
         for (let r = 1; r <= 5; r++) {
+            let startX, startY, moveAngle;
+            if (r === 1) {
+                // Middle origin
+                startX = 0.42 + rng() * 0.16;
+                startY = 0.42 + rng() * 0.16;
+                moveAngle = rng() * Math.PI * 2;
+            } else if (r === 2) {
+                // Upper interior
+                startX = 0.20 + rng() * 0.60;
+                startY = 0.18 + rng() * 0.22;
+                moveAngle = (0.2 + rng() * 0.6) * Math.PI;
+            } else if (r === 3) {
+                // Mid-flank cross
+                const fromLeft = rng() < 0.5;
+                startX = fromLeft ? (0.15 + rng() * 0.15) : (0.70 + rng() * 0.15);
+                startY = 0.35 + rng() * 0.30;
+                moveAngle = fromLeft ? ((rng() - 0.5) * 0.8) : (Math.PI + (rng() - 0.5) * 0.8);
+            } else if (r === 4) {
+                // Lower interior
+                startX = 0.22 + rng() * 0.56;
+                startY = 0.60 + rng() * 0.22;
+                moveAngle = (1.2 + rng() * 0.6) * Math.PI;
+            } else {
+                // Anywhere in field
+                startX = 0.18 + rng() * 0.64;
+                startY = 0.18 + rng() * 0.64;
+                moveAngle = rng() * Math.PI * 2;
+            }
+
+            let shipX, shipY;
+            let attempts = 0;
+            do {
+                shipX = 0.18 + rng() * 0.64;
+                shipY = 0.18 + rng() * 0.64;
+                attempts++;
+            } while (Math.hypot(shipX - startX, shipY - startY) < 0.32 && attempts < 20);
+
+            if (Math.hypot(shipX - startX, shipY - startY) < 0.32) {
+                shipX = startX > 0.5 ? startX - 0.35 : startX + 0.35;
+                shipY = startY > 0.5 ? startY - 0.35 : startY + 0.35;
+            }
+
             this.challenges.push({
                 round: r,
                 shapeIndex: shapes[r - 1],
@@ -177,12 +219,11 @@ export class DailyManager {
                 speed: 0.9 + rng() * 0.5,
                 rotSpeed: (rng() - 0.5) * 0.06,
                 bulletTier: 3,
-                side: Math.floor(rng() * 4),
-                sidePos: 0.2 + rng() * 0.6,
-                targetX: 0.3 + rng() * 0.4,
-                targetY: 0.3 + rng() * 0.4,
-                shipX: 0.25 + rng() * 0.5,
-                shipY: 0.25 + rng() * 0.5,
+                startX,
+                startY,
+                moveAngle,
+                shipX,
+                shipY,
                 initialHeading: Math.floor(rng() * 360)
             });
         }
