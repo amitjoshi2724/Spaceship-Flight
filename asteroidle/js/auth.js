@@ -1,38 +1,64 @@
 /**
  * Asteroidle - Firebase Authentication Module
  * Handles Google Sign-In, Sign-Out, and Auth State subscriptions.
+ * Supports file:// protocol and offline gameplay with graceful local fallback.
  */
-import { auth, googleProvider } from './firebase-config.js';
-import { 
-    signInWithPopup, 
-    signOut, 
-    onAuthStateChanged 
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { initFirebase } from './firebase-config.js';
+
+let firebaseAuth = null;
+let firebaseProvider = null;
+let authFns = null;
 
 const authListeners = new Set();
 let currentAuthUser = null;
 let isInitialized = false;
 
-// Track Auth State changes
-onAuthStateChanged(auth, (user) => {
-    currentAuthUser = user;
-    isInitialized = true;
-    renderAuthUI(user);
-    authListeners.forEach(cb => {
-        try {
-            cb(user);
-        } catch (e) {
-            console.error("Error in auth listener:", e);
+// Initialize Firebase Auth if running on http/https
+(async () => {
+    try {
+        const fb = await initFirebase();
+        if (fb && fb.auth) {
+            firebaseAuth = fb.auth;
+            firebaseProvider = fb.googleProvider;
+            authFns = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
+
+            authFns.onAuthStateChanged(firebaseAuth, (user) => {
+                currentAuthUser = user;
+                isInitialized = true;
+                renderAuthUI(user);
+                authListeners.forEach(cb => {
+                    try {
+                        cb(user);
+                    } catch (e) {
+                        console.error("Error in auth listener:", e);
+                    }
+                });
+            });
+            return;
         }
-    });
-});
+    } catch (e) {
+        console.warn("Firebase Auth unavailable:", e);
+    }
+
+    isInitialized = true;
+    renderAuthUI(null);
+})();
 
 /**
  * Sign in using Google Popup
  */
 export async function signInWithGoogle() {
+    if (!firebaseAuth || !authFns) {
+        if (typeof window !== 'undefined' && window.location && window.location.protocol === 'file:') {
+            alert('Google Cloud Sync requires running via a local web server (e.g. http://localhost:8080/ or GitHub Pages). All stats and streaks are safely saved locally in your browser!');
+        } else {
+            alert('Cloud services are currently offline. Your puzzle progress is saved locally.');
+        }
+        return null;
+    }
+
     try {
-        const result = await signInWithPopup(auth, googleProvider);
+        const result = await authFns.signInWithPopup(firebaseAuth, firebaseProvider);
         return result.user;
     } catch (error) {
         if (error.code === 'auth/popup-closed-by-user') {
@@ -53,10 +79,15 @@ export async function signInWithGoogle() {
  * Sign out current user
  */
 export async function signOutUser() {
-    try {
-        await signOut(auth);
-    } catch (error) {
-        console.error('Sign Out Error:', error);
+    if (authFns && firebaseAuth) {
+        try {
+            await authFns.signOut(firebaseAuth);
+        } catch (error) {
+            console.error('Sign Out Error:', error);
+        }
+    } else {
+        currentAuthUser = null;
+        renderAuthUI(null);
     }
 }
 

@@ -3976,8 +3976,8 @@
     if (document.getElementById('gameCanvas')) {
       window.gameInstance = new Game();
 
-      // Register Service Worker for bulletproof offline play
-      if ('serviceWorker' in navigator) {
+      // Register Service Worker for bulletproof offline play (only on http/https, as file:// protocol does not support SW)
+      if ('serviceWorker' in navigator && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
         window.addEventListener('load', () => {
           navigator.serviceWorker
             .register('./sw.js')

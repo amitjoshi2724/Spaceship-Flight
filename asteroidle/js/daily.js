@@ -483,7 +483,17 @@ export class DailyManager {
     }
 }
 
-// Boot DailyManager on load
-window.addEventListener('DOMContentLoaded', () => {
-    window.asteroidleApp = new DailyManager();
-});
+
+
+// Boot DailyManager reliably on DOM load
+function bootAsteroidle() {
+    if (!window.asteroidleApp && document.getElementById('asteroidle-canvas')) {
+        window.asteroidleApp = new DailyManager();
+    }
+}
+
+if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', bootAsteroidle);
+} else {
+    bootAsteroidle();
+}

@@ -1,15 +1,26 @@
 /**
  * Asteroidle - Dual-Layer Storage Module
- * Offline-first localStorage with real-time Firestore cloud synchronization.
+ * Offline-first localStorage with optional real-time Firestore cloud synchronization.
+ * Operates seamlessly on file:// protocol, offline, or with active network connection.
  */
-import { db } from './firebase-config.js';
+import { initFirebase } from './firebase-config.js';
 import { onAuthChange, getCurrentUser } from './auth.js';
-import { 
-    doc, 
-    getDoc, 
-    setDoc, 
-    onSnapshot 
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+let firestoreDb = null;
+let firestoreFns = null;
+
+// Initialize Firestore if running on http/https
+(async () => {
+    try {
+        const fb = await initFirebase();
+        if (fb && fb.db) {
+            firestoreDb = fb.db;
+            firestoreFns = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+        }
+    } catch (e) {
+        console.warn("Firestore unavailable, running in local-storage-only mode:", e);
+    }
+})();
 
 const STATS_KEY = 'asteroidle_stats_v1';
 const HISTORY_KEY = 'asteroidle_history_v1';
@@ -203,11 +214,11 @@ function notifyListeners() {
  */
 async function syncToCloud() {
     const user = getCurrentUser();
-    if (!user) return;
+    if (!user || !firestoreDb || !firestoreFns) return;
 
     try {
-        const userRef = doc(db, 'users', user.uid);
-        await setDoc(userRef, {
+        const userRef = firestoreFns.doc(firestoreDb, 'users', user.uid);
+        await firestoreFns.setDoc(userRef, {
             asteroidle_stats: memoryStats,
             asteroidle_history: memoryHistory,
             lastUpdated: Date.now()
@@ -226,11 +237,11 @@ onAuthChange(async (user) => {
         firestoreUnsubscribe = null;
     }
 
-    if (!user) return;
+    if (!user || !firestoreDb || !firestoreFns) return;
 
     try {
-        const userRef = doc(db, 'users', user.uid);
-        const snap = await getDoc(userRef);
+        const userRef = firestoreFns.doc(firestoreDb, 'users', user.uid);
+        const snap = await firestoreFns.getDoc(userRef);
 
         if (snap.exists()) {
             const cloudData = snap.data();
@@ -279,7 +290,7 @@ onAuthChange(async (user) => {
         }
 
         // Setup real-time listener for multi-tab or cross-device updates
-        firestoreUnsubscribe = onSnapshot(userRef, (docSnap) => {
+        firestoreUnsubscribe = firestoreFns.onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
                 const updated = docSnap.data();
                 if (updated.asteroidle_stats) memoryStats = { ...DEFAULT_STATS, ...updated.asteroidle_stats };
