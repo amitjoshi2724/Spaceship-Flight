@@ -3951,22 +3951,41 @@
     }
   }
 
-  // Launch on DOM ready
-  window.addEventListener('DOMContentLoaded', () => {
-    window.gameInstance = new Game();
+  // Expose core game engine classes for Asteroidle & extensions without code duplication
+  window.SpaceshipCore = {
+    Rock,
+    Bullet,
+    Spaceship,
+    SoundFx,
+    ParticleSystem,
+    getScreenScale,
+    ROCK_SHAPES: [
+      { x: [0, 25, 15, -5, -8], y: [0, 5, 30, 25, 15] },
+      { x: [-18, 6, 26, 18, -8, -24], y: [-20, -26, -6, 22, 26, 6] },
+      { x: [0, 20, 28, 12, -10, -26, -16], y: [-28, -14, 8, 26, 22, 2, -18] },
+      { x: [-14, 10, 26, 20, 8, -14, -28, -20], y: [-24, -22, -4, 16, 28, 24, 6, -12] },
+      { x: [-10, 14, 30, 16, -14, -24], y: [-30, -26, 6, 28, 30, -6] }
+    ]
+  };
 
-    // Register Service Worker for bulletproof offline play
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker
-          .register('./sw.js')
-          .then((reg) => {
-            console.log('Spaceship Flight Service Worker registered:', reg.scope);
-          })
-          .catch((err) => {
-            console.log('Service Worker registration failed:', err);
-          });
-      });
+  // Launch on DOM ready (only if arcade game canvas exists)
+  window.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('gameCanvas')) {
+      window.gameInstance = new Game();
+
+      // Register Service Worker for bulletproof offline play
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker
+            .register('./sw.js')
+            .then((reg) => {
+              console.log('Spaceship Flight Service Worker registered:', reg.scope);
+            })
+            .catch((err) => {
+              console.log('Service Worker registration failed:', err);
+            });
+        });
+      }
     }
   });
 })();

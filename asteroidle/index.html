@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="description" content="Asteroidle - The Daily Ballistic Interception Game based on Spaceship Flight. Track asteroid trajectories, calculate firing angles, and intercept space rocks!">
+  <meta name="author" content="Amit Joshi (@amitjoshi2724)">
+  <meta name="theme-color" content="#030712">
+  <title>Asteroidle | Daily Ballistic Puzzle | Spaceship Flight</title>
+
+  <!-- Google Fonts: Orbitron & Share Tech Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/asteroidle.css?v=1.0.0">
+  <link rel="stylesheet" href="css/modals.css?v=1.0.0">
+  <link rel="icon" type="image/png" sizes="64x64" href="../images/newspaceship.png">
+</head>
+
+<body>
+  <!-- Top Navigation Header -->
+  <header class="asteroidle-header">
+    <div class="header-top-row">
+      <div class="brand-section">
+        <a href="../index.html" class="brand-link" title="Back to Classic Spaceship Flight">
+          <img src="../images/newspaceship.png" alt="Spaceship Flight" class="brand-icon">
+          <span class="brand-title">ASTEROIDLE</span>
+        </a>
+      </div>
+
+      <nav class="header-actions">
+        <button id="btn-toggle-mode" class="header-btn mode-toggle-btn">
+          ♾️ Play Unlimited Mode
+        </button>
+        <button id="btn-archive" class="header-btn" title="Past Puzzles Calendar">
+          📅 Archive
+        </button>
+        <button id="btn-stats" class="header-btn" title="Player Statistics">
+          📊 Stats
+        </button>
+        <button id="btn-help" class="header-btn" title="How to Play">
+          ❓ Help
+        </button>
+      </nav>
+    </div>
+
+    <!-- User Auth Profile Bar -->
+    <div class="header-profile-row">
+      <div id="auth-container">
+        <!-- Injected dynamically by auth.js -->
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Game Interface -->
+  <main class="asteroidle-container">
+    <!-- Puzzle Information & Progress Bar -->
+    <div class="puzzle-info-bar">
+      <div id="daily-puzzle-title" class="daily-title">ASTEROIDLE LOADING...</div>
+      <div id="round-progress-nodes" class="round-nodes-container">
+        <!-- 5 round nodes injected dynamically -->
+      </div>
+    </div>
+
+    <!-- Radar Arena Canvas -->
+    <div class="arena-wrapper">
+      <canvas id="asteroidle-canvas"></canvas>
+
+      <!-- Round Result Overlay Banner -->
+      <div id="round-result-banner" class="round-result-banner">
+        <!-- Populated upon round resolution -->
+      </div>
+    </div>
+
+    <!-- Ballistic Controls Dashboard -->
+    <section class="controls-dashboard">
+      <div class="telemetry-row">
+        <div class="telemetry-badge">
+          <span>VELOCITY:</span>
+          <span id="cannon-tier-badge" class="tier-pill">Tier 3: Standard Laser</span>
+        </div>
+        <div class="telemetry-badge">
+          <span>HEADING:</span>
+          <span id="telemetry-angle-val" class="angle-readout">0°</span>
+        </div>
+      </div>
+
+      <div class="main-actions-row" id="fire-controls-bar">
+        <!-- Angle Adjustment Steppers & Slider -->
+        <div class="angle-steppers-group">
+          <button id="btn-step-minus-5" class="step-btn" title="Rotate -5°">-5°</button>
+          <button id="btn-step-minus-1" class="step-btn" title="Rotate -1°">-1°</button>
+        </div>
+
+        <div class="angle-slider-wrapper">
+          <input type="range" id="angle-dial-input" class="angle-dial-slider" min="0" max="359" value="0" aria-label="Ship Aiming Angle">
+        </div>
+
+        <div class="angle-steppers-group">
+          <button id="btn-step-plus-1" class="step-btn" title="Rotate +1°">+1°</button>
+          <button id="btn-step-plus-5" class="step-btn" title="Rotate +5°">+5°</button>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons-group">
+          <button id="btn-replay-clip" class="btn-secondary" title="Replay 1-second reconnaissance clip (Key: R)">
+            ↺ Replay Clip
+          </button>
+          <button id="btn-test-fire" class="btn-secondary" title="Fire tracer bullet to test projectile velocity (Key: T)">
+            🎯 Test Fire
+          </button>
+          <button id="btn-fire-intercept" class="btn-fire-primary" title="Launch interception shot! (Spacebar)">
+            FIRE CANNON
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ========================================================================
+       MODALS: Help, Stats, Archive, and Results
+       ======================================================================== -->
+
+  <!-- Help Modal -->
+  <div id="help-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="help-modal-title" class="modal-title">❓ HOW TO PLAY ASTEROIDLE</h3>
+        <button class="modal-close-btn" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="help-step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4>Reconnaissance Clip</h4>
+            <p>Watch the 1-second preview clip to analyze the asteroid's velocity vector, trajectory angle, and rotational drift across space.</p>
+          </div>
+        </div>
+
+        <div class="help-step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4>Test-Fire Calibrated Bullets</h4>
+            <p>Each challenge features a cannon velocity tier (Tiers 1 to 5). Click <strong>Test Fire</strong> (or press <code>T</code>) to fire tracer rounds and visually gauge bullet travel time.</p>
+          </div>
+        </div>
+
+        <div class="help-step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>Calculate Ballistic Lead</h4>
+            <p>Your spaceship is in a fixed position. Click/drag on the radar arena or use the arrow keys to angle the cannon ahead of where the asteroid will arrive.</p>
+          </div>
+        </div>
+
+        <div class="help-step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h4>Launch & Precision Scoring</h4>
+            <p>Press <strong>FIRE CANNON</strong> (or <code>Space</code>). A direct hit awards <strong>100 points</strong>! Near-misses are scored based on normalized surface proximity.</p>
+          </div>
+        </div>
+
+        <div class="help-step">
+          <div class="step-num">5</div>
+          <div class="step-content">
+            <h4>Daily 5-Asteroid Challenge</h4>
+            <p>Every day presents 5 unique asteroids. Achieve up to <strong>500 total points</strong>, maintain your streak, and share your score card!</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Statistics Modal -->
+  <div id="stats-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="stats-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="stats-modal-title" class="modal-title">📊 PILOT STATISTICS</h3>
+        <button class="modal-close-btn" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div id="stat-played" class="stat-value">0</div>
+            <div class="stat-label">Played</div>
+          </div>
+          <div class="stat-box">
+            <div id="stat-win-rate" class="stat-value">0%</div>
+            <div class="stat-label">Win Rate</div>
+          </div>
+          <div class="stat-box">
+            <div id="stat-current-streak" class="stat-value">0</div>
+            <div class="stat-label">Current Streak</div>
+          </div>
+          <div class="stat-box">
+            <div id="stat-max-streak" class="stat-value">0</div>
+            <div class="stat-label">Max Streak</div>
+          </div>
+          <div class="stat-box">
+            <div id="stat-high-score" class="stat-value">0</div>
+            <div class="stat-label">High Score</div>
+          </div>
+          <div class="stat-box">
+            <div id="stat-avg-score" class="stat-value">0</div>
+            <div class="stat-label">Avg Score</div>
+          </div>
+        </div>
+
+        <div class="distribution-section">
+          <h4 class="section-subtitle">SCORE DISTRIBUTION</h4>
+          <div id="stats-distribution-chart" class="stats-distribution-chart">
+            <!-- Histogram injected dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Calendar Archive Modal -->
+  <div id="archive-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="archive-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="archive-modal-title" class="modal-title">📅 ASTEROIDLE ARCHIVE</h3>
+        <button class="modal-close-btn" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-secondary);">Browse past daily missions and test your ballistic accuracy:</p>
+        <div id="archive-puzzle-list" class="archive-list">
+          <!-- Populated dynamically with past 30 days -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Final Results Modal -->
+  <div id="results-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="results-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="results-modal-title" class="modal-title">🎯 MISSION COMPLETE</h3>
+        <button class="modal-close-btn" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="results-score-display">
+          <div class="score-banner-label">TOTAL BALLISTIC SCORE</div>
+          <div id="results-total-score" class="score-banner-number">0 / 500</div>
+        </div>
+
+        <div id="results-rounds-list" class="results-rounds-list">
+          <!-- 5 round score breakdown injected dynamically -->
+        </div>
+
+        <div class="modal-footer-actions">
+          <button id="btn-share-score" class="share-btn">SHARE SCORE 📋</button>
+          <div class="next-countdown-box">
+            <span>NEXT MISSION IN:</span>
+            <span id="countdown-timer" class="countdown-timer">00:00:00</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load unified single source of truth game engine from parent directory -->
+  <script src="../game.js"></script>
+  <!-- Load Asteroidle Daily controller as ES Module -->
+  <script type="module" src="js/daily.js"></script>
+</body>
+
+</html>
