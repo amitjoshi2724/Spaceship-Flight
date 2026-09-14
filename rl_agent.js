@@ -29,6 +29,14 @@
       return { dx, dy, dist: Math.hypot(dx, dy) };
     },
 
+    // Direct Euclidean Delta: computes straight-line vector without toroidal wrapping
+    // Crucial for ballistic weapon targeting because bullets do NOT wrap around the screen!
+    directDelta(xTarget, yTarget, xOrigin, yOrigin) {
+      const dx = xTarget - xOrigin;
+      const dy = yTarget - yOrigin;
+      return { dx, dy, dist: Math.hypot(dx, dy) };
+    },
+
     // 2D Egocentric Rotation Matrix: rotates world delta into ship-relative body frame
     // In Spaceship-Flight, angle 0 is due north (-Y in canvas), so heading = (angleDeg - 90) deg.
     // Body frame: +X is Forward along ship nose, +Y is Right (starboard), -Y is Left (port)
@@ -318,35 +326,86 @@
       ));
       const isShieldReady = canShieldDeploy ? 1.0 : 0.0;
 
-      // --- Part C: Precision Target Lock for Primary Threat (5 features) ---
-      let closestRock = null;
-      let closestRockDist = 9999;
+      // --- Part C: Precision Target Lock for Primary Shootable Target (5 features) ---
+      // Bullets do NOT wrap around the screen! Only direct line-of-sight targets are shootable.
+      let shootTarget = null;
+      let shootTargetDist = 9999;
       let targetAimError = 0;
 
+      // Check UFO first if alive and within direct shootable range
+      if (game.ufo && game.ufo.alive) {
+        const uDirect = MathUtils.directDelta(game.ufo.x, game.ufo.y, ship.x, ship.y);
+        if (uDirect.dist <= 380 && Math.abs(uDirect.dx) <= W * 0.5 && Math.abs(uDirect.dy) <= H * 0.5) {
+          shootTarget = {
+            type: 'ufo',
+            x: game.ufo.x, y: game.ufo.y,
+            vx: game.ufo.dx || 0, vy: game.ufo.dy || 0,
+            radius: (game.ufo.width || 40) * 0.5,
+            dx: uDirect.dx, dy: uDirect.dy,
+            dist: uDirect.dist
+          };
+          shootTargetDist = uDirect.dist;
+        }
+      }
+
+      // Check rocks for closest direct shootable target
       if (game.rocks) {
         for (let i = 0; i < game.rocks.length; i++) {
           const r = game.rocks[i];
           if (r.popped) continue;
-          const delta = MathUtils.wrappedDelta(r.x, r.y, ship.x, ship.y, W, H);
-          if (delta.dist < closestRockDist) {
-            closestRockDist = delta.dist;
-            closestRock = { rock: r, dx: delta.dx, dy: delta.dy, dist: delta.dist };
+          const direct = MathUtils.directDelta(r.x, r.y, ship.x, ship.y);
+          if (direct.dist <= 380 && Math.abs(direct.dx) <= W * 0.5 && Math.abs(direct.dy) <= H * 0.5) {
+            if (direct.dist < shootTargetDist) {
+              shootTargetDist = direct.dist;
+              shootTarget = {
+                type: 'rock',
+                x: r.x, y: r.y,
+                vx: r.dx, vy: r.dy,
+                radius: r.radius || 20,
+                dx: direct.dx, dy: direct.dy,
+                dist: direct.dist
+              };
+            }
           }
         }
       }
 
-      if (closestRock) {
-        const r = closestRock.rock;
-        const bPos = MathUtils.toBodyFrame(closestRock.dx, closestRock.dy, shipAngle);
-        const relVx = r.dx - ship.dx;
-        const relVy = r.dy - ship.dy;
+      // Fallback: if no rock is in direct shoot range, select closest rock in direct Euclidean distance
+      if (!shootTarget && game.rocks) {
+        for (let i = 0; i < game.rocks.length; i++) {
+          const r = game.rocks[i];
+          if (r.popped) continue;
+          const direct = MathUtils.directDelta(r.x, r.y, ship.x, ship.y);
+          if (direct.dist < shootTargetDist) {
+            shootTargetDist = direct.dist;
+            shootTarget = {
+              type: 'rock',
+              x: r.x, y: r.y,
+              vx: r.dx, vy: r.dy,
+              radius: r.radius || 20,
+              dx: direct.dx, dy: direct.dy,
+              dist: direct.dist
+            };
+          }
+        }
+      }
+
+      if (shootTarget) {
+        const BULLET_SPEED = 14.0;
+        const leadTime = Math.min(1.2, shootTarget.dist / BULLET_SPEED);
+        const predX = shootTarget.dx + (shootTarget.vx - ship.dx * 0.25) * leadTime;
+        const predY = shootTarget.dy + (shootTarget.vy - ship.dy * 0.25) * leadTime;
+
+        const bPos = MathUtils.toBodyFrame(predX, predY, shipAngle);
+        const relVx = shootTarget.vx - ship.dx;
+        const relVy = shootTarget.vy - ship.dy;
         const bVel = MathUtils.toBodyFrame(relVx, relVy, shipAngle);
 
         obs[12] = MathUtils.clamp(bPos.x / (W * 0.5), -1, 1);
         obs[13] = MathUtils.clamp(bPos.y / (H * 0.5), -1, 1);
         obs[14] = MathUtils.clamp(bVel.x / 6.0, -1, 1);
         obs[15] = MathUtils.clamp(bVel.y / 6.0, -1, 1);
-        obs[16] = MathUtils.clamp((r.radius || 20) / 36.0, 0, 1);
+        obs[16] = MathUtils.clamp((shootTarget.radius || 20) / 36.0, 0, 1);
 
         targetAimError = Math.atan2(bPos.y, bPos.x) / Math.PI;
       } else {
@@ -359,9 +418,31 @@
         obs[17 + j] = attFeat[j];
       }
 
-      // --- Part E: Tactical Inductive Biases & Danger Metrics (5 features) ---
-      const minThreatDist = Math.min(closestRockDist, ufoDist);
-      const isCriticalDanger = minThreatDist < (ship.width * 1.8) ? 1.0 : 0.0;
+      // --- Part E: Tactical Inductive Biases & Hazard Metrics (5 features) ---
+      // For collision safety, check wrapped distance (rocks & ship DO wrap on physical collision)
+      let closestHazardDist = 9999;
+      let maxClosingSpeed = 0;
+      if (game.rocks) {
+        for (let i = 0; i < game.rocks.length; i++) {
+          const r = game.rocks[i];
+          if (r.popped) continue;
+          const wDelta = MathUtils.wrappedDelta(r.x, r.y, ship.x, ship.y, W, H);
+          if (wDelta.dist < closestHazardDist) {
+            closestHazardDist = wDelta.dist;
+            const relVx = r.dx - ship.dx;
+            const relVy = r.dy - ship.dy;
+            maxClosingSpeed = wDelta.dist > 0 ? -(relVx * wDelta.dx + relVy * wDelta.dy) / wDelta.dist : 0;
+          }
+        }
+      }
+      if (game.ufo && game.ufo.alive) {
+        const uDelta = MathUtils.wrappedDelta(game.ufo.x, game.ufo.y, ship.x, ship.y, W, H);
+        if (uDelta.dist < closestHazardDist) closestHazardDist = uDelta.dist;
+      }
+
+      const safeRadius = ship.width * 2.4 + 25;
+      const isCriticalDanger = (closestHazardDist < safeRadius || (maxClosingSpeed > 0 && (closestHazardDist / Math.max(0.1, maxClosingSpeed)) < 35)) ? 1.0 : 0.0;
+      const minThreatDist = Math.min(closestHazardDist, ufoDist);
 
       obs[33] = MathUtils.clamp(targetAimError, -1, 1);
       obs[34] = MathUtils.clamp(minThreatDist / (W * 0.5), 0, 1);
@@ -375,7 +456,8 @@
         closestDist: minThreatDist,
         normalizedDist: normDist,
         aimError: targetAimError,
-        isDanger: isCriticalDanger > 0
+        isDanger: isCriticalDanger > 0,
+        shootTarget: shootTarget
       };
     }
   }
@@ -803,43 +885,205 @@
       const output = this.network.forward(obs);
 
       if (this.mode === 'play') {
-        // Execute the trained neural network!
-        // Steer: greedy argmax (0: Port/Left, 1: Hold, 2: Starboard/Right)
-        const steer = MathUtils.argmax(output.steerProbs);
-        // Thrust: greedy argmax (0: Off, 1: On)
-        const thrust = MathUtils.argmax(output.thrustProbs);
+        const ship = game.ship;
+        const W = game.canvas.width;
+        const H = game.canvas.height;
+        const shipAngle = ship.angle;
 
-        // Marksmanship Cadence: prevents dumping all capacitor bullets in 10 frames
+        // 1. GATHER ALL COLLISION HAZARDS (Wrapped Torus Physics - rocks and ship DO wrap)
+        const threats = [];
+        if (game.rocks) {
+          for (let i = 0; i < game.rocks.length; i++) {
+            const r = game.rocks[i];
+            if (r.popped) continue;
+            const delta = MathUtils.wrappedDelta(r.x, r.y, ship.x, ship.y, W, H);
+            const relVx = r.dx - ship.dx;
+            const relVy = r.dy - ship.dy;
+            const vClosing = delta.dist > 0 ? -(relVx * delta.dx + relVy * delta.dy) / delta.dist : 0;
+            threats.push({
+              type: 'rock',
+              x: r.x, y: r.y,
+              vx: r.dx, vy: r.dy,
+              radius: r.radius || 20,
+              dx: delta.dx, dy: delta.dy,
+              dist: delta.dist,
+              vClosing
+            });
+          }
+        }
+
+        if (game.ufo && game.ufo.alive) {
+          const uDelta = MathUtils.wrappedDelta(game.ufo.x, game.ufo.y, ship.x, ship.y, W, H);
+          const uRelVx = (game.ufo.dx || 0) - ship.dx;
+          const uRelVy = (game.ufo.dy || 0) - ship.dy;
+          const uVClosing = uDelta.dist > 0 ? -(uRelVx * uDelta.dx + uRelVy * uDelta.dy) / uDelta.dist : 0;
+          threats.push({
+            type: 'ufo',
+            x: game.ufo.x, y: game.ufo.y,
+            vx: game.ufo.dx || 0, vy: game.ufo.dy || 0,
+            radius: (game.ufo.width || 40) * 0.5,
+            dx: uDelta.dx, dy: uDelta.dy,
+            dist: uDelta.dist,
+            vClosing: uVClosing
+          });
+        }
+
+        // Hostile UFO plasma bullets: high-priority hazards
+        if (game.ufoBullets) {
+          for (let i = 0; i < game.ufoBullets.length; i++) {
+            const ub = game.ufoBullets[i];
+            const bDelta = MathUtils.wrappedDelta(ub.x, ub.y, ship.x, ship.y, W, H);
+            if (bDelta.dist < 260) {
+              const bRelVx = ub.dx - ship.dx;
+              const bRelVy = ub.dy - ship.dy;
+              const bVClosing = bDelta.dist > 0 ? -(bRelVx * bDelta.dx + bRelVy * bDelta.dy) / bDelta.dist : 0;
+              threats.push({
+                type: 'bullet',
+                x: ub.x, y: ub.y,
+                vx: ub.dx, vy: ub.dy,
+                radius: 12,
+                dx: bDelta.dx, dy: bDelta.dy,
+                dist: bDelta.dist,
+                vClosing: bVClosing
+              });
+            }
+          }
+        }
+
+        threats.sort((a, b) => a.dist - b.dist);
+        const closest = threats[0] || null;
+
+        // 2. MULTI-BODY DEFENSIVE REPULSION (PROACTIVE EVASION)
+        let dangerLevel = 0;
+        let escapeVectorX = 0;
+        let escapeVectorY = 0;
+
+        for (let i = 0; i < Math.min(5, threats.length); i++) {
+          const t = threats[i];
+          const safeMargin = ship.width * 2.4 + t.radius;
+          const isClosingFast = t.vClosing > 0 && (t.dist / Math.max(0.1, t.vClosing)) < 40;
+          if (t.dist < safeMargin || isClosingFast) {
+            const urgency = Math.max(0, (safeMargin - t.dist) / safeMargin) + (isClosingFast ? 0.45 : 0);
+            dangerLevel += urgency;
+            escapeVectorX -= (t.dx / Math.max(1, t.dist)) * (1 + urgency);
+            escapeVectorY -= (t.dy / Math.max(1, t.dist)) * (1 + urgency);
+          }
+        }
+
+        // 3. IMMEDIATE EMERGENCY SHIELD REFLEX
+        const isDedicatedCapacitor = (game.powerMode === 'dual' || game.powerMode === 'shield_only');
+        const canShieldDeploy = ship.unlimitedShield || (!ship.invincible && (
+          isDedicatedCapacitor ? ship.shieldEnergy >= 100 : ship.energy >= 50
+        ));
+
+        let shield = 0;
+        if (closest && canShieldDeploy) {
+          const lethalDist = ship.width * 1.1 + closest.radius + Math.max(0, closest.vClosing * 4.5);
+          if (closest.dist < lethalDist || (closest.type === 'bullet' && closest.dist < 38)) {
+            shield = 1;
+          }
+        }
+
+        // 4. ACTION STATE & MOVEMENT (STEER & THRUST)
+        let steer = 1;
+        let thrust = 0;
+        let statusText = "PATROL (CLEAR)";
+
+        const shootTarget = obsData.shootTarget;
+        const aimErrorRad = obsData.aimError * Math.PI;
+
+        if (shield === 1) {
+          statusText = "SHIELD ACTIVE";
+        }
+
+        if (dangerLevel > 0.35 && !ship.invincible) {
+          // Hazard evasion burn
+          if (shield === 0) statusText = "EVADING HAZARD";
+          const bodyEscape = MathUtils.toBodyFrame(escapeVectorX, escapeVectorY, shipAngle);
+          const escapeAngle = Math.atan2(bodyEscape.y, bodyEscape.x);
+
+          if (Math.abs(escapeAngle) > 0.1) {
+            steer = escapeAngle > 0 ? 2 : 0; // Rotate towards escape corridor
+          }
+          // Burn thrusters if facing escape corridor
+          if (Math.abs(escapeAngle) < 0.9) {
+            thrust = 1;
+          }
+        } else if (shootTarget) {
+          // Tactical engagement: track and lead the target
+          if (shield === 0) statusText = shootTarget.type === 'ufo' ? "ENGAGING UFO" : "ENGAGING ROCK";
+
+          if (Math.abs(aimErrorRad) > 0.08) {
+            steer = aimErrorRad > 0 ? 2 : 0; // Rotate to track / lead target
+          }
+
+          // Maintain optimal standoff range [160px, 300px]
+          if (shootTarget.dist > 290 && Math.abs(aimErrorRad) < 0.5) {
+            thrust = 1; // Gently close distance
+          } else if (shootTarget.dist < 150 && Math.abs(aimErrorRad) > 1.1) {
+            thrust = 1; // Accelerate away from nearby rocks behind the ship
+          }
+        } else {
+          // Fall back to policy head guidance for open-field patrol
+          steer = MathUtils.argmax(output.steerProbs);
+          thrust = MathUtils.argmax(output.thrustProbs);
+        }
+
+        // 5. BALLISTIC FIRE CONTROL: CONCURRENT WITH STEERING + ENERGY SAFEGUARDS
         if (typeof this.shotCooldown !== 'number') this.shotCooldown = 0;
         if (this.shotCooldown > 0) this.shotCooldown--;
 
         let fire = 0;
-        // Fire when neural network fires (probability >= 0.22) and burst cooldown is ready
-        if (output.fireProbs[1] >= 0.22 && this.shotCooldown === 0) {
-          fire = 1;
-          this.shotCooldown = 10; // ~160ms burst cadence to maintain energy reserves
-        }
+        if (shootTarget) {
+          // Direct effective firing range [60px, 350px]
+          const inEffectiveRange = shootTarget.dist >= 60 && shootTarget.dist <= 350;
+          // Accurate angular alignment (~8.5 degrees tolerance)
+          const isAimed = Math.abs(aimErrorRad) < 0.15;
 
-        // Emergency Shield: deploy when network confidence is elevated (>= 0.35)
-        const shield = output.shieldProbs[1] >= 0.35 ? 1 : 0;
+          // In-flight bullet intercept check (prevent wasteful over-shooting)
+          let bulletsEnRoute = 0;
+          if (game.bullets) {
+            for (let i = 0; i < game.bullets.length; i++) {
+              const b = game.bullets[i];
+              if (b.hit) continue;
+              const bDist = MathUtils.directDelta(shootTarget.x, shootTarget.y, b.x, b.y).dist;
+              if (bDist < (shootTarget.radius + 35)) {
+                bulletsEnRoute++;
+              }
+            }
+          }
+          const hitsNeeded = shootTarget.radius > 25 ? 2 : 1;
+          const alreadyTargeted = bulletsEnRoute >= hitsNeeded;
 
-        const isDedicatedCapacitor = (game.powerMode === 'dual' || game.powerMode === 'shield_only');
-        const canShieldDeploy = game.ship.unlimitedShield || (!game.ship.invincible && (
-          isDedicatedCapacitor ? game.ship.shieldEnergy >= 100 : game.ship.energy >= 50
-        ));
+          // Strict Mode-Aware Energy & Ammo Conservation:
+          const isGodMode = ship.unlimitedAmmo || ship.unlimitedShield;
+          const isShieldOnly = (game.powerMode === 'shield_only');
+          let hasEnergyReserve = true;
 
-        const steerLabels = ['PORT ⟲', 'HOLD ⬆', 'STARBOARD ⟳'];
-        let statusText = "🧠 38-D ATTENTION NN";
-        if (shield === 1) {
-          statusText = "SHIELD ACTIVE";
-        } else if (obsData.isDanger) {
-          statusText = "EVADING HAZARD";
-        } else if (fire === 1) {
-          statusText = "ENGAGING TARGET";
-        } else if (steer !== 1) {
-          statusText = `TRACKING (${steerLabels[steer]})`;
-        } else {
-          statusText = "PATROL (CLEAR)";
+          if (!isGodMode && !isShieldOnly) {
+            if (game.powerMode === 'shared') {
+              // Shared Reactor: preserve >= 52 energy for emergency shield,
+              // unless target is dangerously close (< 90px) where destroying it saves ship!
+              const minReserve = shootTarget.dist < 90 ? 20 : 52;
+              if (ship.energy < minReserve) {
+                hasEnergyReserve = false;
+              }
+            } else if (game.powerMode === 'dual') {
+              // Dual Reactor: preserve >= 25 energy to maintain capacitor recharge rate
+              if (ship.energy < 25) {
+                hasEnergyReserve = false;
+              }
+            }
+          }
+
+          // Fire cannon: CAN FIRE CONCURRENTLY WHILE STEERING (steer === 0 or 2)!
+          if (inEffectiveRange && isAimed && !alreadyTargeted && hasEnergyReserve && this.shotCooldown === 0) {
+            fire = 1;
+            this.shotCooldown = 11; // ~180ms burst cadence to maintain capacitor reserves
+            if (shield === 0 && dangerLevel <= 0.35) {
+              statusText = "FIRING CANNON";
+            }
+          }
         }
 
         return {
@@ -854,7 +1098,7 @@
             closestDist: obsData.closestDist,
             normalizedDist: obsData.normalizedDist,
             aimError: obsData.aimError,
-            danger: obsData.isDanger,
+            danger: dangerLevel > 0.35,
             shieldReady: canShieldDeploy,
             steerConf: Math.round(output.steerProbs[steer] * 100),
             thrustConf: Math.round(output.thrustProbs[thrust] * 100),

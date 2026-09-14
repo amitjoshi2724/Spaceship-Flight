@@ -324,6 +324,20 @@ $$\Delta y_{\text{wrapped}} = \left( (y_{\text{target}} - y_{\text{ship}} + H/2)
 The true wrapped distance is:
 $$d_{\text{wrapped}} = \sqrt{\Delta x_{\text{wrapped}}^2 + \Delta y_{\text{wrapped}}^2}$$
 
+#### The Critical Asymmetry: Bullets Do NOT Wrap Around!
+A frequent pitfall in Asteroids AI architecture is assuming that **all** game elements obey toroidal wrapping.
+
+In `Spaceship Flight`:
+- **Spaceship and Asteroids**: DO wrap around screen boundaries. A rock exiting the right edge re-enters on the left edge.
+- **Plasma Bullets**: DO **NOT** wrap around! When a bullet exits the canvas boundaries (`x < -10`, `x > W + 10`), the game engine despawns it to eliminate memory overhead.
+
+> [!WARNING]
+> If your AI uses `wrappedDelta` to aim its plasma cannon at an asteroid near an opposite border (e.g., ship at $x = 20$, asteroid at $x = 780$), the AI will compute $\Delta x_{\text{wrapped}} = -40$, point its nose toward the left wall, and fire. The bullet will travel $30\text{ px}$, collide with the canvas boundary, and despawn — leaving the asteroid completely untouched!
+
+Therefore, the AI must enforce a **Dual-Geometry Principle**:
+1. **Collision Threat & Evasion Field**: Uses **Toroidal Wrapped Delta** (`wrappedDelta`) because physical collisions wrap around boundaries.
+2. **Ballistic Weapon Targeting**: Uses **Direct Euclidean Delta** (`directDelta`) within canvas bounds ($d_{\text{direct}} \le 380\text{ px}$). Firing is strictly forbidden if the straight-line trajectory intersects a canvas boundary before reaching the target.
+
 ---
 
 ### 4.2 Coordinate Systems: World vs. Egocentric (Ship-Centric)
@@ -853,16 +867,16 @@ Every feature is strictly normalized and dimensionless—**no raw pixel coordina
 | **`obs[9]`** | $v_{x,\text{ufo,body}} / 6.0$ | $[-1.0, 1.0]$ | Alien UFO (Egocentric) | Alien saucer relative closing velocity (Forward axis) |
 | **`obs[10]`** | $v_{y,\text{ufo,body}} / 6.0$ | $[-1.0, 1.0]$ | Alien UFO (Egocentric) | Alien saucer relative closing velocity (Starboard axis) |
 | **`obs[11]`** | $\mathbb{I}_{\text{ufo\_alive}}$ | $\{0.0, 1.0\}$ | Alien UFO (Egocentric) | Flag indicating if alien saucer is active on battlefield |
-| **`obs[12]`** | $x_{\text{target,body}} / (W/2)$ | $[-1.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest primary rock position along forward nose axis |
-| **`obs[13]`** | $y_{\text{target,body}} / (H/2)$ | $[-1.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest primary rock position along starboard axis |
-| **`obs[14]`** | $v_{x,\text{target,body}} / 6.0$ | $[-1.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest primary rock relative velocity along forward axis |
-| **`obs[15]`** | $v_{y,\text{target,body}} / 6.0$ | $[-1.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest primary rock relative velocity along starboard axis |
-| **`obs[16]`** | $r_{\text{target}} / 36.0$ | $[0.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest primary rock physical radius / collision hull |
+| **`obs[12]`** | $x_{\text{target,body}} / (W/2)$ | $[-1.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest shootable rock position along forward nose axis (direct Euclidean ray) |
+| **`obs[13]`** | $y_{\text{target,body}} / (H/2)$ | $[-1.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest shootable rock position along starboard axis (direct Euclidean ray) |
+| **`obs[14]`** | $v_{x,\text{target,body}} / 6.0$ | $[-1.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest shootable rock relative velocity along forward axis |
+| **`obs[15]`** | $v_{y,\text{target,body}} / 6.0$ | $[-1.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest shootable rock relative velocity along starboard axis |
+| **`obs[16]`** | $r_{\text{target}} / 36.0$ | $[0.0, 1.0]$ | **Target Lock (Aim Head)** | Nearest shootable rock physical radius / collision hull |
 | **`obs[17..24]`** | $\mathbf{c}_{\text{threat}} \in \mathbb{R}^8$ | $[-2.0, 2.0]$ | **Attention Context Field** | **Attention-Weighted Threat Vector** across **all active rocks** |
 | **`obs[25..32]`** | $\mathbf{m}_{\text{threat}} \in \mathbb{R}^8$ | $[-2.0, 2.0]$ | **Attention Peak Hazard** | **Element-wise Maximum Threat** across all active rocks |
-| **`obs[33]`** | $\Delta\psi_{\text{aim}} / \pi$ | $[-1.0, 1.0]$ | Tactical Biases | Angular aim alignment error to primary target |
+| **`obs[33]`** | $\Delta\psi_{\text{aim}} / \pi$ | $[-1.0, 1.0]$ | Tactical Biases | Angular aim alignment error to primary shootable target |
 | **`obs[34]`** | $d_{\text{threat}} / (W/2)$ | $[0.0, 1.0]$ | Tactical Biases | Normalized distance to closest threat ($0.0 = \text{impact}$) |
-| **`obs[35]`** | $\mathbb{I}_{\text{danger}}$ | $\{0.0, 1.0\}$ | Tactical Biases | Imminent collision alarm ($d_{\text{threat}} < 1.8 \times \text{width}$) |
+| **`obs[35]`** | $\mathbb{I}_{\text{danger}}$ | $\{0.0, 1.0\}$ | Tactical Biases | **Proactive collision alarm** ($d < 2.4 \times \text{width} + r$ or closing impact $t_{\text{impact}} < 35\text{ frames}$) |
 | **`obs[36]`** | $\mathbb{I}_{\text{shield\_ready}}$ | $\{0.0, 1.0\}$ | Tactical Biases | **Power-Mode Invariant Shield Readiness** |
 | **`obs[37]`** | $N_{\text{bullets}} / 10.0$ | $[0.0, 1.0]$ | Tactical Biases | Active friendly laser projectile density |
 
@@ -874,13 +888,11 @@ Instead of discarding asteroids beyond the 3 closest, the ship executes a contin
 4. **Context Vector $\mathbf{c}_{\text{threat}} = \sum \alpha_i \mathbf{v}_i$:** Captures the dynamic weighted center of incoming danger.
 5. **Peak Vector $\mathbf{m}_{\text{threat}} = \max_i \mathbf{v}_i$:** Captures the single most extreme hazard, preventing high-speed small asteroids from ever being diluted by distant background rocks.
 
-#### Power Mode Invariance:
+#### Power Mode Invariance & Ammo Management:
 By providing $\mathbb{I}_{\text{shield\_ready}}$ (`obs[36]`) alongside battery levels, the agent does not need three separate neural network models for **Shared Reactor**, **Dual Capacitors**, and **Unlimited Ammo**:
-- In **Shared Reactor**: $\mathbb{I}_{\text{shield\_ready}} = 1$ when $E \ge 50\%$.
-- In **Dual Capacitors**: $\mathbb{I}_{\text{shield\_ready}} = 1$ when $E_{\text{shield}} \ge 100\%$.
+- In **Shared Reactor**: $\mathbb{I}_{\text{shield\_ready}} = 1$ when $E \ge 50\%$. The policy enforces strict energy preservation ($\ge 52\%$) during routine combat so the $50\%$ shield remains permanently armed.
+- In **Dual Capacitors**: $\mathbb{I}_{\text{shield\_ready}} = 1$ when $E_{\text{shield}} \ge 100\%$. The policy stops firing when weapon capacitor drops below $25\%$ to allow steady recharge and prevent empty battery clicks.
 - In **Unlimited Ammo**: $\mathbb{I}_{\text{shield\_ready}} = 1$ when $E_{\text{shield}} \ge 100\%$, and weapon battery (`obs[4]`) stays locked at $1.0$.
-
-The policy learns a single generalizable rule: `if danger > 0 and shield_ready == 1: deploy_shield()`, which succeeds across all three game modes identically.
 
 ---
 
@@ -895,12 +907,18 @@ PPO natively supports `gym.spaces.MultiDiscrete`:
 
 $$\mathcal{A} = \text{MultiDiscrete}([3, \; 2, \; 2, \; 2])$$
 
-- **Branch 0 (Steering):** `0: No-op`, `1: Rotate Left`, `2: Rotate Right`
+- **Branch 0 (Steering):** `0: Rotate Left (Port)`, `1: Hold / Straight`, `2: Rotate Right (Starboard)`
 - **Branch 1 (Thrust):** `0: Coast`, `1: Fire Thruster`
 - **Branch 2 (Gun):** `0: Hold Fire`, `1: Shoot Plasma Bolt`
 - **Branch 3 (Shield):** `0: Standby`, `1: Deploy Emergency Shield`
 
 The policy network outputs $3 + 2 + 2 + 2 = 9$ logits, and samples independently from each categorical distribution.
+
+#### Concurrent Action Execution: Simultaneous Steering and Firing
+A vital architectural principle in arcade dogfighting is that **steering and firing are completely independent concurrent actions**:
+- The ship rotates (`Branch 0 = 0` or `2`) to sweep and track a moving target across the field.
+- In the exact same frame, if the cannon's predicted lead line-of-sight aligns with the target's hitbox, the ship triggers plasma fire (`Branch 2 = 1`).
+- The ship never stops rotating to fire, nor does it suppress firing while turning! Both actions execute simultaneously within the canvas game loop on every frame.
 
 ### Option 2: Flattened Discrete Action Space (Required for DQN)
 DQN requires a single discrete action index:
