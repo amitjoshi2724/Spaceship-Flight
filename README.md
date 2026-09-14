@@ -81,13 +81,13 @@ Tailor your arcade combat experience with three distinct energy management syste
 
 | Game Mode | Ammo Battery | Shield Capacitor | Debt Allowed? | Combat Siphon (Per Rock Destroyed) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Shared Reactor** *(Default)* | 100% max (15/shot) | Shares main battery (50% cost) | **No** (requires ≥50% charge) | **+6%** to shared battery |
+| **Shared Reactor** *(Default)* | 100% max (12/shot) | Shares main battery (50% cost) | **No** (requires ≥50% charge) | **+6%** to shared battery |
 | **Dual Capacitors** | 100% max (15/shot) | Dedicated 100% capacitor (5%/s) | **No** (requires 100% full charge) | **+3%** to ammo battery **AND** **+3%** to shield |
 | **Shield Charger** | **Unlimited** (free lasers) | Dedicated 100% capacitor (2%/s) | **No** (requires 100% full charge) | **+3%** to shield capacitor |
 
 #### Mode Breakdown & Combat Siphon:
 - **Shared Reactor (Tactical Resource Trade-Off):**
-  A single power plant routes power to both laser cannons and the emergency invulnerability shield. Features **Kinetic Dynamo** recharging (12.5%/sec idle, accelerating by 1.6x to 20%/sec while thrusting). Deploying the emergency shield consumes **50% energy** and strictly requires at least 50% charge to activate (no negative debt). Shielding at full battery leaves 50% energy (3 laser shots ready) so you are never left defenseless. Destroying asteroids siphons **+6% energy** back to the reactor.
+  A single power plant routes power to both laser cannons and the emergency invulnerability shield. Features **Kinetic Dynamo** recharging (12.5%/sec idle, accelerating by 1.6x to 20%/sec while thrusting). Firing consumes **12% energy**. Deploying the emergency shield consumes **50% energy** and strictly requires at least 50% charge to activate (no negative debt). Shielding at full battery leaves 50% energy (4 laser shots ready) so you are never left defenseless. Destroying asteroids siphons **+6% energy** back to the reactor.
 - **Dual Capacitors (Tactical Weapon & Defense Separation):**
   Splits power into independent **Ammo Battery** and **Shield Capacitor** gauges displayed side-by-side on the HUD. Weapons recharge via the **Kinetic Dynamo** (12.5%/sec idle, 20%/sec while thrusting), while the shield recharges passively at **5%/second** (20s full charge). The emergency shield requires a full 100% charge to deploy (no debt). Destroying asteroids rewards tactical play by siphoning **+3% to ammo AND +3% to shield** simultaneously.
 - **Shield Charger (Casual / Unlimited Ammo):**

@@ -1088,7 +1088,7 @@
     }
 
     fire(bullets) {
-      const COST_PER_SHOT = 15;
+      const COST_PER_SHOT = (this.powerMode === 'shared') ? 12 : 15;
 
       // Rate limit / shot cooldown: enforces deliberate cadence (9 frames = ~150ms cycle)
       if (this.fireCooldown > 0) return false;
@@ -3836,7 +3836,8 @@
           // Firing discipline & energy budgeting
           if (this.lastStepDecision.fire === 1) {
             const consumesAmmo = (this.powerMode !== 'shield_only' && !this.ship.unlimitedAmmo && !this.ship.unlimitedShield);
-            if (consumesAmmo && this.ship.energy < 15) {
+            const shotCost = (this.powerMode === 'shared') ? 12 : 15;
+            if (consumesAmmo && this.ship.energy < shotCost) {
               stepReward -= 0.03; // Dry fire / battery depleted penalty
             } else if (consumesAmmo && this.powerMode === 'shared' && this.ship.energy < 35 && closestDist > 90) {
               stepReward -= 0.02; // Recklessly draining capacitor below emergency shield reserve

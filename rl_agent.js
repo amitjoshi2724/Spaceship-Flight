@@ -716,7 +716,8 @@
       const canShieldDeploy = ship.unlimitedShield || (!ship.invincible && (
         isDedicatedCapacitor ? ship.shieldEnergy >= 100 : ship.energy >= 50
       ));
-      const canFire = (game.powerMode === 'shield_only' || ship.unlimitedAmmo || ship.unlimitedShield || ship.energy > 15);
+      const shotCost = (game.powerMode === 'shared') ? 12 : 15;
+      const canFire = (game.powerMode === 'shield_only' || ship.unlimitedAmmo || ship.unlimitedShield || ship.energy >= shotCost);
 
       if (closest && closest.dist < (ship.width * 0.95 + closest.radius)) {
         if (canShieldDeploy) {
@@ -775,7 +776,7 @@
         // In Shared Reactor mode, weapon and shields draw from the SAME 100-point capacitor.
         // Emergency Shield requires 50% energy!
         // Therefore, during routine engagement, we NEVER drop below 35% battery.
-        // If a threat is within critical proximity (< 90px), we can fire down to 15%.
+        // If a threat is within critical proximity (< 90px), we can fire down to 12%.
         let hasEnergyReserve = false;
         if (game.powerMode === 'shield_only' || ship.unlimitedAmmo || ship.unlimitedShield) {
           hasEnergyReserve = true;
@@ -783,7 +784,7 @@
           hasEnergyReserve = ship.energy >= 15;
         } else {
           // Shared mode
-          const minReserve = (closest.dist < 90) ? 15 : 35;
+          const minReserve = (closest.dist < 90) ? 12 : 35;
           hasEnergyReserve = ship.energy >= minReserve;
         }
 
@@ -1064,7 +1065,7 @@
             if (game.powerMode === 'shared') {
               // Shared Reactor: preserve >= 52 energy for emergency shield,
               // unless target is dangerously close (< 90px) where destroying it saves ship!
-              const minReserve = shootTarget.dist < 90 ? 20 : 52;
+              const minReserve = shootTarget.dist < 90 ? 12 : 52;
               if (ship.energy < minReserve) {
                 hasEnergyReserve = false;
               }

@@ -1329,8 +1329,8 @@ In the browser game loop, `game.update()` executes at **60 Hz** (or up to **600 
 - At initialization (random Xavier weights), the Actor network outputs approximately equal logits for the Fire head: $[z_0 \approx 0, z_1 \approx 0]$.
 - Softmax produces probabilities $p(\text{Hold}) \approx 0.5$ and $p(\text{Fire}) \approx 0.5$.
 - Sampling a binary action with $p = 0.5$ at 60 Hz means the agent attempts to fire **30 bullets per second**!
-- In Shared Reactor mode, each shot costs 15% energy from a 100-point capacitor. The ship can only fire 6 shots before exhausting its battery.
-- Consequently, at 30 shots/sec, **100% of the ship's battery is dumped in only 6 to 10 frames ($\approx 100 - 160\text{ ms}$)**.
+- In Shared Reactor mode, each shot costs 12% energy from a 100-point capacitor. The ship can fire 8 shots before exhausting its battery (and 4 consecutive shots before hitting the 50% emergency shield lockout).
+- Consequently, at 30 shots/sec, **100% of the ship's battery is dumped in only 8 to 16 frames ($\approx 130 - 260\text{ ms}$)**.
 
 #### 2. Sparse Rewards & Reward Hacking (Local Optima)
 In Asteroids, destroying an asteroid or UFO yields a large positive environment reward ($+2.0$ to $+3.0$).
