@@ -81,11 +81,7 @@
     <section class="controls-dashboard">
       <div class="telemetry-row">
         <div class="telemetry-badge">
-          <span>VELOCITY:</span>
-          <span id="cannon-tier-badge" class="tier-pill">Tier 3: Standard Laser</span>
-        </div>
-        <div class="telemetry-badge">
-          <span>HEADING:</span>
+          <span>CANON HEADING:</span>
           <span id="telemetry-angle-val" class="angle-readout">0°</span>
         </div>
       </div>
@@ -267,6 +263,9 @@
   </div>
 
   <!-- Load unified single source of truth game engine from parent directory -->
+  <script>
+    window.SPACESHIP_ASSET_PREFIX = '../';
+  </script>
   <script src="../game.js"></script>
   <!-- Load Asteroidle Daily controller as ES Module -->
   <script type="module" src="js/daily.js"></script>

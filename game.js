@@ -909,11 +909,12 @@
         blueMoving: new Image()
       };
 
-      this.sprites.redNormal.src = 'images/newspaceship.png';
-      this.sprites.redMoving1.src = 'images/newspaceshipmoving.png';
-      this.sprites.redMoving2.src = 'images/newspaceshipmoving2.png';
-      this.sprites.blueNormal.src = 'images/bluenewspaceship.png';
-      this.sprites.blueMoving.src = 'images/bluenewspaceshipmoving2.png';
+      const imgPrefix = (typeof window !== 'undefined' && window.SPACESHIP_ASSET_PREFIX) ? window.SPACESHIP_ASSET_PREFIX : '';
+      this.sprites.redNormal.src = imgPrefix + 'images/newspaceship.png';
+      this.sprites.redMoving1.src = imgPrefix + 'images/newspaceshipmoving.png';
+      this.sprites.redMoving2.src = imgPrefix + 'images/newspaceshipmoving2.png';
+      this.sprites.blueNormal.src = imgPrefix + 'images/bluenewspaceship.png';
+      this.sprites.blueMoving.src = imgPrefix + 'images/bluenewspaceshipmoving2.png';
     }
 
     recalculateSize() {
@@ -3956,20 +3957,22 @@
     Rock,
     Bullet,
     Spaceship,
-    SoundFx,
+    SoundFX,
     ParticleSystem,
+    Starfield,
     getScreenScale,
     ROCK_SHAPES: [
       { x: [0, 25, 15, -5, -8], y: [0, 5, 30, 25, 15] },
       { x: [-18, 6, 26, 18, -8, -24], y: [-20, -26, -6, 22, 26, 6] },
       { x: [0, 20, 28, 12, -10, -26, -16], y: [-28, -14, 8, 26, 22, 2, -18] },
       { x: [-14, 10, 26, 20, 8, -14, -28, -20], y: [-24, -22, -4, 16, 28, 24, 6, -12] },
+
       { x: [-10, 14, 30, 16, -14, -24], y: [-30, -26, 6, 28, 30, -6] }
     ]
   };
 
   // Launch on DOM ready (only if arcade game canvas exists)
-  window.addEventListener('DOMContentLoaded', () => {
+  function initGame() {
     if (document.getElementById('gameCanvas')) {
       window.gameInstance = new Game();
 
@@ -3987,5 +3990,11 @@
         });
       }
     }
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', initGame);
+  } else {
+    initGame();
+  }
 })();

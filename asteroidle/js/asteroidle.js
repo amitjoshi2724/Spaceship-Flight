@@ -1,7 +1,7 @@
 /**
  * Asteroidle - Core Game Engine
- * Features 1-second asteroid clip replay, ship aiming, bullet speed tiers (1-5),
- * continuous collision detection, normalized surface-proximity scoring, and telemetry.
+ * Reuses the authentic Spaceship, Rock, Bullet, Starfield, SoundFX, and ParticleSystem
+ * directly from Spaceship-Flight (game.js) via window.SpaceshipCore.
  */
 
 export class AsteroidleEngine {
@@ -10,16 +10,17 @@ export class AsteroidleEngine {
         this.ctx = canvas.getContext('2d');
         this.onRoundComplete = onRoundComplete;
 
-        // Core classes from game.js
+        // Core engine classes from game.js
         this.core = window.SpaceshipCore || {};
-        this.soundFx = new (this.core.SoundFx || Object)();
-        this.particles = new (this.core.ParticleSystem || Object)();
+        const SoundFXClass = this.core.SoundFX || class {};
+        const ParticleSystemClass = this.core.ParticleSystem || class {};
+        const SpaceshipClass = this.core.Spaceship || class {};
+        const StarfieldClass = this.core.Starfield || class {};
 
-        // Ship and aim state
-        this.shipX = 0;
-        this.shipY = 0;
-        this.shipAngle = 0; // Degrees (0 = UP)
-        this.targetAngle = 0;
+        this.soundFx = new SoundFXClass();
+        this.particles = new ParticleSystemClass();
+        this.ship = new SpaceshipClass(this.canvas, this.soundFx, this.particles);
+        this.starfield = null;
 
         // Challenge definition
         this.challenge = null;
@@ -27,8 +28,13 @@ export class AsteroidleEngine {
         this.rockInitialState = null;
         this.rockClipEndState = null;
 
-        // Playback state
-        // States: 'PREVIEW' (1s clip), 'AIMING' (waiting for fire), 'FIRING' (shot in flight), 'RESOLVED'
+        // Continuous keyboard rotation state (matches game.js rate: 4.5 deg/frame)
+        this.keys = {
+            left: false,
+            right: false
+        };
+
+        // Playback state: 'PREVIEW' (1s clip), 'AIMING', 'FIRING', 'RESOLVED'
         this.state = 'AIMING';
         this.clipDurationFrames = 60; // 1.0 second at 60fps
         this.clipFrame = 0;
@@ -38,7 +44,6 @@ export class AsteroidleEngine {
         // Bullets
         this.testBullets = [];
         this.interceptBullet = null;
-        this.bulletSpeedTier = 3;
         this.closestDistance = Infinity;
         this.minSurfaceDistance = Infinity;
         this.directHit = false;
@@ -49,7 +54,7 @@ export class AsteroidleEngine {
         this.animId = null;
         this.lastTime = performance.now();
 
-        // Bind events
+        // Setup handlers & resize
         this.setupInputHandlers();
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
@@ -63,7 +68,8 @@ export class AsteroidleEngine {
         const rect = this.canvas.parentElement.getBoundingClientRect();
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         this.width = rect.width;
-        this.height = Math.min(rect.width * 0.72, Math.max(400, window.innerHeight * 0.58));
+        const vh = (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 700;
+        this.height = Math.min(rect.width * 0.72, Math.max(400, vh * 0.58));
 
         this.canvas.width = this.width * dpr;
         this.canvas.height = this.height * dpr;
@@ -72,34 +78,19 @@ export class AsteroidleEngine {
 
         this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+        // Re-create starfield matching dimensions
+        if (this.core.Starfield) {
+            this.starfield = new this.core.Starfield(this.width, this.height);
+        }
+
+        if (this.ship && typeof this.ship.recalculateSize === 'function') {
+            this.ship.canvas = this.canvas;
+            this.ship.recalculateSize();
+        }
+
         if (this.challenge) {
             this.updateEntityPositions();
         }
-    }
-
-    getSpeedForTier(tier) {
-        // Calibrated bullet velocity tiers (scaled by screen sizeFactor)
-        const sizeFactor = Math.min(this.width, Math.max(450, this.height * 1.6)) / 1000;
-        const baseSpeed = Math.max(0.85, Math.min(1.25, sizeFactor));
-        const tierMultipliers = {
-            1: 8.0,   // Slow Plasma
-            2: 11.0,  // Medium Kinetic
-            3: 14.0,  // Standard Laser (from Spaceship Flight)
-            4: 17.5,  // Hyper-Velocity Beam
-            5: 21.0   // Tachyon Railgun
-        };
-        return (tierMultipliers[tier] || 14.0) * baseSpeed;
-    }
-
-    getTierName(tier) {
-        const names = {
-            1: 'Tier 1: Slow Plasma',
-            2: 'Tier 2: Light Kinetic',
-            3: 'Tier 3: Standard Laser',
-            4: 'Tier 4: Hyper-Beam',
-            5: 'Tier 5: Tachyon Railgun'
-        };
-        return names[tier] || `Tier ${tier}`;
     }
 
     /**
@@ -107,7 +98,6 @@ export class AsteroidleEngine {
      */
     loadChallenge(challenge) {
         this.challenge = challenge;
-        this.bulletSpeedTier = challenge.bulletTier || 3;
         this.testBullets = [];
         this.interceptBullet = null;
         this.closestDistance = Infinity;
@@ -128,18 +118,20 @@ export class AsteroidleEngine {
         const H = this.height;
         const ch = this.challenge;
 
-        // Fixed ship position
-        this.shipX = ch.shipX * W;
-        this.shipY = ch.shipY * H;
+        // Position the authentic spaceship at the fixed round coordinates
+        this.ship.x = ch.shipX * W;
+        this.ship.y = ch.shipY * H;
+        this.ship.dx = 0;
+        this.ship.dy = 0;
 
-        // Create the Rock instance using SpaceshipCore.Rock
+        // Create the authentic Rock instance using SpaceshipCore.Rock
         const RockClass = this.core.Rock;
         if (!RockClass) return;
 
         this.rock = new RockClass(W, H, ch.speed);
         this.rock.shapeIndex = ch.shapeIndex % 5;
 
-        // Apply challenge baseRadius if specified
+        // Apply challenge baseRadius
         const baseDimension = Math.min(W, Math.max(450, H * 1.6));
         const sizeFactor = baseDimension / 1000;
         if (ch.baseRadius) {
@@ -220,10 +212,10 @@ export class AsteroidleEngine {
             rotSpeed: this.rock.rotSpeed
         };
 
-        // Default ship aim facing the asteroid's predicted position
-        const defaultAim = Math.atan2(this.rockClipEndState.y - this.shipY, this.rockClipEndState.x - this.shipX);
-        this.shipAngle = Math.round(((defaultAim * 180 / Math.PI) + 90 + 360) % 360);
-        this.targetAngle = this.shipAngle;
+        // Default ship aim facing the asteroid's predicted end position
+        const defaultAim = Math.atan2(this.rockClipEndState.y - this.ship.y, this.rockClipEndState.x - this.ship.x);
+        this.ship.angle = Math.round(((defaultAim * 180 / Math.PI) + 90 + 360) % 360);
+        this.updateAimUI();
     }
 
     /**
@@ -256,84 +248,71 @@ export class AsteroidleEngine {
     }
 
     /**
-     * User adjusts aiming angle
+     * Set angle directly
      */
     setAngle(deg) {
-        this.shipAngle = Math.round((deg % 360 + 360) % 360);
-        this.targetAngle = this.shipAngle;
+        if (!this.ship) return;
+        this.ship.angle = Math.round((deg % 360 + 360) % 360);
         this.updateAimUI();
     }
 
     adjustAngle(deltaDeg) {
-        this.setAngle(this.shipAngle + deltaDeg);
+        if (!this.ship) return;
+        this.setAngle(this.ship.angle + deltaDeg);
     }
 
     aimAtPoint(px, py) {
-        const rad = Math.atan2(py - this.shipY, px - this.shipX);
+        if (!this.ship) return;
+        const rad = Math.atan2(py - this.ship.y, px - this.ship.x);
         const deg = (rad * 180 / Math.PI) + 90;
         this.setAngle(deg);
     }
 
     /**
-     * Test-fire a tracer bullet (does not count as real shot)
+     * Test-fire a tracer bullet (uses standard bullet speed from game.js)
      */
     testFire() {
-        if (this.state === 'FIRING') return;
-        const rad = ((this.shipAngle - 90) * Math.PI) / 180;
-        const noseDist = 22;
-        const bx = this.shipX + Math.cos(rad) * noseDist;
-        const by = this.shipY + Math.sin(rad) * noseDist;
-        const speed = this.getSpeedForTier(this.bulletTier || this.bulletSpeedTier);
+        if (this.state === 'FIRING' || !this.ship) return;
 
-        const tracer = {
-            x: bx,
-            y: by,
-            dx: Math.cos(rad) * speed,
-            dy: Math.sin(rad) * speed,
-            radius: 3.5,
-            visualRadius: 6.0,
-            isTracer: true,
-            distanceTraveled: 0
-        };
+        const rad = ((this.ship.angle - 90) * Math.PI) / 180;
+        const noseDist = this.ship.height * 0.55;
+        const bx = this.ship.x + Math.cos(rad) * noseDist;
+        const by = this.ship.y + Math.sin(rad) * noseDist;
+        const scale = this.core.getScreenScale ? this.core.getScreenScale(this.canvas) : 1.0;
 
-        this.testBullets.push(tracer);
+        const BulletClass = this.core.Bullet;
+        if (BulletClass) {
+            const b = new BulletClass(bx, by, this.ship.angle, 0, 0, scale);
+            b.isTracer = true;
+            this.testBullets.push(b);
+        }
+
         if (this.soundFx && typeof this.soundFx.playLaser === 'function') {
             this.soundFx.playLaser();
         }
     }
 
     /**
-     * Commit the real interception shot!
+     * Commit the real interception shot using the standard game Bullet!
      */
     fireInterceptShot() {
         if (this.state !== 'AIMING' && this.state !== 'PREVIEW') return;
+        if (!this.ship) return;
 
         // Ensure rock is placed at the t = 1.0s clip end position
         this.restoreRockState(this.rockClipEndState);
         this.state = 'FIRING';
         this.isPlayingClip = false;
 
-        const rad = ((this.shipAngle - 90) * Math.PI) / 180;
-        const noseDist = 24;
-        const bx = this.shipX + Math.cos(rad) * noseDist;
-        const by = this.shipY + Math.sin(rad) * noseDist;
-        const speed = this.getSpeedForTier(this.bulletSpeedTier);
+        const rad = ((this.ship.angle - 90) * Math.PI) / 180;
+        const noseDist = this.ship.height * 0.55;
+        const bx = this.ship.x + Math.cos(rad) * noseDist;
+        const by = this.ship.y + Math.sin(rad) * noseDist;
+        const scale = this.core.getScreenScale ? this.core.getScreenScale(this.canvas) : 1.0;
 
         const BulletClass = this.core.Bullet;
         if (BulletClass) {
-            this.interceptBullet = new BulletClass(bx, by, this.shipAngle, 0, 0);
-            this.interceptBullet.dx = Math.cos(rad) * speed;
-            this.interceptBullet.dy = Math.sin(rad) * speed;
-        } else {
-            this.interceptBullet = {
-                x: bx,
-                y: by,
-                dx: Math.cos(rad) * speed,
-                dy: Math.sin(rad) * speed,
-                radius: 3.5,
-                visualRadius: 6.0,
-                hit: false
-            };
+            this.interceptBullet = new BulletClass(bx, by, this.ship.angle, 0, 0, scale);
         }
 
         this.closestDistance = Infinity;
@@ -345,9 +324,6 @@ export class AsteroidleEngine {
         }
     }
 
-    /**
-     * Setup keyboard and canvas touch/mouse listeners
-     */
     setupInputHandlers() {
         let isPointerDown = false;
 
@@ -385,14 +361,14 @@ export class AsteroidleEngine {
             isPointerDown = false;
         });
 
-        // Keyboard controls
+        // Continuous arrow key rotation matching game.js exactly
         window.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
             if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
-                this.adjustAngle(-1);
+                this.keys.left = true;
             } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
-                this.adjustAngle(1);
+                this.keys.right = true;
             } else if (e.code === 'KeyT') {
                 this.testFire();
             } else if (e.code === 'Space') {
@@ -404,18 +380,25 @@ export class AsteroidleEngine {
                 this.playClip();
             }
         });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+                this.keys.left = false;
+            } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+                this.keys.right = false;
+            }
+        });
     }
 
     updateAimUI() {
+        if (!this.ship) return;
+        const deg = Math.round((this.ship.angle % 360 + 360) % 360);
         const degElem = document.getElementById('telemetry-angle-val');
-        if (degElem) degElem.textContent = `${this.shipAngle}°`;
+        if (degElem) degElem.textContent = `${deg}°`;
         const dial = document.getElementById('angle-dial-input');
-        if (dial && dial.value != this.shipAngle) dial.value = this.shipAngle;
+        if (dial && dial.value != deg) dial.value = deg;
     }
 
-    /**
-     * Main animation loop
-     */
     loop(timestamp) {
         const dt = Math.min(0.05, (timestamp - this.lastTime) / 1000);
         this.lastTime = timestamp;
@@ -427,18 +410,33 @@ export class AsteroidleEngine {
     }
 
     update(dt) {
-        // Particle system update
+        // Continuous keyboard rotation (using ship.rotateLeft / rotateRight from game.js)
+        if (this.ship && (this.state === 'AIMING' || this.state === 'PREVIEW')) {
+            if (this.keys.left) {
+                this.ship.rotateLeft();
+                this.updateAimUI();
+            }
+            if (this.keys.right) {
+                this.ship.rotateRight();
+                this.updateAimUI();
+            }
+        }
+
+        // Particle system update from game.js
         if (this.particles && typeof this.particles.update === 'function') {
             this.particles.update();
         }
 
-        // Test tracer bullets
+        // Test tracer bullets update
         for (let i = this.testBullets.length - 1; i >= 0; i--) {
             const b = this.testBullets[i];
-            b.x += b.dx;
-            b.y += b.dy;
-            b.distanceTraveled += Math.hypot(b.dx, b.dy);
-            if (b.x < -20 || b.x > this.width + 20 || b.y < -20 || b.y > this.height + 20) {
+            if (typeof b.update === 'function') {
+                b.update(this.width, this.height);
+            } else {
+                b.x += b.dx;
+                b.y += b.dy;
+            }
+            if (b.hit || b.x < -20 || b.x > this.width + 20 || b.y < -20 || b.y > this.height + 20) {
                 this.testBullets.splice(i, 1);
             }
         }
@@ -463,15 +461,19 @@ export class AsteroidleEngine {
         // Intercept shot execution
         if (this.state === 'FIRING' && this.interceptBullet && this.rock) {
             const b = this.interceptBullet;
-            b.x += b.dx;
-            b.y += b.dy;
+            if (typeof b.update === 'function') {
+                b.update(this.width, this.height);
+            } else {
+                b.x += b.dx;
+                b.y += b.dy;
+            }
 
             // Move rock forward in lockstep
             this.rock.x += this.rock.dx;
             this.rock.y += this.rock.dy;
             this.rock.rotation += this.rock.rotSpeed;
 
-            // Collision check using SpaceshipCore.Rock.containsBullet
+            // Collision check using authentic rock.containsBullet from game.js
             let hit = false;
             if (typeof this.rock.containsBullet === 'function') {
                 hit = this.rock.containsBullet(b);
@@ -480,7 +482,7 @@ export class AsteroidleEngine {
                 hit = d <= this.rock.radius;
             }
 
-            // Continuous distance calculation: test against actual polygon edge segments
+            // Exact continuous surface distance calculation to polygon edge segments
             let surfaceDist;
             const pts = typeof this.rock.getTransformedPoints === 'function' ? this.rock.getTransformedPoints() : null;
             if (pts && typeof this.rock.distToSegmentSquared === 'function') {
@@ -509,15 +511,12 @@ export class AsteroidleEngine {
 
             // Check if bullet exited arena
             const margin = 50;
-            if (b.x < -margin || b.x > this.width + margin || b.y < -margin || b.y > this.height + margin) {
+            if (b.hit || b.x < -margin || b.x > this.width + margin || b.y < -margin || b.y > this.height + margin) {
                 this.resolveRound(false);
             }
         }
     }
 
-    /**
-     * Resolve the round and calculate normalized score
-     */
     resolveRound(isDirectHit) {
         this.state = 'RESOLVED';
 
@@ -540,20 +539,17 @@ export class AsteroidleEngine {
                 subtext: "Perfect ballistic lead solution."
             };
         } else {
-            // Normalized Surface Proximity:
-            // Miss ratio M = surfaceDistance / asteroidRadius
+            // Normalized continuous Surface Proximity:
             const M = this.minSurfaceDistance / R;
-            // Formula: round(100 * (1 - M / 3)^1.5)
             if (M <= 3.0) {
                 score = Math.max(0, Math.round(100 * Math.pow(1 - (M / 3.0), 1.5)));
             } else {
                 score = 0;
             }
 
-            // Calculate lead error in degrees relative to optimal intercept
-            const optimalRad = Math.atan2(this.rock.y - this.shipY, this.rock.x - this.shipX);
+            const optimalRad = Math.atan2(this.rock.y - this.ship.y, this.rock.x - this.ship.x);
             const optimalDeg = ((optimalRad * 180 / Math.PI) + 90 + 360) % 360;
-            let angleDiff = Math.abs(this.shipAngle - optimalDeg);
+            let angleDiff = Math.abs(this.ship.angle - optimalDeg);
             if (angleDiff > 180) angleDiff = 360 - angleDiff;
 
             this.resultTelemetry = {
@@ -577,12 +573,16 @@ export class AsteroidleEngine {
 
         ctx.clearRect(0, 0, W, H);
 
-        // 1. Radar telemetry background
-        this.renderRadarGrid(ctx, W, H);
+        // 1. Authentic deep space starfield from game.js
+        if (this.starfield && typeof this.starfield.draw === 'function') {
+            this.starfield.draw(ctx);
+        }
 
-        // 2. Asteroid
+        // 2. Radar telemetry background
+        this.renderRadarRings(ctx, W, H);
+
+        // 3. Asteroid (using authentic rock.draw from game.js)
         if (this.rock && !this.rock.popped) {
-            // Draw ghost trail during aiming
             if (this.state === 'AIMING' && this.rockInitialState) {
                 ctx.save();
                 ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
@@ -592,7 +592,6 @@ export class AsteroidleEngine {
                 ctx.lineTo(this.rock.x, this.rock.y);
                 ctx.stroke();
 
-                // Small initial ghost marker
                 ctx.fillStyle = 'rgba(148, 163, 184, 0.3)';
                 ctx.beginPath();
                 ctx.arc(this.rockInitialState.x, this.rockInitialState.y, 4, 0, Math.PI * 2);
@@ -600,64 +599,49 @@ export class AsteroidleEngine {
                 ctx.restore();
             }
 
-            this.rock.draw(ctx);
+            if (typeof this.rock.draw === 'function') {
+                this.rock.draw(ctx);
+            }
         }
 
-        // 3. Particles
+        // 4. Particle explosions from game.js
         if (this.particles && typeof this.particles.draw === 'function') {
             this.particles.draw(ctx);
         }
 
-        // 4. Tracer bullets
+        // 5. Tracer bullets (from test fire)
         for (const b of this.testBullets) {
-            ctx.save();
-            ctx.shadowColor = '#38bdf8';
-            ctx.shadowBlur = 8;
-            ctx.fillStyle = '#7dd3fc';
-            ctx.beginPath();
-            ctx.arc(b.x, b.y, b.visualRadius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#e0f2fe';
-            ctx.beginPath();
-            ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-        }
-
-        // 5. Intercept bullet
-        if (this.interceptBullet && !this.interceptBullet.hit) {
-            if (typeof this.interceptBullet.draw === 'function') {
-                this.interceptBullet.draw(ctx);
-            } else {
-                ctx.save();
-                ctx.shadowColor = '#facc15';
-                ctx.shadowBlur = 12;
-                ctx.fillStyle = '#fde047';
-                ctx.beginPath();
-                ctx.arc(this.interceptBullet.x, this.interceptBullet.y, 5, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
+            if (typeof b.draw === 'function') {
+                b.draw(ctx);
             }
         }
 
-        // 6. Player Spaceship
-        this.renderShip(ctx);
+        // 6. Intercept bullet
+        if (this.interceptBullet && !this.interceptBullet.hit) {
+            if (typeof this.interceptBullet.draw === 'function') {
+                this.interceptBullet.draw(ctx);
+            }
+        }
 
-        // 7. Aiming reticle and trajectory line
+        // 7. Authentic Spaceship sprite from game.js!
+        if (this.ship && typeof this.ship.draw === 'function') {
+            this.ship.draw(ctx);
+        }
+
+        // 8. Laser sight guide
         if (this.state === 'AIMING' || this.state === 'PREVIEW') {
             this.renderAimGuide(ctx);
         }
 
-        // 8. On-screen clip progress bar
+        // 9. Clip reconnaissance progress bar
         if (this.state === 'PREVIEW') {
             this.renderClipOverlay(ctx, W, H);
         }
     }
 
-    renderRadarGrid(ctx, W, H) {
+    renderRadarRings(ctx, W, H) {
         ctx.save();
-        // Concentric rings
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.07)';
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
         ctx.lineWidth = 1;
         const cx = W / 2;
         const cy = H / 2;
@@ -667,62 +651,19 @@ export class AsteroidleEngine {
             ctx.arc(cx, cy, r, 0, Math.PI * 2);
             ctx.stroke();
         }
-
-        // Axis lines
-        ctx.beginPath();
-        ctx.moveTo(0, cy);
-        ctx.lineTo(W, cy);
-        ctx.moveTo(cx, 0);
-        ctx.lineTo(cx, H);
-        ctx.stroke();
-        ctx.restore();
-    }
-
-    renderShip(ctx) {
-        ctx.save();
-        ctx.translate(this.shipX, this.shipY);
-        ctx.rotate((this.shipAngle * Math.PI) / 180);
-
-        // Standard Spaceship Geometry (classic retro arrowhead from Spaceship.java)
-        const scale = 1.0;
-        ctx.strokeStyle = '#38bdf8';
-        ctx.fillStyle = '#0f172a';
-        ctx.lineWidth = 2.0;
-
-        ctx.shadowColor = '#0284c7';
-        ctx.shadowBlur = 10;
-
-        ctx.beginPath();
-        ctx.moveTo(0, -22 * scale);       // Nose
-        ctx.lineTo(14 * scale, 16 * scale); // Right fin
-        ctx.lineTo(8 * scale, 12 * scale);  // Right notch
-        ctx.lineTo(0, 15 * scale);          // Thruster
-        ctx.lineTo(-8 * scale, 12 * scale); // Left notch
-        ctx.lineTo(-14 * scale, 16 * scale);// Left fin
-        ctx.closePath();
-
-        ctx.fill();
-        ctx.stroke();
-
-        // Glowing cockpit
-        ctx.fillStyle = '#38bdf8';
-        ctx.beginPath();
-        ctx.arc(0, -4 * scale, 3 * scale, 0, Math.PI * 2);
-        ctx.fill();
-
         ctx.restore();
     }
 
     renderAimGuide(ctx) {
+        if (!this.ship) return;
         ctx.save();
-        const rad = ((this.shipAngle - 90) * Math.PI) / 180;
-        const noseDist = 24;
-        const startX = this.shipX + Math.cos(rad) * noseDist;
-        const startY = this.shipY + Math.sin(rad) * noseDist;
+        const rad = ((this.ship.angle - 90) * Math.PI) / 180;
+        const noseDist = this.ship.height * 0.55;
+        const startX = this.ship.x + Math.cos(rad) * noseDist;
+        const startY = this.ship.y + Math.sin(rad) * noseDist;
         const maxLen = 1200;
 
-        // Faint laser sight line
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([6, 6]);
 
@@ -730,25 +671,6 @@ export class AsteroidleEngine {
         ctx.moveTo(startX, startY);
         ctx.lineTo(startX + Math.cos(rad) * maxLen, startY + Math.sin(rad) * maxLen);
         ctx.stroke();
-
-        // Lead indicator marker
-        const leadDist = 180;
-        const reticleX = startX + Math.cos(rad) * leadDist;
-        const reticleY = startY + Math.sin(rad) * leadDist;
-
-        ctx.setLineDash([]);
-        ctx.strokeStyle = '#38bdf8';
-        ctx.beginPath();
-        ctx.arc(reticleX, reticleY, 8, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(reticleX - 12, reticleY);
-        ctx.lineTo(reticleX + 12, reticleY);
-        ctx.moveTo(reticleX, reticleY - 12);
-        ctx.lineTo(reticleX, reticleY + 12);
-        ctx.stroke();
-
         ctx.restore();
     }
 

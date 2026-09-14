@@ -229,12 +229,6 @@ export class DailyManager {
         const ch = this.challenges[this.currentRound - 1];
         if (!ch) return;
 
-        // Update Tier display badge
-        const tierBadge = document.getElementById('cannon-tier-badge');
-        if (tierBadge) {
-            tierBadge.textContent = this.engine.getTierName(ch.bulletTier);
-        }
-
         // Hide result banner, show aiming
         const resultBanner = document.getElementById('round-result-banner');
         if (resultBanner) resultBanner.classList.remove('visible');
