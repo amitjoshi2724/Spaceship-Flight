@@ -3971,9 +3971,9 @@
     ]
   };
 
-  // Launch on DOM ready (only if arcade game canvas exists)
+  // Launch on DOM ready (only if arcade game canvas & startMenu exist and not in Asteroidle mode)
   function initGame() {
-    if (document.getElementById('gameCanvas')) {
+    if (document.getElementById('gameCanvas') && document.getElementById('startMenu') && !window.ASTEROIDLE_MODE) {
       window.gameInstance = new Game();
 
       // Register Service Worker for bulletproof offline play (only on http/https, as file:// protocol does not support SW)

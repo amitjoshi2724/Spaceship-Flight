@@ -1,24 +1,24 @@
 /**
- * Asteroidle - Daily Manager & UI Controller
+ * Asteroidle - Daily Manager & Arcade UI Controller
  * Manages 5-round puzzle progression, Calendar Archive, Stats Modal,
- * Wordle-style emoji sharing, and Unlimited Mode.
+ * Wordle-style emoji sharing, Unlimited Mode, and Game Settings.
  */
 import { 
     generateDailyChallenges, 
     getTodayDateStr, 
     getPuzzleNumber, 
     parseDate, 
-    formatDate,
-    createMulberry32,
-    hashString
+    formatDate, 
+    createMulberry32, 
+    hashString 
 } from './prng.js';
 import { 
     recordDailyCompletion, 
     getStats, 
     getHistory, 
-    getRecordForDate,
-    saveActiveState,
-    loadActiveState
+    getRecordForDate, 
+    saveActiveState, 
+    loadActiveState 
 } from './storage.js';
 import { AsteroidleEngine } from './asteroidle.js';
 import './auth.js'; // Initializes Google Auth
@@ -36,6 +36,7 @@ export class DailyManager {
         this.initDOM();
         this.checkURLParams();
         this.setupModals();
+        this.setupSettings();
         this.startPuzzle(this.currentDateStr);
     }
 
@@ -46,46 +47,25 @@ export class DailyManager {
 
         if (modeParam === 'unlimited') {
             this.isUnlimited = true;
-        } else if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+            this.updateModeButton();
+            this.startUnlimitedPuzzle();
+            return;
+        }
+
+        if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
             this.currentDateStr = dateParam;
             this.puzzleNum = getPuzzleNumber(dateParam);
         }
     }
 
     initDOM() {
-        const canvas = document.getElementById('asteroidle-canvas');
+        const canvas = document.getElementById('gameCanvas') || document.getElementById('asteroidle-canvas');
         this.engine = new AsteroidleEngine(canvas, (score, telem) => {
             this.onRoundResolved(score, telem);
         });
 
-        // Controls bindings
-        document.getElementById('btn-replay-clip')?.addEventListener('click', () => {
-            this.engine.playClip();
-        });
-
-        document.getElementById('btn-test-fire')?.addEventListener('click', () => {
-            this.engine.testFire();
-        });
-
-        document.getElementById('btn-fire-intercept')?.addEventListener('click', () => {
-            this.engine.fireInterceptShot();
-        });
-
-        // Angle Dial & Steppers
-        const dial = document.getElementById('angle-dial-input');
-        if (dial) {
-            dial.addEventListener('input', (e) => {
-                this.engine.setAngle(Number(e.target.value));
-            });
-        }
-
-        document.getElementById('btn-step-minus-5')?.addEventListener('click', () => this.engine.adjustAngle(-5));
-        document.getElementById('btn-step-minus-1')?.addEventListener('click', () => this.engine.adjustAngle(-1));
-        document.getElementById('btn-step-plus-1')?.addEventListener('click', () => this.engine.adjustAngle(1));
-        document.getElementById('btn-step-plus-5')?.addEventListener('click', () => this.engine.adjustAngle(5));
-
         // Mode switch
-        const modeBtn = document.getElementById('btn-toggle-mode');
+        const modeBtn = document.getElementById('mode-toggle-btn');
         if (modeBtn) {
             modeBtn.addEventListener('click', () => {
                 this.isUnlimited = !this.isUnlimited;
@@ -98,18 +78,51 @@ export class DailyManager {
             });
         }
 
+        // Sound Toggle in Top HUD
+        const soundBtn = document.getElementById('soundToggleBtn');
+        if (soundBtn) {
+            const isSoundOn = localStorage.getItem('spaceship_flight_sound') === 'true';
+            soundBtn.textContent = isSoundOn ? '🔊' : '🔇';
+            soundBtn.addEventListener('click', () => {
+                const nextState = !(localStorage.getItem('spaceship_flight_sound') === 'true');
+                this.engine.setSound(nextState);
+                soundBtn.textContent = nextState ? '🔊' : '🔇';
+                const settingSound = document.getElementById('settingSound');
+                if (settingSound) settingSound.checked = nextState;
+            });
+        }
+
+        // Next Round button in result banner
+        const nextBtn = document.getElementById('next-round-btn');
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => this.advanceNextRound());
+        }
+
+        // Space key advances round if result banner is active
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                const banner = document.getElementById('round-result-banner');
+                if (banner && banner.classList.contains('visible')) {
+                    e.preventDefault();
+                    this.advanceNextRound();
+                }
+            }
+        });
+
         this.updateModeButton();
     }
 
     updateModeButton() {
-        const modeBtn = document.getElementById('btn-toggle-mode');
+        const modeBtn = document.getElementById('mode-toggle-btn');
         if (!modeBtn) return;
         if (this.isUnlimited) {
-            modeBtn.innerHTML = '📅 Play Daily Mode';
+            modeBtn.textContent = 'DAILY';
             modeBtn.classList.add('unlimited-active');
+            modeBtn.title = 'Switch to Daily Puzzle Mode';
         } else {
-            modeBtn.innerHTML = '♾️ Play Unlimited Mode';
+            modeBtn.textContent = 'UNLIMITED';
             modeBtn.classList.remove('unlimited-active');
+            modeBtn.title = 'Switch to Unlimited Practice Mode';
         }
     }
 
@@ -124,19 +137,21 @@ export class DailyManager {
         const existing = getRecordForDate(dateStr);
         if (existing && existing.completed) {
             this.roundScores = existing.roundScores || [0, 0, 0, 0, 0];
-            this.renderRoundNodes();
-            this.showResultsModal(existing.totalScore, true);
+            this.updateHeaderBanner();
+            this.updatePips();
+            this.showResultsModal(existing.totalScore);
             return;
         }
 
         // Restore active progress if partially played
         const saved = loadActiveState(dateStr);
         if (saved && saved.round > 1 && Array.isArray(saved.scores)) {
-            this.currentRound = saved.round;
+            this.currentRound = Math.min(5, saved.round);
             this.roundScores = saved.scores;
         }
 
         this.updateHeaderBanner();
+        this.updatePips();
         this.loadCurrentRound();
     }
 
@@ -146,7 +161,7 @@ export class DailyManager {
         this.puzzleNum = Math.floor(Math.random() * 9000) + 1000;
         const rng = createMulberry32(hashString(randomSeed));
         
-        // Generate 5 challenges ensuring one of each of the 5 rock shapes
+        // Guarantee exactly one of each of the 5 canonical rock shapes
         const shapes = [0, 1, 2, 3, 4];
         for (let i = shapes.length - 1; i > 0; i--) {
             const j = Math.floor(rng() * (i + 1));
@@ -161,63 +176,66 @@ export class DailyManager {
                 baseRadius: 18 + rng() * 18,
                 speed: 0.9 + rng() * 0.5,
                 rotSpeed: (rng() - 0.5) * 0.06,
-                bulletTier: Math.floor(rng() * 5) + 1,
+                bulletTier: 3,
                 side: Math.floor(rng() * 4),
                 sidePos: 0.2 + rng() * 0.6,
                 targetX: 0.3 + rng() * 0.4,
                 targetY: 0.3 + rng() * 0.4,
                 shipX: 0.25 + rng() * 0.5,
-                shipY: 0.25 + rng() * 0.5
+                shipY: 0.25 + rng() * 0.5,
+                initialHeading: Math.floor(rng() * 360)
             });
         }
 
         this.roundScores = [];
         this.currentRound = 1;
         this.updateHeaderBanner();
+        this.updatePips();
         this.loadCurrentRound();
     }
 
     updateHeaderBanner() {
-        const titleElem = document.getElementById('daily-puzzle-title');
-        if (titleElem) {
-            if (this.isUnlimited) {
-                titleElem.textContent = `ASTEROIDLE (UNLIMITED SECTOR #${this.puzzleNum})`;
-            } else {
-                titleElem.textContent = `ASTEROIDLE #${this.puzzleNum} — ${this.currentDateStr}`;
-            }
+        const pNumBadge = document.getElementById('puzzle-number-badge');
+        const pDateLabel = document.getElementById('puzzle-date-label');
+        if (pNumBadge) {
+            pNumBadge.textContent = this.isUnlimited ? `SECTOR #${this.puzzleNum}` : `ASTEROIDLE #${this.puzzleNum}`;
         }
-        this.renderRoundNodes();
+        if (pDateLabel) {
+            pDateLabel.textContent = this.isUnlimited ? `UNLIMITED MISSION` : this.currentDateStr;
+        }
+
+        const roundInd = document.getElementById('round-indicator');
+        if (roundInd) {
+            roundInd.textContent = `${Math.min(5, this.currentRound)} / 5`;
+        }
+
+        const totalScoreVal = document.getElementById('total-score-val');
+        if (totalScoreVal) {
+            const sum = this.roundScores.reduce((a, b) => a + b, 0);
+            totalScoreVal.textContent = `${sum} / 500`;
+        }
     }
 
-    renderRoundNodes() {
-        const container = document.getElementById('round-progress-nodes');
-        if (!container) return;
+    updatePips() {
+        for (let r = 1; r <= 5; r++) {
+            const pip = document.getElementById(`pip-${r}`);
+            if (!pip) continue;
 
-        let html = '';
-        for (let i = 1; i <= 5; i++) {
-            let cls = 'round-node';
-            let label = `R${i}`;
-            let scoreText = '';
+            pip.className = 'round-pip';
+            const score = this.roundScores[r - 1];
 
-            if (i < this.currentRound || (this.roundScores[i - 1] !== undefined)) {
-                const s = this.roundScores[i - 1] || 0;
-                if (s === 100) cls += ' direct-hit';
-                else if (s >= 75) cls += ' high-score';
-                else if (s >= 35) cls += ' mid-score';
-                else cls += ' low-score';
-                scoreText = `<span class="node-score">${s}</span>`;
-            } else if (i === this.currentRound) {
-                cls += ' current';
+            if (score !== undefined) {
+                pip.textContent = score;
+                if (score === 100) pip.classList.add('hit');
+                else if (score > 0) pip.classList.add('near');
+                else pip.classList.add('miss');
+            } else if (r === this.currentRound) {
+                pip.textContent = r;
+                pip.classList.add('current');
+            } else {
+                pip.textContent = r;
             }
-
-            html += `
-                <div class="${cls}">
-                    <span class="node-label">${label}</span>
-                    ${scoreText}
-                </div>
-            `;
         }
-        container.innerHTML = html;
     }
 
     loadCurrentRound() {
@@ -229,14 +247,12 @@ export class DailyManager {
         const ch = this.challenges[this.currentRound - 1];
         if (!ch) return;
 
-        // Hide result banner, show aiming
+        // Hide result banner
         const resultBanner = document.getElementById('round-result-banner');
         if (resultBanner) resultBanner.classList.remove('visible');
 
-        const controls = document.getElementById('fire-controls-bar');
-        if (controls) controls.style.display = 'flex';
-
-        this.renderRoundNodes();
+        this.updateHeaderBanner();
+        this.updatePips();
         this.engine.loadChallenge(ch);
     }
 
@@ -247,32 +263,35 @@ export class DailyManager {
             saveActiveState(this.currentDateStr, this.currentRound, this.roundScores);
         }
 
-        this.renderRoundNodes();
+        this.updateHeaderBanner();
+        this.updatePips();
 
-        // Show banner telemetry
+        // Show floating telemetry result banner
         const resultBanner = document.getElementById('round-result-banner');
-        if (resultBanner) {
-            resultBanner.innerHTML = `
-                <div class="banner-title ${telem.isHit ? 'hit' : 'miss'}">${telem.message}</div>
-                <div class="banner-sub">${telem.subtext}</div>
-                <button id="btn-next-asteroid" class="primary-btn next-btn">
-                    ${this.currentRound < 5 ? 'NEXT ASTEROID →' : 'SEE FINAL RESULTS 📊'}
-                </button>
-            `;
-            resultBanner.classList.add('visible');
+        const headline = document.getElementById('round-score-headline');
+        const points = document.getElementById('round-score-points');
+        const subtext = document.getElementById('round-score-subtext');
+        const nextBtn = document.getElementById('next-round-btn');
 
-            const nextBtn = document.getElementById('btn-next-asteroid');
-            if (nextBtn) {
-                nextBtn.addEventListener('click', () => {
-                    resultBanner.classList.remove('visible');
-                    this.currentRound++;
-                    if (this.currentRound <= 5) {
-                        this.loadCurrentRound();
-                    } else {
-                        this.finalizePuzzle();
-                    }
-                });
-            }
+        if (headline) headline.textContent = telem.message;
+        if (points) points.textContent = `+${score} PTS`;
+        if (subtext) subtext.textContent = telem.subtext;
+        if (nextBtn) {
+            nextBtn.textContent = this.currentRound < 5 ? 'NEXT ASTEROID [SPACE] ➔' : 'VIEW MISSION INTEL [SPACE] 📊';
+        }
+
+        if (resultBanner) resultBanner.classList.add('visible');
+    }
+
+    advanceNextRound() {
+        const resultBanner = document.getElementById('round-result-banner');
+        if (resultBanner) resultBanner.classList.remove('visible');
+
+        this.currentRound++;
+        if (this.currentRound <= 5) {
+            this.loadCurrentRound();
+        } else {
+            this.finalizePuzzle();
         }
     }
 
@@ -283,93 +302,25 @@ export class DailyManager {
             recordDailyCompletion(this.currentDateStr, this.puzzleNum, this.roundScores, total);
         }
 
-        this.showResultsModal(total, false);
+        this.showResultsModal(total);
     }
 
-    showResultsModal(totalScore, wasAlreadyPlayed = false) {
-        const modal = document.getElementById('results-modal');
-        if (!modal) return;
-
-        const scoreVal = document.getElementById('results-total-score');
-        if (scoreVal) scoreVal.textContent = `${totalScore} / 500`;
-
-        const list = document.getElementById('results-rounds-list');
-        if (list) {
-            list.innerHTML = this.roundScores.map((s, idx) => {
-                const badge = s === 100 ? '🟢 DIRECT HIT (100)' : s >= 75 ? `🟡 NEAR MISS (${s})` : s >= 35 ? `🟠 GRAZE (${s})` : `🔴 DEFLECTION (${s})`;
-                return `<div class="result-row"><span>Asteroid ${idx + 1}</span><span class="score-pill">${badge}</span></div>`;
-            }).join('');
-        }
-
-        // Countdown timer to midnight
-        this.updateMidnightCountdown();
-
-        // Share button
-        const shareBtn = document.getElementById('btn-share-score');
-        if (shareBtn) {
-            shareBtn.onclick = () => this.shareScore(totalScore);
-        }
-
-        modal.classList.add('active');
-    }
-
-    shareScore(totalScore) {
-        const emojis = this.roundScores.map(s => {
-            if (s === 100) return '🟢 100';
-            if (s >= 75) return `🟡  ${s}`;
-            if (s >= 35) return `🟠  ${s}`;
-            return `🔴  ${s}`;
-        });
-
-        const shareText = `Asteroidle #${this.puzzleNum} 🎯 ${totalScore}/500\n` +
-            emojis.map((e, idx) => `🪨 R${idx + 1}: ${e}`).join('\n') +
-            `\nhttps://amitjoshi2724.github.io/Spaceship-Flight/asteroidle`;
-
-        navigator.clipboard.writeText(shareText).then(() => {
-            this.showToast('Copied result to clipboard! 📋');
-        }).catch(() => {
-            alert(shareText);
-        });
-    }
-
-    showToast(msg) {
-        let toast = document.getElementById('game-toast');
-        if (!toast) {
-            toast = document.createElement('div');
-            toast.id = 'game-toast';
-            toast.className = 'game-toast';
-            document.body.appendChild(toast);
-        }
-        toast.textContent = msg;
-        toast.classList.add('visible');
-        setTimeout(() => toast.classList.remove('visible'), 2500);
-    }
-
-    updateMidnightCountdown() {
-        const countdownElem = document.getElementById('countdown-timer');
-        if (!countdownElem) return;
-
-        const updateTimer = () => {
-            const now = new Date();
-            const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
-            const diffMs = tomorrow - now;
-
-            const h = String(Math.floor(diffMs / (1000 * 60 * 60))).padStart(2, '0');
-            const m = String(Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))).padStart(2, '0');
-            const s = String(Math.floor((diffMs % (1000 * 60)) / 1000)).padStart(2, '0');
-
-            countdownElem.textContent = `${h}:${m}:${s}`;
-        };
-        updateTimer();
-        setInterval(updateTimer, 1000);
+    showResultsModal(totalScore) {
+        this.renderStatsModal();
+        const modal = document.getElementById('stats-modal');
+        if (modal) modal.classList.add('active');
     }
 
     setupModals() {
-        // Close modal buttons
+        // Modal close buttons (data-close="modal-id")
         document.querySelectorAll('.modal-close-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const modal = e.target.closest('.modal-backdrop');
-                if (modal) modal.classList.remove('active');
+                const targetId = btn.dataset.close;
+                if (targetId) {
+                    document.getElementById(targetId)?.classList.remove('active');
+                } else {
+                    btn.closest('.modal-backdrop, .overlay')?.classList.remove('active');
+                }
             });
         });
 
@@ -381,62 +332,227 @@ export class DailyManager {
         });
 
         // Help Modal
-        document.getElementById('btn-help')?.addEventListener('click', () => {
+        document.getElementById('help-modal-btn')?.addEventListener('click', () => {
             document.getElementById('help-modal')?.classList.add('active');
         });
 
         // Stats Modal
-        document.getElementById('btn-stats')?.addEventListener('click', () => {
+        document.getElementById('stats-modal-btn')?.addEventListener('click', () => {
             this.renderStatsModal();
             document.getElementById('stats-modal')?.classList.add('active');
         });
 
         // Archive Modal
-        document.getElementById('btn-archive')?.addEventListener('click', () => {
+        document.getElementById('archive-modal-btn')?.addEventListener('click', () => {
             this.renderArchiveModal();
             document.getElementById('archive-modal')?.classList.add('active');
         });
+
+        // Share Intel button
+        document.getElementById('share-score-btn')?.addEventListener('click', () => {
+            this.shareScore();
+        });
+    }
+
+    setupSettings() {
+        const settingsModal = document.getElementById('settingsModal');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const closeBtn = document.getElementById('closeSettingsBtn');
+
+        if (settingsBtn && settingsModal) {
+            settingsBtn.addEventListener('click', () => settingsModal.classList.add('active'));
+        }
+        if (closeBtn && settingsModal) {
+            closeBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
+        }
+
+        // Ship Skin Selection
+        const redBtn = document.getElementById('selectRedShip');
+        const blueBtn = document.getElementById('selectBlueShip');
+        const currentSkin = localStorage.getItem('spaceship_flight_ship_skin') || 'red';
+
+        if (currentSkin === 'blue') {
+            blueBtn?.classList.add('active');
+            redBtn?.classList.remove('active');
+        } else {
+            redBtn?.classList.add('active');
+            blueBtn?.classList.remove('active');
+        }
+
+        const updateSkin = (skin) => {
+            this.engine.setShipSkin(skin);
+            if (skin === 'blue') {
+                blueBtn?.classList.add('active');
+                redBtn?.classList.remove('active');
+            } else {
+                redBtn?.classList.add('active');
+                blueBtn?.classList.remove('active');
+            }
+        };
+
+        redBtn?.addEventListener('click', () => updateSkin('red'));
+        blueBtn?.addEventListener('click', () => updateSkin('blue'));
+
+        // Ship Scale Slider
+        const shipScaleSlider = document.getElementById('settingShipSize');
+        const shipScaleVal = document.getElementById('shipSizeVal');
+        const currentScale = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
+        if (shipScaleSlider) {
+            shipScaleSlider.value = currentScale;
+            if (shipScaleVal) shipScaleVal.textContent = `${currentScale}%`;
+
+            shipScaleSlider.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value, 10);
+                if (shipScaleVal) shipScaleVal.textContent = `${val}%`;
+                this.engine.setShipScale(val);
+            });
+        }
+
+        // Sound Toggle Checkbox in Settings
+        const soundCheckbox = document.getElementById('settingSound');
+        const soundBtn = document.getElementById('soundToggleBtn');
+        const isSoundOn = localStorage.getItem('spaceship_flight_sound') === 'true';
+        if (soundCheckbox) {
+            soundCheckbox.checked = isSoundOn;
+            soundCheckbox.addEventListener('change', (e) => {
+                this.engine.setSound(e.target.checked);
+                if (soundBtn) soundBtn.textContent = e.target.checked ? '🔊' : '🔇';
+            });
+        }
+
+        // Touch Controls Visibility Selector
+        const touchSelect = document.getElementById('settingTouchControls');
+        const touchControls = document.getElementById('touchControls');
+        const savedTouch = localStorage.getItem('spaceship_flight_touch_visibility') || 'auto';
+        if (touchSelect) {
+            touchSelect.value = savedTouch;
+            if (touchControls) {
+                touchControls.classList.toggle('hidden', savedTouch === 'hidden');
+            }
+
+            touchSelect.addEventListener('change', (e) => {
+                const val = e.target.value;
+                try { localStorage.setItem('spaceship_flight_touch_visibility', val); } catch (err) { }
+                if (touchControls) {
+                    touchControls.classList.toggle('hidden', val === 'hidden');
+                }
+            });
+        }
+
+        // Button Size Slider
+        const btnSizeSlider = document.getElementById('settingBtnSize');
+        const btnSizeVal = document.getElementById('btnSizeVal');
+        const savedBtnSize = localStorage.getItem('spaceship_flight_btn_size') || '72';
+        document.documentElement.style.setProperty('--ctrl-btn-size', `${savedBtnSize}px`);
+        if (btnSizeSlider) {
+            btnSizeSlider.value = savedBtnSize;
+            if (btnSizeVal) btnSizeVal.textContent = `${savedBtnSize}px`;
+
+            btnSizeSlider.addEventListener('input', (e) => {
+                const sz = e.target.value;
+                if (btnSizeVal) btnSizeVal.textContent = `${sz}px`;
+                document.documentElement.style.setProperty('--ctrl-btn-size', `${sz}px`);
+                try { localStorage.setItem('spaceship_flight_btn_size', sz); } catch (err) { }
+            });
+        }
     }
 
     renderStatsModal() {
         const stats = getStats();
-        document.getElementById('stat-played').textContent = stats.played;
-        document.getElementById('stat-win-rate').textContent = stats.played > 0 ? `${Math.round((stats.won / stats.played) * 100)}%` : '0%';
-        document.getElementById('stat-current-streak').textContent = stats.currentStreak;
-        document.getElementById('stat-max-streak').textContent = stats.maxStreak;
-        document.getElementById('stat-high-score').textContent = stats.highScore;
-        document.getElementById('stat-avg-score').textContent = stats.played > 0 ? Math.round(stats.totalScore / stats.played) : 0;
+        const playedElem = document.getElementById('stat-played');
+        const winPctElem = document.getElementById('stat-win-pct');
+        const streakElem = document.getElementById('stat-streak');
+        const maxStreakElem = document.getElementById('stat-max-streak');
 
-        // Histogram
-        const distContainer = document.getElementById('stats-distribution-chart');
+        if (playedElem) playedElem.textContent = stats.played;
+        if (winPctElem) winPctElem.textContent = stats.played > 0 ? `${Math.round((stats.won / stats.played) * 100)}%` : '0%';
+        if (streakElem) streakElem.textContent = stats.currentStreak;
+        if (maxStreakElem) maxStreakElem.textContent = stats.maxStreak;
+
+        // Score Distribution Histogram
+        const distContainer = document.getElementById('score-distribution-bars');
         if (distContainer) {
             const keys = ['0-100', '101-200', '201-300', '301-400', '401-500'];
             const maxVal = Math.max(1, ...keys.map(k => stats.distribution[k] || 0));
 
             distContainer.innerHTML = keys.map(k => {
                 const count = stats.distribution[k] || 0;
-                const pct = Math.max(7, Math.round((count / maxVal) * 100));
+                const pct = Math.max(8, Math.round((count / maxVal) * 100));
                 return `
-                    <div class="histogram-row">
-                        <span class="bracket-label">${k}</span>
-                        <div class="bar-container">
-                            <div class="bar-fill" style="width: ${pct}%">${count}</div>
+                    <div class="dist-row">
+                        <span class="dist-label">${k}</span>
+                        <div class="dist-bar-track">
+                            <div class="dist-bar-fill" style="width: ${pct}%">${count}</div>
                         </div>
                     </div>
                 `;
             }).join('');
         }
+
+        // Current Mission Performance Breakdown
+        const blocksContainer = document.getElementById('mission-round-blocks');
+        const finalScoreElem = document.getElementById('mission-final-score-val');
+        const total = this.roundScores.reduce((a, b) => a + b, 0);
+
+        if (finalScoreElem) finalScoreElem.textContent = `${total} / 500`;
+
+        if (blocksContainer) {
+            blocksContainer.innerHTML = [1, 2, 3, 4, 5].map(r => {
+                const s = this.roundScores[r - 1];
+                let cls = 'block-pending';
+                let text = '--';
+                if (s !== undefined) {
+                    text = s;
+                    if (s === 100) cls = 'block-hit';
+                    else if (s >= 75) cls = 'block-high';
+                    else if (s >= 35) cls = 'block-mid';
+                    else cls = 'block-miss';
+                }
+                return `<div class="round-block ${cls}"><span class="block-label">R${r}</span><span class="block-val">${text}</span></div>`;
+            }).join('');
+        }
+    }
+
+    shareScore() {
+        const total = this.roundScores.reduce((a, b) => a + b, 0);
+        const emojis = this.roundScores.map(s => {
+            if (s === 100) return '🟢 100';
+            if (s >= 75) return `🟡  ${s}`;
+            if (s >= 35) return `🟠  ${s}`;
+            return `🔴  ${s}`;
+        });
+
+        const shareText = `Asteroidle #${this.puzzleNum} 🎯 ${total}/500\n` +
+            emojis.map((e, idx) => `🪨 R${idx + 1}: ${e}`).join('\n') +
+            `\nhttps://amitjoshi2724.github.io/Spaceship-Flight/asteroidle/`;
+
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(shareText).then(() => {
+                this.showToast();
+            }).catch(() => {
+                alert(shareText);
+            });
+        } else {
+            alert(shareText);
+        }
+    }
+
+    showToast() {
+        const toast = document.getElementById('share-toast');
+        if (!toast) return;
+        toast.classList.remove('hidden');
+        setTimeout(() => toast.classList.add('hidden'), 2500);
     }
 
     renderArchiveModal() {
         const history = getHistory();
-        const listElem = document.getElementById('archive-puzzle-list');
+        const listElem = document.getElementById('archive-list-container');
         if (!listElem) return;
 
         const today = new Date();
         const items = [];
 
-        // List past 30 days
+        // Past 30 Days (Semantle / Wordle archive format)
         for (let i = 0; i < 30; i++) {
             const d = new Date(today);
             d.setDate(d.getDate() - i);
@@ -447,15 +563,22 @@ export class DailyManager {
             items.push({
                 dateStr,
                 pNum,
-                record
+                isToday: i === 0,
+                completed: record && record.completed,
+                score: record ? record.totalScore : null
             });
         }
 
         listElem.innerHTML = items.map(item => {
-            const isToday = item.dateStr === getTodayDateStr();
-            const isSolved = item.record && item.record.completed;
-            const scoreText = isSolved ? `⭐ ${item.record.totalScore} pts` : isToday ? '⏳ Today' : '⚪ Unplayed';
-            const statusClass = isSolved ? 'solved' : isToday ? 'today' : 'unplayed';
+            let statusClass = 'status-pending';
+            let scoreText = 'Unplayed';
+            if (item.completed) {
+                statusClass = 'status-completed';
+                scoreText = `Score: ${item.score}/500`;
+            } else if (item.isToday) {
+                statusClass = 'status-today';
+                scoreText = 'Today\'s Mission';
+            }
 
             return `
                 <div class="archive-card ${statusClass}" data-date="${item.dateStr}">
@@ -465,7 +588,7 @@ export class DailyManager {
                     </div>
                     <div class="archive-action">
                         <span class="archive-badge">${scoreText}</span>
-                        <button class="archive-play-btn" data-date="${item.dateStr}">Play</button>
+                        <button class="archive-play-btn menu-btn" data-date="${item.dateStr}">Play</button>
                     </div>
                 </div>
             `;
@@ -483,11 +606,9 @@ export class DailyManager {
     }
 }
 
-
-
 // Boot DailyManager reliably on DOM load
 function bootAsteroidle() {
-    if (!window.asteroidleApp && document.getElementById('asteroidle-canvas')) {
+    if (!window.asteroidleApp && (document.getElementById('gameCanvas') || document.getElementById('asteroidle-canvas'))) {
         window.asteroidleApp = new DailyManager();
     }
 }

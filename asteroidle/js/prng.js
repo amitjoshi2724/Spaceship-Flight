@@ -139,7 +139,8 @@ export function generateDailyChallenges(dateStr) {
             targetX,
             targetY,
             shipX,
-            shipY
+            shipY,
+            initialHeading: Math.floor(rng() * 360)
         });
     }
 

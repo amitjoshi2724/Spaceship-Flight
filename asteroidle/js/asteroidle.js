@@ -18,9 +18,24 @@ export class AsteroidleEngine {
         const StarfieldClass = this.core.Starfield || class {};
 
         this.soundFx = new SoundFXClass();
+        const savedSound = localStorage.getItem('spaceship_flight_sound');
+        if (this.soundFx) this.soundFx.enabled = (savedSound === 'true');
+
         this.particles = new ParticleSystemClass();
         this.ship = new SpaceshipClass(this.canvas, this.soundFx, this.particles);
-        this.starfield = null;
+        if (this.ship) this.ship.showStatusBars = false;
+        
+        // Restore user skin & scale preference from Spaceship Flight
+        const savedSkin = localStorage.getItem('spaceship_flight_ship_skin') || 'red';
+        if (this.ship) this.ship.selectedSkin = savedSkin;
+
+        const savedScale = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
+        if (this.ship && typeof this.ship.setScalePercent === 'function') {
+            this.ship.setScalePercent(savedScale);
+        }
+
+        // Fullscreen authentic deep space starfield from game.js
+        this.starfield = new StarfieldClass(this.canvas);
 
         // Challenge definition
         this.challenge = null;
@@ -50,39 +65,53 @@ export class AsteroidleEngine {
         this.roundScore = 0;
         this.resultTelemetry = null;
 
+        // Screen shake on hit
+        this.screenShake = 0;
+
         // Animation
         this.animId = null;
         this.lastTime = performance.now();
 
-        // Setup handlers & resize
+        // Setup handlers & resize to full screen
         this.setupInputHandlers();
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => this.resizeCanvas());
+        }
 
         // Start render loop
         this.loop = this.loop.bind(this);
         this.animId = requestAnimationFrame(this.loop);
     }
 
+    /**
+     * Fullscreen responsive canvas matching Spaceship Flight (game.js)
+     */
     resizeCanvas() {
-        const rect = this.canvas.parentElement.getBoundingClientRect();
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        this.width = rect.width;
-        const vh = (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 700;
-        this.height = Math.min(rect.width * 0.72, Math.max(400, vh * 0.58));
+        const screenW = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+        const screenH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        const isPortrait = screenH > screenW;
 
-        this.canvas.width = this.width * dpr;
-        this.canvas.height = this.height * dpr;
-        this.canvas.style.width = `${this.width}px`;
-        this.canvas.style.height = `${this.height}px`;
-
-        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-        // Re-create starfield matching dimensions
-        if (this.core.Starfield) {
-            this.starfield = new this.core.Starfield(this.width, this.height);
+        if (isPortrait) {
+            // 16:9 widescreen canvas horizontally with letterbox padding
+            this.canvas.width = Math.floor(screenW);
+            this.canvas.height = Math.floor(screenW * (9 / 16));
+        } else {
+            // Fullscreen widescreen in landscape / desktop
+            this.canvas.width = Math.floor(screenW);
+            this.canvas.height = Math.floor(screenH);
         }
 
+        this.width = this.canvas.width;
+        this.height = this.canvas.height;
+
+        // Resize authentic starfield
+        if (this.starfield && typeof this.starfield.resize === 'function') {
+            this.starfield.resize();
+        }
+
+        // Adaptive Ship Sizing: authentic proportions decided in Spaceship Flight
         if (this.ship && typeof this.ship.recalculateSize === 'function') {
             this.ship.canvas = this.canvas;
             this.ship.recalculateSize();
@@ -90,6 +119,30 @@ export class AsteroidleEngine {
 
         if (this.challenge) {
             this.updateEntityPositions();
+        }
+    }
+
+    setSound(enabled) {
+        if (this.soundFx) {
+            this.soundFx.enabled = enabled;
+            try {
+                localStorage.setItem('spaceship_flight_sound', enabled ? 'true' : 'false');
+            } catch (e) { }
+        }
+    }
+
+    setShipSkin(skin) {
+        if (this.ship) {
+            this.ship.selectedSkin = skin;
+            try {
+                localStorage.setItem('spaceship_flight_ship_skin', skin);
+            } catch (e) { }
+        }
+    }
+
+    setShipScale(scalePercent) {
+        if (this.ship && typeof this.ship.setScalePercent === 'function') {
+            this.ship.setScalePercent(scalePercent);
         }
     }
 
@@ -124,6 +177,11 @@ export class AsteroidleEngine {
         this.ship.dx = 0;
         this.ship.dy = 0;
 
+        // Initial heading is completely RANDOM (or deterministic per daily seed) - NEVER pre-aimed!
+        const initialAngle = (ch.initialHeading !== undefined) ? ch.initialHeading : Math.floor(Math.random() * 360);
+        this.ship.angle = initialAngle;
+        this.updateAimUI();
+
         // Create the authentic Rock instance using SpaceshipCore.Rock
         const RockClass = this.core.Rock;
         if (!RockClass) return;
@@ -131,7 +189,7 @@ export class AsteroidleEngine {
         this.rock = new RockClass(W, H, ch.speed);
         this.rock.shapeIndex = ch.shapeIndex % 5;
 
-        // Apply challenge baseRadius
+        // Apply challenge baseRadius scaled to arena dimensions
         const baseDimension = Math.min(W, Math.max(450, H * 1.6));
         const sizeFactor = baseDimension / 1000;
         if (ch.baseRadius) {
@@ -163,8 +221,8 @@ export class AsteroidleEngine {
             });
         }
 
-        // Spawn position along perimeter
-        const offset = 20;
+        // Spawn position along arena perimeter
+        const offset = 30;
         let startX, startY;
         if (ch.side === 0) { // Left
             startX = -this.rock.radius - offset;
@@ -211,11 +269,6 @@ export class AsteroidleEngine {
             rotation: this.rock.rotSpeed * this.clipDurationFrames,
             rotSpeed: this.rock.rotSpeed
         };
-
-        // Default ship aim facing the asteroid's predicted end position
-        const defaultAim = Math.atan2(this.rockClipEndState.y - this.ship.y, this.rockClipEndState.x - this.ship.x);
-        this.ship.angle = Math.round(((defaultAim * 180 / Math.PI) + 90 + 360) % 360);
-        this.updateAimUI();
     }
 
     /**
@@ -247,9 +300,6 @@ export class AsteroidleEngine {
         this.rock.popped = false;
     }
 
-    /**
-     * Set angle directly
-     */
     setAngle(deg) {
         if (!this.ship) return;
         this.ship.angle = Math.round((deg % 360 + 360) % 360);
@@ -329,8 +379,10 @@ export class AsteroidleEngine {
 
         const handlePointer = (e) => {
             const rect = this.canvas.getBoundingClientRect();
-            const px = (e.clientX !== undefined ? e.clientX : e.touches[0].clientX) - rect.left;
-            const py = (e.clientY !== undefined ? e.clientY : e.touches[0].clientY) - rect.top;
+            const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+            const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+            const px = clientX - rect.left;
+            const py = clientY - rect.top;
             this.aimAtPoint(px, py);
         };
 
@@ -361,7 +413,7 @@ export class AsteroidleEngine {
             isPointerDown = false;
         });
 
-        // Continuous arrow key rotation matching game.js exactly
+        // Continuous arrow key rotation matching game.js exactly (4.5 deg/frame)
         window.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
@@ -388,6 +440,67 @@ export class AsteroidleEngine {
                 this.keys.right = false;
             }
         });
+
+        // Bind on-screen tactile buttons (identical to Spaceship Flight touch controls)
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+        const btnFire = document.getElementById('btnFire');
+        const replayBtn = document.getElementById('replay-btn');
+        const testFireBtn = document.getElementById('test-fire-btn');
+
+        if (btnLeft) {
+            const startL = (e) => { e.preventDefault(); this.keys.left = true; btnLeft.classList.add('pressed'); };
+            const stopL = (e) => { e.preventDefault(); this.keys.left = false; btnLeft.classList.remove('pressed'); };
+            btnLeft.addEventListener('mousedown', startL);
+            btnLeft.addEventListener('mouseup', stopL);
+            btnLeft.addEventListener('mouseleave', stopL);
+            btnLeft.addEventListener('touchstart', startL, { passive: false });
+            btnLeft.addEventListener('touchend', stopL, { passive: false });
+        }
+
+        if (btnRight) {
+            const startR = (e) => { e.preventDefault(); this.keys.right = true; btnRight.classList.add('pressed'); };
+            const stopR = (e) => { e.preventDefault(); this.keys.right = false; btnRight.classList.remove('pressed'); };
+            btnRight.addEventListener('mousedown', startR);
+            btnRight.addEventListener('mouseup', stopR);
+            btnRight.addEventListener('mouseleave', stopR);
+            btnRight.addEventListener('touchstart', startR, { passive: false });
+            btnRight.addEventListener('touchend', stopR, { passive: false });
+        }
+
+        if (btnFire) {
+            btnFire.addEventListener('click', () => {
+                if (this.state === 'AIMING' || this.state === 'PREVIEW') {
+                    this.fireInterceptShot();
+                }
+            });
+            btnFire.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                btnFire.classList.add('pressed');
+                if (this.state === 'AIMING' || this.state === 'PREVIEW') {
+                    this.fireInterceptShot();
+                }
+            }, { passive: false });
+            btnFire.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                btnFire.classList.remove('pressed');
+            }, { passive: false });
+        }
+
+        if (replayBtn) {
+            replayBtn.addEventListener('click', () => this.playClip());
+        }
+
+        if (testFireBtn) {
+            testFireBtn.addEventListener('click', () => this.testFire());
+        }
+
+        document.querySelectorAll('.finetune-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const step = parseFloat(btn.dataset.step || '0');
+                this.adjustAngle(step);
+            });
+        });
     }
 
     updateAimUI() {
@@ -395,8 +508,6 @@ export class AsteroidleEngine {
         const deg = Math.round((this.ship.angle % 360 + 360) % 360);
         const degElem = document.getElementById('telemetry-angle-val');
         if (degElem) degElem.textContent = `${deg}°`;
-        const dial = document.getElementById('angle-dial-input');
-        if (dial && dial.value != deg) dial.value = deg;
     }
 
     loop(timestamp) {
@@ -410,6 +521,17 @@ export class AsteroidleEngine {
     }
 
     update(dt) {
+        // Starfield gentle parallax update
+        if (this.starfield && typeof this.starfield.update === 'function') {
+            this.starfield.update(0.25, 0);
+        }
+
+        // Screen shake decay
+        if (this.screenShake > 0) {
+            this.screenShake *= 0.9;
+            if (this.screenShake < 0.5) this.screenShake = 0;
+        }
+
         // Continuous keyboard rotation (using ship.rotateLeft / rotateRight from game.js)
         if (this.ship && (this.state === 'AIMING' || this.state === 'PREVIEW')) {
             if (this.keys.left) {
@@ -505,6 +627,7 @@ export class AsteroidleEngine {
             if (hit) {
                 this.directHit = true;
                 this.minSurfaceDistance = 0;
+                this.screenShake = 18;
                 this.resolveRound(true);
                 return;
             }
@@ -527,10 +650,10 @@ export class AsteroidleEngine {
             score = 100;
             if (this.rock) this.rock.popped = true;
             if (this.soundFx && typeof this.soundFx.playExplosion === 'function') {
-                this.soundFx.playExplosion();
+                this.soundFx.playExplosion(false);
             }
-            if (this.particles && typeof this.particles.createExplosion === 'function') {
-                this.particles.createExplosion(this.interceptBullet.x, this.interceptBullet.y, 45, '#f59e0b');
+            if (this.particles && typeof this.particles.addExplosion === 'function') {
+                this.particles.addExplosion(this.interceptBullet.x, this.interceptBullet.y, '#facc15', 35);
             }
             this.resultTelemetry = {
                 score: 100,
@@ -556,7 +679,7 @@ export class AsteroidleEngine {
                 score,
                 isHit: false,
                 message: score > 75 ? "⚡ GRAZING NEAR-MISS!" : score > 40 ? "⚠️ CLOSE SHAVE" : "❌ BALLISTIC DEFLECTION",
-                subtext: `Missed by ${M.toFixed(2)}x rock radii (Error: ~${angleDiff.toFixed(1)}°)`
+                subtext: `Missed by ${M.toFixed(2)}x rock radii (Angle error: ~${angleDiff.toFixed(1)}°)`
             };
         }
 
@@ -571,123 +694,76 @@ export class AsteroidleEngine {
         const W = this.width;
         const H = this.height;
 
-        ctx.clearRect(0, 0, W, H);
+        ctx.save();
+
+        // Screen shake effect on impact
+        if (this.screenShake > 0) {
+            const sx = (Math.random() - 0.5) * this.screenShake;
+            const sy = (Math.random() - 0.5) * this.screenShake;
+            ctx.translate(sx, sy);
+        }
 
         // 1. Authentic deep space starfield from game.js
         if (this.starfield && typeof this.starfield.draw === 'function') {
             this.starfield.draw(ctx);
+        } else {
+            ctx.fillStyle = '#030712';
+            ctx.fillRect(0, 0, W, H);
         }
 
-        // 2. Radar telemetry background
-        this.renderRadarRings(ctx, W, H);
-
-        // 3. Asteroid (using authentic rock.draw from game.js)
+        // 2. Asteroid (using authentic rock.draw from game.js)
         if (this.rock && !this.rock.popped) {
-            if (this.state === 'AIMING' && this.rockInitialState) {
-                ctx.save();
-                ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
-                ctx.setLineDash([4, 4]);
-                ctx.beginPath();
-                ctx.moveTo(this.rockInitialState.x, this.rockInitialState.y);
-                ctx.lineTo(this.rock.x, this.rock.y);
-                ctx.stroke();
-
-                ctx.fillStyle = 'rgba(148, 163, 184, 0.3)';
-                ctx.beginPath();
-                ctx.arc(this.rockInitialState.x, this.rockInitialState.y, 4, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
-            }
-
             if (typeof this.rock.draw === 'function') {
                 this.rock.draw(ctx);
             }
         }
 
-        // 4. Particle explosions from game.js
+        // 3. Particle explosions from game.js
         if (this.particles && typeof this.particles.draw === 'function') {
             this.particles.draw(ctx);
         }
 
-        // 5. Tracer bullets (from test fire)
+        // 4. Tracer bullets (from test fire)
         for (const b of this.testBullets) {
             if (typeof b.draw === 'function') {
                 b.draw(ctx);
             }
         }
 
-        // 6. Intercept bullet
+        // 5. Intercept bullet
         if (this.interceptBullet && !this.interceptBullet.hit) {
             if (typeof this.interceptBullet.draw === 'function') {
                 this.interceptBullet.draw(ctx);
             }
         }
 
-        // 7. Authentic Spaceship sprite from game.js!
+        // 6. Authentic Spaceship sprite from game.js (exact proportions!)
         if (this.ship && typeof this.ship.draw === 'function') {
             this.ship.draw(ctx);
         }
 
-        // 8. Laser sight guide
-        if (this.state === 'AIMING' || this.state === 'PREVIEW') {
-            this.renderAimGuide(ctx);
-        }
-
-        // 9. Clip reconnaissance progress bar
+        // 7. Clip reconnaissance progress bar
         if (this.state === 'PREVIEW') {
             this.renderClipOverlay(ctx, W, H);
         }
-    }
 
-    renderRadarRings(ctx, W, H) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
-        ctx.lineWidth = 1;
-        const cx = W / 2;
-        const cy = H / 2;
-        const maxR = Math.hypot(W, H) / 2;
-        for (let r = 80; r < maxR; r += 80) {
-            ctx.beginPath();
-            ctx.arc(cx, cy, r, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-        ctx.restore();
-    }
-
-    renderAimGuide(ctx) {
-        if (!this.ship) return;
-        ctx.save();
-        const rad = ((this.ship.angle - 90) * Math.PI) / 180;
-        const noseDist = this.ship.height * 0.55;
-        const startX = this.ship.x + Math.cos(rad) * noseDist;
-        const startY = this.ship.y + Math.sin(rad) * noseDist;
-        const maxLen = 1200;
-
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([6, 6]);
-
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(startX + Math.cos(rad) * maxLen, startY + Math.sin(rad) * maxLen);
-        ctx.stroke();
         ctx.restore();
     }
 
     renderClipOverlay(ctx, W, H) {
         ctx.save();
         const progress = Math.min(1.0, this.clipFrame / this.clipDurationFrames);
-        const barW = W * 0.6;
-        const barH = 4;
+        const barW = Math.min(480, W * 0.6);
+        const barH = 5;
         const barX = (W - barW) / 2;
-        const barY = 20;
+        const barY = 78;
 
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
         ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
 
         ctx.fillStyle = '#38bdf8';
         ctx.shadowColor = '#38bdf8';
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 8;
         ctx.fillRect(barX, barY, barW * progress, barH);
 
         ctx.fillStyle = '#94a3b8';

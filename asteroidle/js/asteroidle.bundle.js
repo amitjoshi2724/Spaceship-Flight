@@ -97,7 +97,8 @@
         targetX,
         targetY,
         shipX,
-        shipY
+        shipY,
+        initialHeading: Math.floor(rng() * 360)
       });
     }
     return challenges;
@@ -544,9 +545,18 @@
       const StarfieldClass = this.core.Starfield || class {
       };
       this.soundFx = new SoundFXClass();
+      const savedSound = localStorage.getItem("spaceship_flight_sound");
+      if (this.soundFx) this.soundFx.enabled = savedSound === "true";
       this.particles = new ParticleSystemClass();
       this.ship = new SpaceshipClass(this.canvas, this.soundFx, this.particles);
-      this.starfield = null;
+      if (this.ship) this.ship.showStatusBars = false;
+      const savedSkin = localStorage.getItem("spaceship_flight_ship_skin") || "red";
+      if (this.ship) this.ship.selectedSkin = savedSkin;
+      const savedScale = parseInt(localStorage.getItem("spaceship_flight_ship_scale") || "100", 10);
+      if (this.ship && typeof this.ship.setScalePercent === "function") {
+        this.ship.setScalePercent(savedScale);
+      }
+      this.starfield = new StarfieldClass(this.canvas);
       this.challenge = null;
       this.rock = null;
       this.rockInitialState = null;
@@ -567,27 +577,36 @@
       this.directHit = false;
       this.roundScore = 0;
       this.resultTelemetry = null;
+      this.screenShake = 0;
       this.animId = null;
       this.lastTime = performance.now();
       this.setupInputHandlers();
       this.resizeCanvas();
       window.addEventListener("resize", () => this.resizeCanvas());
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", () => this.resizeCanvas());
+      }
       this.loop = this.loop.bind(this);
       this.animId = requestAnimationFrame(this.loop);
     }
+    /**
+     * Fullscreen responsive canvas matching Spaceship Flight (game.js)
+     */
     resizeCanvas() {
-      const rect = this.canvas.parentElement.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      this.width = rect.width;
-      const vh = typeof window !== "undefined" && window.innerHeight ? window.innerHeight : 700;
-      this.height = Math.min(rect.width * 0.72, Math.max(400, vh * 0.58));
-      this.canvas.width = this.width * dpr;
-      this.canvas.height = this.height * dpr;
-      this.canvas.style.width = `${this.width}px`;
-      this.canvas.style.height = `${this.height}px`;
-      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (this.core.Starfield) {
-        this.starfield = new this.core.Starfield(this.width, this.height);
+      const screenW = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+      const screenH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      const isPortrait = screenH > screenW;
+      if (isPortrait) {
+        this.canvas.width = Math.floor(screenW);
+        this.canvas.height = Math.floor(screenW * (9 / 16));
+      } else {
+        this.canvas.width = Math.floor(screenW);
+        this.canvas.height = Math.floor(screenH);
+      }
+      this.width = this.canvas.width;
+      this.height = this.canvas.height;
+      if (this.starfield && typeof this.starfield.resize === "function") {
+        this.starfield.resize();
       }
       if (this.ship && typeof this.ship.recalculateSize === "function") {
         this.ship.canvas = this.canvas;
@@ -595,6 +614,29 @@
       }
       if (this.challenge) {
         this.updateEntityPositions();
+      }
+    }
+    setSound(enabled) {
+      if (this.soundFx) {
+        this.soundFx.enabled = enabled;
+        try {
+          localStorage.setItem("spaceship_flight_sound", enabled ? "true" : "false");
+        } catch (e) {
+        }
+      }
+    }
+    setShipSkin(skin) {
+      if (this.ship) {
+        this.ship.selectedSkin = skin;
+        try {
+          localStorage.setItem("spaceship_flight_ship_skin", skin);
+        } catch (e) {
+        }
+      }
+    }
+    setShipScale(scalePercent) {
+      if (this.ship && typeof this.ship.setScalePercent === "function") {
+        this.ship.setScalePercent(scalePercent);
       }
     }
     /**
@@ -622,6 +664,9 @@
       this.ship.y = ch.shipY * H;
       this.ship.dx = 0;
       this.ship.dy = 0;
+      const initialAngle = ch.initialHeading !== void 0 ? ch.initialHeading : Math.floor(Math.random() * 360);
+      this.ship.angle = initialAngle;
+      this.updateAimUI();
       const RockClass = this.core.Rock;
       if (!RockClass) return;
       this.rock = new RockClass(W, H, ch.speed);
@@ -654,7 +699,7 @@
           y: (chosen.y[i] - avgY) * this.rock.scale * 1.5
         });
       }
-      const offset = 20;
+      const offset = 30;
       let startX, startY;
       if (ch.side === 0) {
         startX = -this.rock.radius - offset;
@@ -695,9 +740,6 @@
         rotation: this.rock.rotSpeed * this.clipDurationFrames,
         rotSpeed: this.rock.rotSpeed
       };
-      const defaultAim = Math.atan2(this.rockClipEndState.y - this.ship.y, this.rockClipEndState.x - this.ship.x);
-      this.ship.angle = Math.round((defaultAim * 180 / Math.PI + 90 + 360) % 360);
-      this.updateAimUI();
     }
     /**
      * Replay the 1-second preview clip
@@ -725,9 +767,6 @@
       this.rock.rotSpeed = st.rotSpeed;
       this.rock.popped = false;
     }
-    /**
-     * Set angle directly
-     */
     setAngle(deg) {
       if (!this.ship) return;
       this.ship.angle = Math.round((deg % 360 + 360) % 360);
@@ -792,8 +831,10 @@
       let isPointerDown = false;
       const handlePointer = (e) => {
         const rect = this.canvas.getBoundingClientRect();
-        const px = (e.clientX !== void 0 ? e.clientX : e.touches[0].clientX) - rect.left;
-        const py = (e.clientY !== void 0 ? e.clientY : e.touches[0].clientY) - rect.top;
+        const clientX = e.clientX !== void 0 ? e.clientX : e.touches && e.touches[0] ? e.touches[0].clientX : 0;
+        const clientY = e.clientY !== void 0 ? e.clientY : e.touches && e.touches[0] ? e.touches[0].clientY : 0;
+        const px = clientX - rect.left;
+        const py = clientY - rect.top;
         this.aimAtPoint(px, py);
       };
       this.canvas.addEventListener("mousedown", (e) => {
@@ -841,14 +882,81 @@
           this.keys.right = false;
         }
       });
+      const btnLeft = document.getElementById("btnLeft");
+      const btnRight = document.getElementById("btnRight");
+      const btnFire = document.getElementById("btnFire");
+      const replayBtn = document.getElementById("replay-btn");
+      const testFireBtn = document.getElementById("test-fire-btn");
+      if (btnLeft) {
+        const startL = (e) => {
+          e.preventDefault();
+          this.keys.left = true;
+          btnLeft.classList.add("pressed");
+        };
+        const stopL = (e) => {
+          e.preventDefault();
+          this.keys.left = false;
+          btnLeft.classList.remove("pressed");
+        };
+        btnLeft.addEventListener("mousedown", startL);
+        btnLeft.addEventListener("mouseup", stopL);
+        btnLeft.addEventListener("mouseleave", stopL);
+        btnLeft.addEventListener("touchstart", startL, { passive: false });
+        btnLeft.addEventListener("touchend", stopL, { passive: false });
+      }
+      if (btnRight) {
+        const startR = (e) => {
+          e.preventDefault();
+          this.keys.right = true;
+          btnRight.classList.add("pressed");
+        };
+        const stopR = (e) => {
+          e.preventDefault();
+          this.keys.right = false;
+          btnRight.classList.remove("pressed");
+        };
+        btnRight.addEventListener("mousedown", startR);
+        btnRight.addEventListener("mouseup", stopR);
+        btnRight.addEventListener("mouseleave", stopR);
+        btnRight.addEventListener("touchstart", startR, { passive: false });
+        btnRight.addEventListener("touchend", stopR, { passive: false });
+      }
+      if (btnFire) {
+        btnFire.addEventListener("click", () => {
+          if (this.state === "AIMING" || this.state === "PREVIEW") {
+            this.fireInterceptShot();
+          }
+        });
+        btnFire.addEventListener("touchstart", (e) => {
+          e.preventDefault();
+          btnFire.classList.add("pressed");
+          if (this.state === "AIMING" || this.state === "PREVIEW") {
+            this.fireInterceptShot();
+          }
+        }, { passive: false });
+        btnFire.addEventListener("touchend", (e) => {
+          e.preventDefault();
+          btnFire.classList.remove("pressed");
+        }, { passive: false });
+      }
+      if (replayBtn) {
+        replayBtn.addEventListener("click", () => this.playClip());
+      }
+      if (testFireBtn) {
+        testFireBtn.addEventListener("click", () => this.testFire());
+      }
+      document.querySelectorAll(".finetune-pill").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const step = parseFloat(btn.dataset.step || "0");
+          this.adjustAngle(step);
+        });
+      });
     }
     updateAimUI() {
       if (!this.ship) return;
       const deg = Math.round((this.ship.angle % 360 + 360) % 360);
       const degElem = document.getElementById("telemetry-angle-val");
       if (degElem) degElem.textContent = `${deg}\xB0`;
-      const dial = document.getElementById("angle-dial-input");
-      if (dial && dial.value != deg) dial.value = deg;
     }
     loop(timestamp) {
       const dt = Math.min(0.05, (timestamp - this.lastTime) / 1e3);
@@ -858,6 +966,13 @@
       this.animId = requestAnimationFrame(this.loop);
     }
     update(dt) {
+      if (this.starfield && typeof this.starfield.update === "function") {
+        this.starfield.update(0.25, 0);
+      }
+      if (this.screenShake > 0) {
+        this.screenShake *= 0.9;
+        if (this.screenShake < 0.5) this.screenShake = 0;
+      }
       if (this.ship && (this.state === "AIMING" || this.state === "PREVIEW")) {
         if (this.keys.left) {
           this.ship.rotateLeft();
@@ -935,6 +1050,7 @@
         if (hit) {
           this.directHit = true;
           this.minSurfaceDistance = 0;
+          this.screenShake = 18;
           this.resolveRound(true);
           return;
         }
@@ -952,10 +1068,10 @@
         score = 100;
         if (this.rock) this.rock.popped = true;
         if (this.soundFx && typeof this.soundFx.playExplosion === "function") {
-          this.soundFx.playExplosion();
+          this.soundFx.playExplosion(false);
         }
-        if (this.particles && typeof this.particles.createExplosion === "function") {
-          this.particles.createExplosion(this.interceptBullet.x, this.interceptBullet.y, 45, "#f59e0b");
+        if (this.particles && typeof this.particles.addExplosion === "function") {
+          this.particles.addExplosion(this.interceptBullet.x, this.interceptBullet.y, "#facc15", 35);
         }
         this.resultTelemetry = {
           score: 100,
@@ -978,7 +1094,7 @@
           score,
           isHit: false,
           message: score > 75 ? "\u26A1 GRAZING NEAR-MISS!" : score > 40 ? "\u26A0\uFE0F CLOSE SHAVE" : "\u274C BALLISTIC DEFLECTION",
-          subtext: `Missed by ${M.toFixed(2)}x rock radii (Error: ~${angleDiff.toFixed(1)}\xB0)`
+          subtext: `Missed by ${M.toFixed(2)}x rock radii (Angle error: ~${angleDiff.toFixed(1)}\xB0)`
         };
       }
       this.roundScore = score;
@@ -990,26 +1106,19 @@
       const ctx = this.ctx;
       const W = this.width;
       const H = this.height;
-      ctx.clearRect(0, 0, W, H);
+      ctx.save();
+      if (this.screenShake > 0) {
+        const sx = (Math.random() - 0.5) * this.screenShake;
+        const sy = (Math.random() - 0.5) * this.screenShake;
+        ctx.translate(sx, sy);
+      }
       if (this.starfield && typeof this.starfield.draw === "function") {
         this.starfield.draw(ctx);
+      } else {
+        ctx.fillStyle = "#030712";
+        ctx.fillRect(0, 0, W, H);
       }
-      this.renderRadarRings(ctx, W, H);
       if (this.rock && !this.rock.popped) {
-        if (this.state === "AIMING" && this.rockInitialState) {
-          ctx.save();
-          ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
-          ctx.setLineDash([4, 4]);
-          ctx.beginPath();
-          ctx.moveTo(this.rockInitialState.x, this.rockInitialState.y);
-          ctx.lineTo(this.rock.x, this.rock.y);
-          ctx.stroke();
-          ctx.fillStyle = "rgba(148, 163, 184, 0.3)";
-          ctx.beginPath();
-          ctx.arc(this.rockInitialState.x, this.rockInitialState.y, 4, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        }
         if (typeof this.rock.draw === "function") {
           this.rock.draw(ctx);
         }
@@ -1030,56 +1139,23 @@
       if (this.ship && typeof this.ship.draw === "function") {
         this.ship.draw(ctx);
       }
-      if (this.state === "AIMING" || this.state === "PREVIEW") {
-        this.renderAimGuide(ctx);
-      }
       if (this.state === "PREVIEW") {
         this.renderClipOverlay(ctx, W, H);
       }
-    }
-    renderRadarRings(ctx, W, H) {
-      ctx.save();
-      ctx.strokeStyle = "rgba(56, 189, 248, 0.08)";
-      ctx.lineWidth = 1;
-      const cx = W / 2;
-      const cy = H / 2;
-      const maxR = Math.hypot(W, H) / 2;
-      for (let r = 80; r < maxR; r += 80) {
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-    renderAimGuide(ctx) {
-      if (!this.ship) return;
-      ctx.save();
-      const rad = (this.ship.angle - 90) * Math.PI / 180;
-      const noseDist = this.ship.height * 0.55;
-      const startX = this.ship.x + Math.cos(rad) * noseDist;
-      const startY = this.ship.y + Math.sin(rad) * noseDist;
-      const maxLen = 1200;
-      ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([6, 6]);
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.lineTo(startX + Math.cos(rad) * maxLen, startY + Math.sin(rad) * maxLen);
-      ctx.stroke();
       ctx.restore();
     }
     renderClipOverlay(ctx, W, H) {
       ctx.save();
       const progress = Math.min(1, this.clipFrame / this.clipDurationFrames);
-      const barW = W * 0.6;
-      const barH = 4;
+      const barW = Math.min(480, W * 0.6);
+      const barH = 5;
       const barX = (W - barW) / 2;
-      const barY = 20;
-      ctx.fillStyle = "rgba(15, 23, 42, 0.7)";
+      const barY = 78;
+      ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
       ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
       ctx.fillStyle = "#38bdf8";
       ctx.shadowColor = "#38bdf8";
-      ctx.shadowBlur = 6;
+      ctx.shadowBlur = 8;
       ctx.fillRect(barX, barY, barW * progress, barH);
       ctx.fillStyle = "#94a3b8";
       ctx.font = '11px "Share Tech Mono", monospace';
@@ -1102,6 +1178,7 @@
       this.initDOM();
       this.checkURLParams();
       this.setupModals();
+      this.setupSettings();
       this.startPuzzle(this.currentDateStr);
     }
     checkURLParams() {
@@ -1110,36 +1187,21 @@
       const modeParam = urlParams.get("mode");
       if (modeParam === "unlimited") {
         this.isUnlimited = true;
-      } else if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+        this.updateModeButton();
+        this.startUnlimitedPuzzle();
+        return;
+      }
+      if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
         this.currentDateStr = dateParam;
         this.puzzleNum = getPuzzleNumber(dateParam);
       }
     }
     initDOM() {
-      const canvas = document.getElementById("asteroidle-canvas");
+      const canvas = document.getElementById("gameCanvas") || document.getElementById("asteroidle-canvas");
       this.engine = new AsteroidleEngine(canvas, (score, telem) => {
         this.onRoundResolved(score, telem);
       });
-      document.getElementById("btn-replay-clip")?.addEventListener("click", () => {
-        this.engine.playClip();
-      });
-      document.getElementById("btn-test-fire")?.addEventListener("click", () => {
-        this.engine.testFire();
-      });
-      document.getElementById("btn-fire-intercept")?.addEventListener("click", () => {
-        this.engine.fireInterceptShot();
-      });
-      const dial = document.getElementById("angle-dial-input");
-      if (dial) {
-        dial.addEventListener("input", (e) => {
-          this.engine.setAngle(Number(e.target.value));
-        });
-      }
-      document.getElementById("btn-step-minus-5")?.addEventListener("click", () => this.engine.adjustAngle(-5));
-      document.getElementById("btn-step-minus-1")?.addEventListener("click", () => this.engine.adjustAngle(-1));
-      document.getElementById("btn-step-plus-1")?.addEventListener("click", () => this.engine.adjustAngle(1));
-      document.getElementById("btn-step-plus-5")?.addEventListener("click", () => this.engine.adjustAngle(5));
-      const modeBtn = document.getElementById("btn-toggle-mode");
+      const modeBtn = document.getElementById("mode-toggle-btn");
       if (modeBtn) {
         modeBtn.addEventListener("click", () => {
           this.isUnlimited = !this.isUnlimited;
@@ -1151,17 +1213,44 @@
           }
         });
       }
+      const soundBtn = document.getElementById("soundToggleBtn");
+      if (soundBtn) {
+        const isSoundOn = localStorage.getItem("spaceship_flight_sound") === "true";
+        soundBtn.textContent = isSoundOn ? "\u{1F50A}" : "\u{1F507}";
+        soundBtn.addEventListener("click", () => {
+          const nextState = !(localStorage.getItem("spaceship_flight_sound") === "true");
+          this.engine.setSound(nextState);
+          soundBtn.textContent = nextState ? "\u{1F50A}" : "\u{1F507}";
+          const settingSound = document.getElementById("settingSound");
+          if (settingSound) settingSound.checked = nextState;
+        });
+      }
+      const nextBtn = document.getElementById("next-round-btn");
+      if (nextBtn) {
+        nextBtn.addEventListener("click", () => this.advanceNextRound());
+      }
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space") {
+          const banner = document.getElementById("round-result-banner");
+          if (banner && banner.classList.contains("visible")) {
+            e.preventDefault();
+            this.advanceNextRound();
+          }
+        }
+      });
       this.updateModeButton();
     }
     updateModeButton() {
-      const modeBtn = document.getElementById("btn-toggle-mode");
+      const modeBtn = document.getElementById("mode-toggle-btn");
       if (!modeBtn) return;
       if (this.isUnlimited) {
-        modeBtn.innerHTML = "\u{1F4C5} Play Daily Mode";
+        modeBtn.textContent = "DAILY";
         modeBtn.classList.add("unlimited-active");
+        modeBtn.title = "Switch to Daily Puzzle Mode";
       } else {
-        modeBtn.innerHTML = "\u267E\uFE0F Play Unlimited Mode";
+        modeBtn.textContent = "UNLIMITED";
         modeBtn.classList.remove("unlimited-active");
+        modeBtn.title = "Switch to Unlimited Practice Mode";
       }
     }
     startPuzzle(dateStr) {
@@ -1173,16 +1262,18 @@
       const existing = getRecordForDate(dateStr);
       if (existing && existing.completed) {
         this.roundScores = existing.roundScores || [0, 0, 0, 0, 0];
-        this.renderRoundNodes();
-        this.showResultsModal(existing.totalScore, true);
+        this.updateHeaderBanner();
+        this.updatePips();
+        this.showResultsModal(existing.totalScore);
         return;
       }
       const saved = loadActiveState(dateStr);
       if (saved && saved.round > 1 && Array.isArray(saved.scores)) {
-        this.currentRound = saved.round;
+        this.currentRound = Math.min(5, saved.round);
         this.roundScores = saved.scores;
       }
       this.updateHeaderBanner();
+      this.updatePips();
       this.loadCurrentRound();
     }
     startUnlimitedPuzzle() {
@@ -1203,57 +1294,59 @@
           baseRadius: 18 + rng() * 18,
           speed: 0.9 + rng() * 0.5,
           rotSpeed: (rng() - 0.5) * 0.06,
-          bulletTier: Math.floor(rng() * 5) + 1,
+          bulletTier: 3,
           side: Math.floor(rng() * 4),
           sidePos: 0.2 + rng() * 0.6,
           targetX: 0.3 + rng() * 0.4,
           targetY: 0.3 + rng() * 0.4,
           shipX: 0.25 + rng() * 0.5,
-          shipY: 0.25 + rng() * 0.5
+          shipY: 0.25 + rng() * 0.5,
+          initialHeading: Math.floor(rng() * 360)
         });
       }
       this.roundScores = [];
       this.currentRound = 1;
       this.updateHeaderBanner();
+      this.updatePips();
       this.loadCurrentRound();
     }
     updateHeaderBanner() {
-      const titleElem = document.getElementById("daily-puzzle-title");
-      if (titleElem) {
-        if (this.isUnlimited) {
-          titleElem.textContent = `ASTEROIDLE (UNLIMITED SECTOR #${this.puzzleNum})`;
-        } else {
-          titleElem.textContent = `ASTEROIDLE #${this.puzzleNum} \u2014 ${this.currentDateStr}`;
-        }
+      const pNumBadge = document.getElementById("puzzle-number-badge");
+      const pDateLabel = document.getElementById("puzzle-date-label");
+      if (pNumBadge) {
+        pNumBadge.textContent = this.isUnlimited ? `SECTOR #${this.puzzleNum}` : `ASTEROIDLE #${this.puzzleNum}`;
       }
-      this.renderRoundNodes();
+      if (pDateLabel) {
+        pDateLabel.textContent = this.isUnlimited ? `UNLIMITED MISSION` : this.currentDateStr;
+      }
+      const roundInd = document.getElementById("round-indicator");
+      if (roundInd) {
+        roundInd.textContent = `${Math.min(5, this.currentRound)} / 5`;
+      }
+      const totalScoreVal = document.getElementById("total-score-val");
+      if (totalScoreVal) {
+        const sum = this.roundScores.reduce((a, b) => a + b, 0);
+        totalScoreVal.textContent = `${sum} / 500`;
+      }
     }
-    renderRoundNodes() {
-      const container = document.getElementById("round-progress-nodes");
-      if (!container) return;
-      let html = "";
-      for (let i = 1; i <= 5; i++) {
-        let cls = "round-node";
-        let label = `R${i}`;
-        let scoreText = "";
-        if (i < this.currentRound || this.roundScores[i - 1] !== void 0) {
-          const s = this.roundScores[i - 1] || 0;
-          if (s === 100) cls += " direct-hit";
-          else if (s >= 75) cls += " high-score";
-          else if (s >= 35) cls += " mid-score";
-          else cls += " low-score";
-          scoreText = `<span class="node-score">${s}</span>`;
-        } else if (i === this.currentRound) {
-          cls += " current";
+    updatePips() {
+      for (let r = 1; r <= 5; r++) {
+        const pip = document.getElementById(`pip-${r}`);
+        if (!pip) continue;
+        pip.className = "round-pip";
+        const score = this.roundScores[r - 1];
+        if (score !== void 0) {
+          pip.textContent = score;
+          if (score === 100) pip.classList.add("hit");
+          else if (score > 0) pip.classList.add("near");
+          else pip.classList.add("miss");
+        } else if (r === this.currentRound) {
+          pip.textContent = r;
+          pip.classList.add("current");
+        } else {
+          pip.textContent = r;
         }
-        html += `
-                <div class="${cls}">
-                    <span class="node-label">${label}</span>
-                    ${scoreText}
-                </div>
-            `;
       }
-      container.innerHTML = html;
     }
     loadCurrentRound() {
       if (this.currentRound > 5) {
@@ -1264,9 +1357,8 @@
       if (!ch) return;
       const resultBanner = document.getElementById("round-result-banner");
       if (resultBanner) resultBanner.classList.remove("visible");
-      const controls = document.getElementById("fire-controls-bar");
-      if (controls) controls.style.display = "flex";
-      this.renderRoundNodes();
+      this.updateHeaderBanner();
+      this.updatePips();
       this.engine.loadChallenge(ch);
     }
     onRoundResolved(score, telem) {
@@ -1274,29 +1366,29 @@
       if (!this.isUnlimited) {
         saveActiveState(this.currentDateStr, this.currentRound, this.roundScores);
       }
-      this.renderRoundNodes();
+      this.updateHeaderBanner();
+      this.updatePips();
       const resultBanner = document.getElementById("round-result-banner");
-      if (resultBanner) {
-        resultBanner.innerHTML = `
-                <div class="banner-title ${telem.isHit ? "hit" : "miss"}">${telem.message}</div>
-                <div class="banner-sub">${telem.subtext}</div>
-                <button id="btn-next-asteroid" class="primary-btn next-btn">
-                    ${this.currentRound < 5 ? "NEXT ASTEROID \u2192" : "SEE FINAL RESULTS \u{1F4CA}"}
-                </button>
-            `;
-        resultBanner.classList.add("visible");
-        const nextBtn = document.getElementById("btn-next-asteroid");
-        if (nextBtn) {
-          nextBtn.addEventListener("click", () => {
-            resultBanner.classList.remove("visible");
-            this.currentRound++;
-            if (this.currentRound <= 5) {
-              this.loadCurrentRound();
-            } else {
-              this.finalizePuzzle();
-            }
-          });
-        }
+      const headline = document.getElementById("round-score-headline");
+      const points = document.getElementById("round-score-points");
+      const subtext = document.getElementById("round-score-subtext");
+      const nextBtn = document.getElementById("next-round-btn");
+      if (headline) headline.textContent = telem.message;
+      if (points) points.textContent = `+${score} PTS`;
+      if (subtext) subtext.textContent = telem.subtext;
+      if (nextBtn) {
+        nextBtn.textContent = this.currentRound < 5 ? "NEXT ASTEROID [SPACE] \u2794" : "VIEW MISSION INTEL [SPACE] \u{1F4CA}";
+      }
+      if (resultBanner) resultBanner.classList.add("visible");
+    }
+    advanceNextRound() {
+      const resultBanner = document.getElementById("round-result-banner");
+      if (resultBanner) resultBanner.classList.remove("visible");
+      this.currentRound++;
+      if (this.currentRound <= 5) {
+        this.loadCurrentRound();
+      } else {
+        this.finalizePuzzle();
       }
     }
     finalizePuzzle() {
@@ -1304,75 +1396,22 @@
       if (!this.isUnlimited) {
         recordDailyCompletion(this.currentDateStr, this.puzzleNum, this.roundScores, total);
       }
-      this.showResultsModal(total, false);
+      this.showResultsModal(total);
     }
-    showResultsModal(totalScore, wasAlreadyPlayed = false) {
-      const modal = document.getElementById("results-modal");
-      if (!modal) return;
-      const scoreVal = document.getElementById("results-total-score");
-      if (scoreVal) scoreVal.textContent = `${totalScore} / 500`;
-      const list = document.getElementById("results-rounds-list");
-      if (list) {
-        list.innerHTML = this.roundScores.map((s, idx) => {
-          const badge = s === 100 ? "\u{1F7E2} DIRECT HIT (100)" : s >= 75 ? `\u{1F7E1} NEAR MISS (${s})` : s >= 35 ? `\u{1F7E0} GRAZE (${s})` : `\u{1F534} DEFLECTION (${s})`;
-          return `<div class="result-row"><span>Asteroid ${idx + 1}</span><span class="score-pill">${badge}</span></div>`;
-        }).join("");
-      }
-      this.updateMidnightCountdown();
-      const shareBtn = document.getElementById("btn-share-score");
-      if (shareBtn) {
-        shareBtn.onclick = () => this.shareScore(totalScore);
-      }
-      modal.classList.add("active");
-    }
-    shareScore(totalScore) {
-      const emojis = this.roundScores.map((s) => {
-        if (s === 100) return "\u{1F7E2} 100";
-        if (s >= 75) return `\u{1F7E1}  ${s}`;
-        if (s >= 35) return `\u{1F7E0}  ${s}`;
-        return `\u{1F534}  ${s}`;
-      });
-      const shareText = `Asteroidle #${this.puzzleNum} \u{1F3AF} ${totalScore}/500
-` + emojis.map((e, idx) => `\u{1FAA8} R${idx + 1}: ${e}`).join("\n") + `
-https://amitjoshi2724.github.io/Spaceship-Flight/asteroidle`;
-      navigator.clipboard.writeText(shareText).then(() => {
-        this.showToast("Copied result to clipboard! \u{1F4CB}");
-      }).catch(() => {
-        alert(shareText);
-      });
-    }
-    showToast(msg) {
-      let toast = document.getElementById("game-toast");
-      if (!toast) {
-        toast = document.createElement("div");
-        toast.id = "game-toast";
-        toast.className = "game-toast";
-        document.body.appendChild(toast);
-      }
-      toast.textContent = msg;
-      toast.classList.add("visible");
-      setTimeout(() => toast.classList.remove("visible"), 2500);
-    }
-    updateMidnightCountdown() {
-      const countdownElem = document.getElementById("countdown-timer");
-      if (!countdownElem) return;
-      const updateTimer = () => {
-        const now = /* @__PURE__ */ new Date();
-        const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
-        const diffMs = tomorrow - now;
-        const h = String(Math.floor(diffMs / (1e3 * 60 * 60))).padStart(2, "0");
-        const m = String(Math.floor(diffMs % (1e3 * 60 * 60) / (1e3 * 60))).padStart(2, "0");
-        const s = String(Math.floor(diffMs % (1e3 * 60) / 1e3)).padStart(2, "0");
-        countdownElem.textContent = `${h}:${m}:${s}`;
-      };
-      updateTimer();
-      setInterval(updateTimer, 1e3);
+    showResultsModal(totalScore) {
+      this.renderStatsModal();
+      const modal = document.getElementById("stats-modal");
+      if (modal) modal.classList.add("active");
     }
     setupModals() {
       document.querySelectorAll(".modal-close-btn").forEach((btn) => {
         btn.addEventListener("click", (e) => {
-          const modal = e.target.closest(".modal-backdrop");
-          if (modal) modal.classList.remove("active");
+          const targetId = btn.dataset.close;
+          if (targetId) {
+            document.getElementById(targetId)?.classList.remove("active");
+          } else {
+            btn.closest(".modal-backdrop, .overlay")?.classList.remove("active");
+          }
         });
       });
       document.querySelectorAll(".modal-backdrop").forEach((modal) => {
@@ -1380,47 +1419,189 @@ https://amitjoshi2724.github.io/Spaceship-Flight/asteroidle`;
           if (e.target === modal) modal.classList.remove("active");
         });
       });
-      document.getElementById("btn-help")?.addEventListener("click", () => {
+      document.getElementById("help-modal-btn")?.addEventListener("click", () => {
         document.getElementById("help-modal")?.classList.add("active");
       });
-      document.getElementById("btn-stats")?.addEventListener("click", () => {
+      document.getElementById("stats-modal-btn")?.addEventListener("click", () => {
         this.renderStatsModal();
         document.getElementById("stats-modal")?.classList.add("active");
       });
-      document.getElementById("btn-archive")?.addEventListener("click", () => {
+      document.getElementById("archive-modal-btn")?.addEventListener("click", () => {
         this.renderArchiveModal();
         document.getElementById("archive-modal")?.classList.add("active");
       });
+      document.getElementById("share-score-btn")?.addEventListener("click", () => {
+        this.shareScore();
+      });
+    }
+    setupSettings() {
+      const settingsModal = document.getElementById("settingsModal");
+      const settingsBtn = document.getElementById("settingsBtn");
+      const closeBtn = document.getElementById("closeSettingsBtn");
+      if (settingsBtn && settingsModal) {
+        settingsBtn.addEventListener("click", () => settingsModal.classList.add("active"));
+      }
+      if (closeBtn && settingsModal) {
+        closeBtn.addEventListener("click", () => settingsModal.classList.remove("active"));
+      }
+      const redBtn = document.getElementById("selectRedShip");
+      const blueBtn = document.getElementById("selectBlueShip");
+      const currentSkin = localStorage.getItem("spaceship_flight_ship_skin") || "red";
+      if (currentSkin === "blue") {
+        blueBtn?.classList.add("active");
+        redBtn?.classList.remove("active");
+      } else {
+        redBtn?.classList.add("active");
+        blueBtn?.classList.remove("active");
+      }
+      const updateSkin = (skin) => {
+        this.engine.setShipSkin(skin);
+        if (skin === "blue") {
+          blueBtn?.classList.add("active");
+          redBtn?.classList.remove("active");
+        } else {
+          redBtn?.classList.add("active");
+          blueBtn?.classList.remove("active");
+        }
+      };
+      redBtn?.addEventListener("click", () => updateSkin("red"));
+      blueBtn?.addEventListener("click", () => updateSkin("blue"));
+      const shipScaleSlider = document.getElementById("settingShipSize");
+      const shipScaleVal = document.getElementById("shipSizeVal");
+      const currentScale = parseInt(localStorage.getItem("spaceship_flight_ship_scale") || "100", 10);
+      if (shipScaleSlider) {
+        shipScaleSlider.value = currentScale;
+        if (shipScaleVal) shipScaleVal.textContent = `${currentScale}%`;
+        shipScaleSlider.addEventListener("input", (e) => {
+          const val = parseInt(e.target.value, 10);
+          if (shipScaleVal) shipScaleVal.textContent = `${val}%`;
+          this.engine.setShipScale(val);
+        });
+      }
+      const soundCheckbox = document.getElementById("settingSound");
+      const soundBtn = document.getElementById("soundToggleBtn");
+      const isSoundOn = localStorage.getItem("spaceship_flight_sound") === "true";
+      if (soundCheckbox) {
+        soundCheckbox.checked = isSoundOn;
+        soundCheckbox.addEventListener("change", (e) => {
+          this.engine.setSound(e.target.checked);
+          if (soundBtn) soundBtn.textContent = e.target.checked ? "\u{1F50A}" : "\u{1F507}";
+        });
+      }
+      const touchSelect = document.getElementById("settingTouchControls");
+      const touchControls = document.getElementById("touchControls");
+      const savedTouch = localStorage.getItem("spaceship_flight_touch_visibility") || "auto";
+      if (touchSelect) {
+        touchSelect.value = savedTouch;
+        if (touchControls) {
+          touchControls.classList.toggle("hidden", savedTouch === "hidden");
+        }
+        touchSelect.addEventListener("change", (e) => {
+          const val = e.target.value;
+          try {
+            localStorage.setItem("spaceship_flight_touch_visibility", val);
+          } catch (err) {
+          }
+          if (touchControls) {
+            touchControls.classList.toggle("hidden", val === "hidden");
+          }
+        });
+      }
+      const btnSizeSlider = document.getElementById("settingBtnSize");
+      const btnSizeVal = document.getElementById("btnSizeVal");
+      const savedBtnSize = localStorage.getItem("spaceship_flight_btn_size") || "72";
+      document.documentElement.style.setProperty("--ctrl-btn-size", `${savedBtnSize}px`);
+      if (btnSizeSlider) {
+        btnSizeSlider.value = savedBtnSize;
+        if (btnSizeVal) btnSizeVal.textContent = `${savedBtnSize}px`;
+        btnSizeSlider.addEventListener("input", (e) => {
+          const sz = e.target.value;
+          if (btnSizeVal) btnSizeVal.textContent = `${sz}px`;
+          document.documentElement.style.setProperty("--ctrl-btn-size", `${sz}px`);
+          try {
+            localStorage.setItem("spaceship_flight_btn_size", sz);
+          } catch (err) {
+          }
+        });
+      }
     }
     renderStatsModal() {
       const stats = getStats();
-      document.getElementById("stat-played").textContent = stats.played;
-      document.getElementById("stat-win-rate").textContent = stats.played > 0 ? `${Math.round(stats.won / stats.played * 100)}%` : "0%";
-      document.getElementById("stat-current-streak").textContent = stats.currentStreak;
-      document.getElementById("stat-max-streak").textContent = stats.maxStreak;
-      document.getElementById("stat-high-score").textContent = stats.highScore;
-      document.getElementById("stat-avg-score").textContent = stats.played > 0 ? Math.round(stats.totalScore / stats.played) : 0;
-      const distContainer = document.getElementById("stats-distribution-chart");
+      const playedElem = document.getElementById("stat-played");
+      const winPctElem = document.getElementById("stat-win-pct");
+      const streakElem = document.getElementById("stat-streak");
+      const maxStreakElem = document.getElementById("stat-max-streak");
+      if (playedElem) playedElem.textContent = stats.played;
+      if (winPctElem) winPctElem.textContent = stats.played > 0 ? `${Math.round(stats.won / stats.played * 100)}%` : "0%";
+      if (streakElem) streakElem.textContent = stats.currentStreak;
+      if (maxStreakElem) maxStreakElem.textContent = stats.maxStreak;
+      const distContainer = document.getElementById("score-distribution-bars");
       if (distContainer) {
         const keys = ["0-100", "101-200", "201-300", "301-400", "401-500"];
         const maxVal = Math.max(1, ...keys.map((k) => stats.distribution[k] || 0));
         distContainer.innerHTML = keys.map((k) => {
           const count = stats.distribution[k] || 0;
-          const pct = Math.max(7, Math.round(count / maxVal * 100));
+          const pct = Math.max(8, Math.round(count / maxVal * 100));
           return `
-                    <div class="histogram-row">
-                        <span class="bracket-label">${k}</span>
-                        <div class="bar-container">
-                            <div class="bar-fill" style="width: ${pct}%">${count}</div>
+                    <div class="dist-row">
+                        <span class="dist-label">${k}</span>
+                        <div class="dist-bar-track">
+                            <div class="dist-bar-fill" style="width: ${pct}%">${count}</div>
                         </div>
                     </div>
                 `;
         }).join("");
       }
+      const blocksContainer = document.getElementById("mission-round-blocks");
+      const finalScoreElem = document.getElementById("mission-final-score-val");
+      const total = this.roundScores.reduce((a, b) => a + b, 0);
+      if (finalScoreElem) finalScoreElem.textContent = `${total} / 500`;
+      if (blocksContainer) {
+        blocksContainer.innerHTML = [1, 2, 3, 4, 5].map((r) => {
+          const s = this.roundScores[r - 1];
+          let cls = "block-pending";
+          let text = "--";
+          if (s !== void 0) {
+            text = s;
+            if (s === 100) cls = "block-hit";
+            else if (s >= 75) cls = "block-high";
+            else if (s >= 35) cls = "block-mid";
+            else cls = "block-miss";
+          }
+          return `<div class="round-block ${cls}"><span class="block-label">R${r}</span><span class="block-val">${text}</span></div>`;
+        }).join("");
+      }
+    }
+    shareScore() {
+      const total = this.roundScores.reduce((a, b) => a + b, 0);
+      const emojis = this.roundScores.map((s) => {
+        if (s === 100) return "\u{1F7E2} 100";
+        if (s >= 75) return `\u{1F7E1}  ${s}`;
+        if (s >= 35) return `\u{1F7E0}  ${s}`;
+        return `\u{1F534}  ${s}`;
+      });
+      const shareText = `Asteroidle #${this.puzzleNum} \u{1F3AF} ${total}/500
+` + emojis.map((e, idx) => `\u{1FAA8} R${idx + 1}: ${e}`).join("\n") + `
+https://amitjoshi2724.github.io/Spaceship-Flight/asteroidle/`;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(shareText).then(() => {
+          this.showToast();
+        }).catch(() => {
+          alert(shareText);
+        });
+      } else {
+        alert(shareText);
+      }
+    }
+    showToast() {
+      const toast = document.getElementById("share-toast");
+      if (!toast) return;
+      toast.classList.remove("hidden");
+      setTimeout(() => toast.classList.add("hidden"), 2500);
     }
     renderArchiveModal() {
       const history = getHistory();
-      const listElem = document.getElementById("archive-puzzle-list");
+      const listElem = document.getElementById("archive-list-container");
       if (!listElem) return;
       const today = /* @__PURE__ */ new Date();
       const items = [];
@@ -1433,14 +1614,21 @@ https://amitjoshi2724.github.io/Spaceship-Flight/asteroidle`;
         items.push({
           dateStr,
           pNum,
-          record
+          isToday: i === 0,
+          completed: record && record.completed,
+          score: record ? record.totalScore : null
         });
       }
       listElem.innerHTML = items.map((item) => {
-        const isToday = item.dateStr === getTodayDateStr();
-        const isSolved = item.record && item.record.completed;
-        const scoreText = isSolved ? `\u2B50 ${item.record.totalScore} pts` : isToday ? "\u23F3 Today" : "\u26AA Unplayed";
-        const statusClass = isSolved ? "solved" : isToday ? "today" : "unplayed";
+        let statusClass = "status-pending";
+        let scoreText = "Unplayed";
+        if (item.completed) {
+          statusClass = "status-completed";
+          scoreText = `Score: ${item.score}/500`;
+        } else if (item.isToday) {
+          statusClass = "status-today";
+          scoreText = "Today's Mission";
+        }
         return `
                 <div class="archive-card ${statusClass}" data-date="${item.dateStr}">
                     <div class="archive-info">
@@ -1449,7 +1637,7 @@ https://amitjoshi2724.github.io/Spaceship-Flight/asteroidle`;
                     </div>
                     <div class="archive-action">
                         <span class="archive-badge">${scoreText}</span>
-                        <button class="archive-play-btn" data-date="${item.dateStr}">Play</button>
+                        <button class="archive-play-btn menu-btn" data-date="${item.dateStr}">Play</button>
                     </div>
                 </div>
             `;
@@ -1466,7 +1654,7 @@ https://amitjoshi2724.github.io/Spaceship-Flight/asteroidle`;
     }
   };
   function bootAsteroidle() {
-    if (!window.asteroidleApp && document.getElementById("asteroidle-canvas")) {
+    if (!window.asteroidleApp && (document.getElementById("gameCanvas") || document.getElementById("asteroidle-canvas"))) {
       window.asteroidleApp = new DailyManager();
     }
   }
