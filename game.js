@@ -891,7 +891,7 @@
       this.maxEnergy = 100;
       this.shieldEnergy = 100;
       this.maxShieldEnergy = 100;
-      this.powerMode = 'shared'; // 'shared', 'dual', 'shield_only'
+      this.powerMode = 'dual'; // 'dual', 'shared', 'shield_only'
       this.fireCooldown = 0; // Weapon refire delay (prevents machine-gun battery exhaustion)
       this.showStatusBars = false;
       this.scalePercent = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
@@ -2504,11 +2504,12 @@
       this.rlHudUpdateCounter = 0;
 
       let savedPowerMode = localStorage.getItem('spaceship_flight_power_mode');
-      if (!savedPowerMode) {
+      const hasExplicitChoice = localStorage.getItem('spaceship_flight_power_mode_explicit') === 'true';
+      if (!savedPowerMode || (!hasExplicitChoice && savedPowerMode === 'shared')) {
         if (localStorage.getItem('spaceship_flight_unlimited_ammo') === 'true') {
           savedPowerMode = 'shield_only';
         } else {
-          savedPowerMode = 'shared';
+          savedPowerMode = 'dual';
         }
       }
       this.powerMode = savedPowerMode;
@@ -2580,6 +2581,7 @@
       this.updateEnergyDisplay();
       try {
         localStorage.setItem('spaceship_flight_power_mode', mode);
+        localStorage.setItem('spaceship_flight_power_mode_explicit', 'true');
         localStorage.setItem('spaceship_flight_unlimited_ammo', (mode === 'shield_only').toString());
       } catch (err) { }
     }

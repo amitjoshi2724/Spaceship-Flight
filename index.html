@@ -144,13 +144,13 @@
     <!-- On-screen Controls for Touch & Mobile -->
     <div id="touchControls">
       <div class="touch-group-left">
-        <button id="btnEmergencyShield" class="ctrl-btn shield-btn" aria-label="Emergency Shield">
+        <button id="btnEmergencyShield" class="ctrl-btn shield-btn" aria-label="Shield">
           <div class="shield-btn-content">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
-            <span class="btn-subtext">EMERGENCY SHIELD</span>
+            <span class="btn-subtext">SHIELD</span>
           </div>
         </button>
         <div class="touch-rot-row">
@@ -286,14 +286,14 @@
         <div class="setting-group">
           <span class="setting-label">POWER & SHIELD SYSTEM</span>
           <div class="power-mode-selector" id="powerModeSelector">
-            <button type="button" class="power-mode-card active" data-mode="shared">
+            <button type="button" class="power-mode-card" data-mode="shared">
               <div class="power-mode-header">
                 <span class="power-mode-title">SHARED REACTOR</span>
                 <span class="power-mode-badge">+6% SIPHON</span>
               </div>
               <p class="power-mode-desc">1 battery for ammo (12%/shot) & shield (50%). Requires ≥50% to activate.</p>
             </button>
-            <button type="button" class="power-mode-card" data-mode="dual">
+            <button type="button" class="power-mode-card active" data-mode="dual">
               <div class="power-mode-header">
                 <span class="power-mode-title">DUAL CAPACITORS</span>
                 <span class="power-mode-badge dual">+3% / +3%</span>
@@ -377,7 +377,7 @@
               <h3>📱 Touch / Mobile</h3>
               <ul>
                 <li><b>Left / Right (Bottom Left):</b> Rotate ship</li>
-                <li><b>Shield Button (Above Rotators):</b> Emergency Shield</li>
+                <li><b>Shield Button (Above Rotators):</b> Deploy Shield</li>
                 <li><b>Hold Screen / Thrust:</b> Accelerate forward</li>
                 <li><b>Tap Screen / Fire:</b> Fire plasma cannons</li>
                 <li><b>Top Right (| |):</b> Pause / Resume</li>
@@ -389,16 +389,15 @@
                 <li><b>Left / Right or A / D:</b> Rotate ship</li>
                 <li><b>Up Arrow or W:</b> Thrust engine</li>
                 <li><b>Spacebar or Left Click:</b> Fire laser</li>
-                <li><b>Shift / S / Down:</b> Emergency Shield</li>
+                <li><b>Shift / S / Down:</b> Deploy Shield</li>
                 <li><b>P or Escape:</b> Pause game</li>
               </ul>
             </div>
           </div>
 
           <div class="scoring-tip">
-            ⚡ <b>Tactical Reactor:</b> Lasers consume energy. Emergency Shield costs 100% and allows debt (down to
-            -100%). Thrusters recharge 2x faster (Kinetic Dynamo)! In Unlimited Ammo mode, the reactor converts to a
-            steady Shield Charger.
+            ⚡ <b>Power Systems:</b> Lasers consume ammo energy. Shield consumes shield capacitor / reactor power.
+            Thrusters recharge ammo 1.6x faster (Kinetic Dynamo)! In Dual Capacitors mode, weapons and shields have dedicated power gauges.
           </div>
         </div>
 
