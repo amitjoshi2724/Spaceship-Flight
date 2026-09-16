@@ -22,24 +22,43 @@ The game includes seamless dual-input support for both desktop keyboards/mice an
 | **Rotate Ship** | `←` / `→` or `A` / `D` | Continuous rotational steering |
 | **Thrust Engine** | `↑` or `W` | Accelerates ship forward and fires exhaust plumes |
 | **Fire Lasers** | `Spacebar`, `L`, or Left Click | Shoots glowing golden plasma bullets |
+| **Deploy Shield** | `Shift`, `S`, `E`, or `↓` | Activates protective forcefield barrier |
 | **Pause / Resume** | `P` or `Escape` | Toggles the pause and settings menu |
 
 ### 📱 Mobile & Touch Controls
 - **Steering:** Tap the on-screen counter-clockwise **[ ↺ < ]** and clockwise **[ ↻ > ]** looped arrow buttons in the lower-left corner.
 - **Thrust:** Tap & hold the on-screen **[THRUST]** button, or touch & hold anywhere on the canvas.
 - **Fire:** Tap the on-screen **[FIRE]** button, or tap anywhere on the playfield.
+- **Shield:** Tap the on-screen **[SHIELD]** button directly above the rotation arrows.
 - **Pause / Play:** Tap **[ \| \| ]** in the top-right corner to pause (switches dynamically to **[ ▶ ]** when paused).
 
 ---
 
-## 📲 Install as an App & Play Offline (iOS & Android)
+## 📲 Install as an App & Play Offline (Mac, iOS & Android)
 
 **Spaceship Flight** is built as a full **Progressive Web App (PWA)** powered by a dedicated **Service Worker (`sw.js`)** and Web App Manifest (`manifest.json`). 
 
-Once installed to your smartphone's home screen:
+Once installed to your desktop or smartphone:
 - ✈️ **100% Offline Playable:** All game logic, physics, procedural Web Audio synthesizers, and ship sprites are pre-cached directly to persistent device storage via the **Cache Storage API**. You can play in Airplane Mode with zero Wi-Fi or cellular data anytime, anywhere.
-- 📱 **Native Fullscreen Experience:** Launches in standalone mode without browser address bars, URL fields, or tabs.
+- 🖥️ **Native Standalone Window:** Launches in its own dedicated window without browser address bars, URL fields, or tabs.
 - 🔄 **Zero-Hassle Background Updates:** When you connect to Wi-Fi, the Service Worker automatically fetches and updates any new changes pushed to GitHub.
+
+### 🍎 Mac (macOS Desktop App)
+
+You can install **Spaceship Flight** directly as a native macOS desktop application with its own dedicated window, Dock icon, and full offline support:
+
+#### Method A: Safari (macOS Sonoma / Sequoia or newer)
+1. Open **[https://amitjoshi2724.github.io/Spaceship-Flight/](https://amitjoshi2724.github.io/Spaceship-Flight/)** in **Safari**.
+2. In the top menu bar, click **File** > **Add to Dock...** (or click the **Share** button in the Safari toolbar and select **Add to Dock**).
+3. Name it **Spaceship Flight** and click **Add**.
+4. The game is saved to your `Applications` folder and pinned to your **macOS Dock**.
+5. Launch it like any native Mac app—it runs in its own window without browser tabs or address bars, supports full keyboard controls, and is 100% playable offline!
+
+#### Method B: Google Chrome, Brave, or Microsoft Edge
+1. Open **[https://amitjoshi2724.github.io/Spaceship-Flight/](https://amitjoshi2724.github.io/Spaceship-Flight/)** in **Chrome**, **Brave**, or **Edge**.
+2. Click the **Install Spaceship Flight** icon in the right side of the address/URL bar (or go to **Settings (⋮)** > **Save and share** > **Install Spaceship Flight...**).
+3. Click **Install**.
+4. The game opens in its own standalone desktop window and is added to your Mac's **Launchpad**, **Spotlight**, and `~/Applications/Chrome Apps` folder.
 
 ### 🍏 iPhone & iPad (iOS Safari)
 1. Open **[https://amitjoshi2724.github.io/Spaceship-Flight/](https://amitjoshi2724.github.io/Spaceship-Flight/)** in **Safari**.
@@ -81,15 +100,15 @@ Tailor your arcade combat experience with three distinct energy management syste
 
 | Game Mode | Ammo Battery | Shield Capacitor | Debt Allowed? | Combat Siphon (Per Rock Destroyed) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Shared Reactor** *(Default)* | 100% max (12/shot) | Shares main battery (50% cost) | **No** (requires ≥50% charge) | **+6%** to shared battery |
-| **Dual Capacitors** | 100% max (15/shot) | Dedicated 100% capacitor (5%/s) | **No** (requires 100% full charge) | **+3%** to ammo battery **AND** **+3%** to shield |
+| **Dual Capacitors** *(Default)* | 100% max (15/shot) | Dedicated 100% capacitor (5%/s) | **No** (requires 100% full charge) | **+3%** to ammo battery **AND** **+3%** to shield |
+| **Shared Reactor** | 100% max (12/shot) | Shares main battery (50% cost) | **No** (requires ≥50% charge) | **+6%** to shared battery |
 | **Shield Charger** | **Unlimited** (free lasers) | Dedicated 100% capacitor (2%/s) | **No** (requires 100% full charge) | **+3%** to shield capacitor |
 
 #### Mode Breakdown & Combat Siphon:
-- **Shared Reactor (Tactical Resource Trade-Off):**
-  A single power plant routes power to both laser cannons and the emergency invulnerability shield. Features **Kinetic Dynamo** recharging (12.5%/sec idle, accelerating by 1.6x to 20%/sec while thrusting). Firing consumes **12% energy**. Deploying the emergency shield consumes **50% energy** and strictly requires at least 50% charge to activate (no negative debt). Shielding at full battery leaves 50% energy (4 laser shots ready) so you are never left defenseless. Destroying asteroids siphons **+6% energy** back to the reactor.
 - **Dual Capacitors (Tactical Weapon & Defense Separation):**
-  Splits power into independent **Ammo Battery** and **Shield Capacitor** gauges displayed side-by-side on the HUD. Weapons recharge via the **Kinetic Dynamo** (12.5%/sec idle, 20%/sec while thrusting), while the shield recharges passively at **5%/second** (20s full charge). The emergency shield requires a full 100% charge to deploy (no debt). Destroying asteroids rewards tactical play by siphoning **+3% to ammo AND +3% to shield** simultaneously.
+  Splits power into independent **Ammo Battery** and **Shield Capacitor** gauges displayed side-by-side on the HUD. Weapons recharge via the **Kinetic Dynamo** (12.5%/sec idle, 20%/sec while thrusting), while the shield recharges passively at **5%/second** (20s full charge). The shield requires a full 100% charge to deploy (no debt). Destroying asteroids rewards tactical play by siphoning **+3% to ammo AND +3% to shield** simultaneously.
+- **Shared Reactor (Tactical Resource Trade-Off):**
+  A single power plant routes power to both laser cannons and the invulnerability shield. Features **Kinetic Dynamo** recharging (12.5%/sec idle, accelerating by 1.6x to 20%/sec while thrusting). Firing consumes **12% energy**. Deploying the shield consumes **50% energy** and strictly requires at least 50% charge to activate (no negative debt). Shielding at full battery leaves 50% energy (4 laser shots ready) so you are never left defenseless. Destroying asteroids siphons **+6% energy** back to the reactor.
 - **Shield Charger (Casual / Unlimited Ammo):**
   Plasma laser cannons fire freely with infinite ammo. The shield capacitor recharges passively at **2%/second** (50s full charge) with recharging paused during active shield protection. Destroying asteroids awards **+3% shield energy** per rock, rewarding sharpshooters with faster defense recovery while preventing spam exploits.
 
