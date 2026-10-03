@@ -16,7 +16,7 @@ The original codebase featured both a **Java Swing desktop application** and a n
 
 The game includes seamless dual-input support for both desktop keyboards/mice and mobile touchscreens:
 
-### 💻 Desktop Controls
+### 💻 Desktop Controls (Solo Mode)
 | Action | Key / Input | Description |
 | :--- | :--- | :--- |
 | **Rotate Ship** | `←` / `→` or `A` / `D` | Continuous rotational steering |
@@ -24,6 +24,14 @@ The game includes seamless dual-input support for both desktop keyboards/mice an
 | **Fire Lasers** | `Spacebar`, `L`, or Left Click | Shoots glowing golden plasma bullets |
 | **Deploy Shield** | `Shift`, `S`, `E`, or `↓` | Activates protective forcefield barrier |
 | **Pause / Resume** | `P` or `Escape` | Toggles the pause and settings menu |
+
+### 👥 2-Player Local Co-op Controls (Shared Keyboard)
+| Action | Player 1 (🔴 Classic Crimson) | Player 2 (🔵 Cobalt Blue) |
+| :--- | :--- | :--- |
+| **Rotate Ship** | `←` / `→` (Arrow Keys) | `A` / `D` |
+| **Thrust Engine** | `↑` (Up Arrow) | `W` |
+| **Fire Lasers** | `Spacebar`, `Enter`, or `Numpad0` *(Golden Plasma)* | `Left Shift` or `Q` *(Electric Cyan Plasma)* |
+| **Deploy Shield** | `↓` (Down Arrow) or `Right Shift` | `S` or `E` |
 
 ### 📱 Mobile & Touch Controls
 - **Steering:** Tap the on-screen counter-clockwise **[ ↺ < ]** and clockwise **[ ↻ > ]** looped arrow buttons in the lower-left corner.
@@ -129,7 +137,15 @@ Built using the Web Audio API with zero external audio assets:
 - Filtered white-noise explosions upon destroying asteroids
 - Retro 8-bit descending arpeggio on game over
 
-### 10. Customization & Persistence
+### 10. 👥 2-Player Local Co-op Mode
+Team up with a friend on a single shared keyboard:
+- **Collaborative Co-op Dynamics:** Both players share the deep-space arena collaboratively. The two ships pass freely through each other with zero friendly-fire or hull collisions.
+- **Dual Cockpit Cockpit HUD:** Displays real-time dedicated cockpit gauges for Player 1 (Classic Crimson) on the left and Player 2 (Cobalt Blue) on the right, tracking independent hull lives, ammo batteries, and shield capacitors.
+- **Dynamic UFO Alternating Target System:** When the hostile alien saucer arrives, it picks its first target randomly, then dynamically alternates focus and predictive attacks between the two living players every 5 seconds (or immediately if the targeted ship is destroyed).
+- **Independent Respawn & Lone Survivor Mode:** If one ship is eliminated, it respawns with protective invulnerability shielding as long as it has lives remaining. If one player runs out of lives, their partner continues fighting alone. Game Over only triggers when both ships are wiped out.
+- **Shared Victory & Individual Trophies:** Every destroyed asteroid or UFO triggers combat energy siphons for the shooter plus awards a 50% assist energy boost to the partner ship. The Game Over screen displays individual rock kill tallies alongside the shared team final score.
+
+### 11. Customization & Persistence
 - **Ship Skin Selection:** Choose between Classic Crimson (`images/newspaceship.png`) and Cobalt Blue (`images/bluenewspaceship.png`).
 - **On-Ship Status Bars Toggle:** Toggle real-time vertical ammo and shield status bars flanking your ship on or off.
 - **High Score Tracking:** Automatically persists your personal best record in browser `localStorage`.

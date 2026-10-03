@@ -496,10 +496,12 @@
   // Matches Bullet.java from Android and Swing implementations
   // ============================================================================
   class Bullet {
-    constructor(x, y, angle, shipDx, shipDy, sizeFactor = 1.0) {
+    constructor(x, y, angle, shipDx, shipDy, sizeFactor = 1.0, shooterId = 1, bulletColor = null) {
       this.x = x;
       this.y = y;
       this.sizeFactor = sizeFactor;
+      this.shooterId = shooterId;
+      this.color = bulletColor || (shooterId === 2 ? 'cyan' : 'gold');
 
       // Dynamic responsive scaling: never hardcode pixel sizes
       this.coreRadius = 3.0 * sizeFactor;
@@ -534,16 +536,18 @@
       if (this.hit) return;
       ctx.save();
 
-      // Outer glow & radiant aura (yellow)
-      ctx.shadowColor = '#facc15';
+      const isCyan = (this.shooterId === 2 || this.color === 'cyan');
+
+      // Outer glow & radiant aura (yellow or cyan)
+      ctx.shadowColor = isCyan ? '#00f0ff' : '#facc15';
       ctx.shadowBlur = 10;
-      ctx.fillStyle = '#fef08a';
+      ctx.fillStyle = isCyan ? '#a5f3fc' : '#fef08a';
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.visualRadius, 0, Math.PI * 2);
       ctx.fill();
 
-      // Solid vibrant yellow core
-      ctx.fillStyle = '#facc15';
+      // Solid vibrant core (yellow or cyan)
+      ctx.fillStyle = isCyan ? '#00f0ff' : '#facc15';
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.coreRadius, 0, Math.PI * 2);
       ctx.fill();
@@ -897,6 +901,8 @@
       this.scalePercent = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
       this.recalculateSize();
       this.selectedSkin = 'red'; // 'red' or 'blue'
+      this.playerId = 1;
+      this.alive = true;
 
       this.flameFrame = 0;
 
@@ -1020,9 +1026,9 @@
       return false;
     }
 
-    reset(full = false) {
-      this.x = this.canvas.width / 2;
-      this.y = this.canvas.height / 2;
+    reset(full = false, spawnX = null, spawnY = null) {
+      this.x = spawnX !== null ? spawnX : this.canvas.width / 2;
+      this.y = spawnY !== null ? spawnY : this.canvas.height / 2;
       this.dx = 0;
       this.dy = 0;
       this.angle = 0;
@@ -1033,6 +1039,7 @@
       this.energy = this.maxEnergy;
       this.shieldEnergy = this.maxShieldEnergy;
       this.fireCooldown = 0;
+      this.alive = true;
       if (full) {
         this.lives = 3;
       }
@@ -1111,7 +1118,9 @@
       const by = this.y + Math.sin(rad) * noseDist;
 
       const scale = getScreenScale(this.canvas);
-      bullets.push(new Bullet(bx, by, this.angle, this.dx, this.dy, scale));
+      const shooterId = this.playerId || (this.selectedSkin === 'blue' ? 2 : 1);
+      const bulletColor = this.selectedSkin === 'blue' ? 'cyan' : 'gold';
+      bullets.push(new Bullet(bx, by, this.angle, this.dx, this.dy, scale, shooterId, bulletColor));
       this.soundFx.playLaser();
       return true;
     }
@@ -1294,6 +1303,7 @@
     }
 
     draw(ctx) {
+      if (!this.alive) return;
       ctx.save();
       ctx.translate(this.x, this.y);
 
@@ -1800,7 +1810,7 @@
 
     update(player, rocks, ufoBullets) {
       if (!this.alive) return false;
-      if (!this.ship && player) {
+      if (player) {
         this.ship = player;
       }
 
@@ -2384,7 +2394,21 @@
       } catch (_) { }
       this.particles = new ParticleSystem();
       this.starfield = new Starfield(this.canvas);
-      this.ship = new Spaceship(this.canvas, this.soundFx, this.particles);
+
+      // Dual ship instances for Solo and Multiplayer Co-op
+      this.ship1 = new Spaceship(this.canvas, this.soundFx, this.particles);
+      this.ship1.playerId = 1;
+      this.ship1.selectedSkin = 'red';
+
+      this.ship2 = new Spaceship(this.canvas, this.soundFx, this.particles);
+      this.ship2.playerId = 2;
+      this.ship2.selectedSkin = 'blue';
+
+      this.ship = this.ship1;
+      this.ships = [this.ship1];
+      this.gameMode = 'solo'; // 'solo' or 'multiplayer'
+      this.p1Kills = 0;
+      this.p2Kills = 0;
 
       this.bullets = [];
       this.rocks = [];
@@ -2394,8 +2418,14 @@
       this.ufoBullets = [];
       this.ufoSpawnTimer = 0;
 
-      // Input State
+      // Input State (P1: Arrow keys & Space; P2: WASD & Left Shift)
       this.keys = {
+        left: false,
+        right: false,
+        up: false,
+        fire: false
+      };
+      this.keysP2 = {
         left: false,
         right: false,
         up: false,
@@ -2403,9 +2433,16 @@
       };
 
       this.domElements = {
+        hud: document.getElementById('hud'),
+        hudSolo: document.getElementById('hudSolo'),
+        hudMultiplayer: document.getElementById('hudMultiplayer'),
         scoreDisplay: document.getElementById('scoreDisplay'),
         highScoreDisplay: document.getElementById('highScoreDisplay'),
-        livesIcons: document.querySelectorAll('.life-icon'),
+        scoreDisplayMp: document.getElementById('scoreDisplayMp'),
+        highScoreDisplayMp: document.getElementById('highScoreDisplayMp'),
+        livesIcons: document.querySelectorAll('#hudSolo .life-icon'),
+        p1LivesIcons: document.getElementById('p1LivesIcons'),
+        p2LivesIcons: document.getElementById('p2LivesIcons'),
         pauseBtn: document.getElementById('pauseBtn'),
         soundToggleBtn: document.getElementById('soundToggleBtn'),
         touchControls: document.getElementById('touchControls'),
@@ -2419,6 +2456,21 @@
         shieldLabel: document.getElementById('shieldLabel') || document.querySelector('#shieldHud .hud-label'),
         shieldVal: document.getElementById('shieldVal'),
         shieldBarFill: document.getElementById('shieldBarFill'),
+
+        // Multiplayer Cockpit HUD elements
+        p1EnergyHud: document.getElementById('p1EnergyHud'),
+        p1EnergyVal: document.getElementById('p1EnergyVal'),
+        p1EnergyBarFill: document.getElementById('p1EnergyBarFill'),
+        p1ShieldHud: document.getElementById('p1ShieldHud'),
+        p1ShieldVal: document.getElementById('p1ShieldVal'),
+        p1ShieldBarFill: document.getElementById('p1ShieldBarFill'),
+
+        p2EnergyHud: document.getElementById('p2EnergyHud'),
+        p2EnergyVal: document.getElementById('p2EnergyVal'),
+        p2EnergyBarFill: document.getElementById('p2EnergyBarFill'),
+        p2ShieldHud: document.getElementById('p2ShieldHud'),
+        p2ShieldVal: document.getElementById('p2ShieldVal'),
+        p2ShieldBarFill: document.getElementById('p2ShieldBarFill'),
 
         // Buttons
         btnLeft: document.getElementById('btnLeft'),
@@ -2437,6 +2489,7 @@
 
         // Modal triggers
         playBtn: document.getElementById('playBtn'),
+        multiplayerBtn: document.getElementById('multiplayerBtn'),
         settingsBtn: document.getElementById('settingsBtn'),
         instructionsBtn: document.getElementById('instructionsBtn'),
         creditsBtn: document.getElementById('creditsBtn'),
@@ -2472,6 +2525,9 @@
         finalScoreVal: document.getElementById('finalScoreVal'),
         bestScoreVal: document.getElementById('bestScoreVal'),
         newHighScoreBanner: document.getElementById('newHighScoreBanner'),
+        multiplayerResultsStats: document.getElementById('multiplayerResultsStats'),
+        p1ScoreVal: document.getElementById('p1ScoreVal'),
+        p2ScoreVal: document.getElementById('p2ScoreVal'),
 
         // Reinforcement Learning & Autopilot Elements
         watchTrainedBtn: document.getElementById('watchTrainedBtn'),
@@ -2513,16 +2569,19 @@
         }
       }
       this.powerMode = savedPowerMode;
-      this.ship.powerMode = this.powerMode;
+      this.ship1.powerMode = this.powerMode;
+      this.ship2.powerMode = this.powerMode;
 
       const savedUFO = localStorage.getItem('spaceship_flight_enable_ufo');
       this.enableUFO = savedUFO !== null ? savedUFO === 'true' : true;
 
       this.showStatusBars = localStorage.getItem('spaceship_flight_show_status_bars') === 'true';
-      this.ship.showStatusBars = this.showStatusBars;
+      this.ship1.showStatusBars = this.showStatusBars;
+      this.ship2.showStatusBars = this.showStatusBars;
 
       this.unlimitedShield = localStorage.getItem('spaceship_flight_unlimited_shield') === 'true';
-      this.ship.unlimitedShield = this.unlimitedShield;
+      this.ship1.unlimitedShield = this.unlimitedShield;
+      this.ship2.unlimitedShield = this.unlimitedShield;
 
       this.btnSize = parseInt(localStorage.getItem('spaceship_flight_btn_size') || '72', 10);
       this.applyBtnSize(this.btnSize);
@@ -2574,9 +2633,11 @@
 
     setPowerMode(mode) {
       this.powerMode = mode;
-      this.ship.powerMode = mode;
-      if (mode === 'shield_only' || mode === 'dual') {
-        if (this.ship.energy < 0) this.ship.energy = 0;
+      for (const s of this.ships) {
+        s.powerMode = mode;
+        if (mode === 'shield_only' || mode === 'dual') {
+          if (s.energy < 0) s.energy = 0;
+        }
       }
       this.updateEnergyDisplay();
       try {
@@ -2657,8 +2718,8 @@
         this.canvas.height = Math.floor(screenH);
       }
 
-      if (this.ship) {
-        this.ship.recalculateSize();
+      for (const s of this.ships) {
+        if (s) s.recalculateSize();
       }
       if (this.ufo) {
         this.ufo.recalculateSize();
@@ -2670,25 +2731,65 @@
     bindInputs() {
       // Keyboard input
       window.addEventListener('keydown', (e) => {
-        if (e.repeat && (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight')) return;
+        if (e.repeat && (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'Enter')) return;
 
-        if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.keys.left = true;
-        if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keys.right = true;
-        if (e.code === 'ArrowUp' || e.code === 'KeyW') {
-          this.keys.up = true;
-          if (this.state === 'PLAYING') this.ship.setThrust(true);
-        }
-        if (e.code === 'Space' || e.code === 'KeyL') {
-          this.keys.fire = true;
-          if (this.state === 'PLAYING') this.ship.fire(this.bullets);
-        }
-        // Emergency Shield activation: Shift, KeyS, KeyE, or ArrowDown
-        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyS' || e.code === 'KeyE' || e.code === 'ArrowDown') {
-          if (this.state === 'PLAYING') {
-            this.ship.triggerEmergencyShield();
-            this.updateEnergyDisplay();
+        if (this.gameMode === 'multiplayer') {
+          // --- PLAYER 1 (Arrow Keys + Space / ArrowDown) ---
+          if (e.code === 'ArrowLeft') this.keys.left = true;
+          if (e.code === 'ArrowRight') this.keys.right = true;
+          if (e.code === 'ArrowUp') {
+            this.keys.up = true;
+            if (this.state === 'PLAYING' && this.ship1.alive) this.ship1.setThrust(true);
+          }
+          if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Numpad0') {
+            this.keys.fire = true;
+            if (this.state === 'PLAYING' && this.ship1.alive) this.ship1.fire(this.bullets);
+          }
+          if (e.code === 'ArrowDown' || e.code === 'ShiftRight') {
+            if (this.state === 'PLAYING' && this.ship1.alive) {
+              this.ship1.triggerEmergencyShield();
+              this.updateEnergyDisplay();
+            }
+          }
+
+          // --- PLAYER 2 (WASD + ShiftLeft / KeyS) ---
+          if (e.code === 'KeyA') this.keysP2.left = true;
+          if (e.code === 'KeyD') this.keysP2.right = true;
+          if (e.code === 'KeyW') {
+            this.keysP2.up = true;
+            if (this.state === 'PLAYING' && this.ship2.alive) this.ship2.setThrust(true);
+          }
+          if (e.code === 'ShiftLeft' || e.code === 'KeyQ') {
+            this.keysP2.fire = true;
+            if (this.state === 'PLAYING' && this.ship2.alive) this.ship2.fire(this.bullets);
+          }
+          if (e.code === 'KeyS' || e.code === 'KeyE') {
+            if (this.state === 'PLAYING' && this.ship2.alive) {
+              this.ship2.triggerEmergencyShield();
+              this.updateEnergyDisplay();
+            }
+          }
+        } else {
+          // --- SOLO MODE (Unified Arrows or WASD) ---
+          if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.keys.left = true;
+          if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keys.right = true;
+          if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+            this.keys.up = true;
+            if (this.state === 'PLAYING' && this.ship.alive) this.ship.setThrust(true);
+          }
+          if (e.code === 'Space' || e.code === 'KeyL') {
+            this.keys.fire = true;
+            if (this.state === 'PLAYING' && this.ship.alive) this.ship.fire(this.bullets);
+          }
+          // Emergency Shield activation: Shift, KeyS, KeyE, or ArrowDown
+          if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyS' || e.code === 'KeyE' || e.code === 'ArrowDown') {
+            if (this.state === 'PLAYING' && this.ship.alive) {
+              this.ship.triggerEmergencyShield();
+              this.updateEnergyDisplay();
+            }
           }
         }
+
         if (e.code === 'KeyP' || e.code === 'Escape') {
           if (this.rlMode) {
             this.exitRLMode();
@@ -2703,12 +2804,14 @@
         }
         if (e.code === 'KeyG') {
           this.unlimitedShield = !this.unlimitedShield;
-          this.ship.unlimitedShield = this.unlimitedShield;
-          this.ship.invincible = this.unlimitedShield;
-          this.ship.unlimitedAmmo = this.unlimitedShield;
-          if (this.unlimitedShield) {
-            this.ship.energy = this.ship.maxEnergy;
-            this.ship.shieldEnergy = this.ship.maxShieldEnergy;
+          for (const s of this.ships) {
+            s.unlimitedShield = this.unlimitedShield;
+            s.invincible = this.unlimitedShield;
+            s.unlimitedAmmo = this.unlimitedShield;
+            if (this.unlimitedShield) {
+              s.energy = s.maxEnergy;
+              s.shieldEnergy = s.maxShieldEnergy;
+            }
           }
           if (this.domElements.settingUnlimitedShield) {
             this.domElements.settingUnlimitedShield.checked = this.unlimitedShield;
@@ -2719,13 +2822,34 @@
       });
 
       window.addEventListener('keyup', (e) => {
-        if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.keys.left = false;
-        if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keys.right = false;
-        if (e.code === 'ArrowUp' || e.code === 'KeyW') {
-          this.keys.up = false;
-          if (this.state === 'PLAYING') this.ship.setThrust(false);
+        if (this.gameMode === 'multiplayer') {
+          // --- PLAYER 1 ---
+          if (e.code === 'ArrowLeft') this.keys.left = false;
+          if (e.code === 'ArrowRight') this.keys.right = false;
+          if (e.code === 'ArrowUp') {
+            this.keys.up = false;
+            if (this.state === 'PLAYING' && this.ship1.alive) this.ship1.setThrust(false);
+          }
+          if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Numpad0') this.keys.fire = false;
+
+          // --- PLAYER 2 ---
+          if (e.code === 'KeyA') this.keysP2.left = false;
+          if (e.code === 'KeyD') this.keysP2.right = false;
+          if (e.code === 'KeyW') {
+            this.keysP2.up = false;
+            if (this.state === 'PLAYING' && this.ship2.alive) this.ship2.setThrust(false);
+          }
+          if (e.code === 'ShiftLeft' || e.code === 'KeyQ') this.keysP2.fire = false;
+        } else {
+          // --- SOLO MODE ---
+          if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.keys.left = false;
+          if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keys.right = false;
+          if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+            this.keys.up = false;
+            if (this.state === 'PLAYING' && this.ship.alive) this.ship.setThrust(false);
+          }
+          if (e.code === 'Space' || e.code === 'KeyL') this.keys.fire = false;
         }
-        if (e.code === 'Space' || e.code === 'KeyL') this.keys.fire = false;
       });
 
       // On-screen touch buttons
@@ -2823,7 +2947,10 @@
 
     bindUI() {
       // Menu Navigation
-      this.domElements.playBtn.addEventListener('click', () => this.startGame());
+      this.domElements.playBtn.addEventListener('click', () => this.startGame('solo'));
+      if (this.domElements.multiplayerBtn) {
+        this.domElements.multiplayerBtn.addEventListener('click', () => this.startMultiplayer());
+      }
       if (this.domElements.watchTrainedBtn) {
         this.domElements.watchTrainedBtn.addEventListener('click', () => this.startWatchTrainedAI());
       }
@@ -2876,7 +3003,7 @@
         if (this.rlMode === 'trained') {
           this.startWatchTrainedAI();
         } else {
-          this.startGame();
+          this.startGame(this.gameMode);
         }
       });
       this.domElements.gameOverQuitBtn.addEventListener('click', () => this.quitToMainMenu());
@@ -2901,8 +3028,9 @@
         });
       }
 
-      // Ship Selection
+      // Ship Selection (Solo mode)
       const updateShipChoice = (skin) => {
+        this.ship1.selectedSkin = skin;
         this.ship.selectedSkin = skin;
         if (skin === 'blue') {
           this.domElements.selectBlueShip.classList.add('active');
@@ -2926,7 +3054,9 @@
         }
         this.domElements.settingShipSize.addEventListener('input', (e) => {
           const val = parseInt(e.target.value, 10);
-          this.ship.setScalePercent(val);
+          for (const s of this.ships) {
+            s.setScalePercent(val);
+          }
           if (this.ufo) {
             this.ufo.recalculateSize();
           }
@@ -3007,7 +3137,9 @@
         this.domElements.settingStatusBars.checked = this.showStatusBars;
         this.domElements.settingStatusBars.addEventListener('change', (e) => {
           this.showStatusBars = e.target.checked;
-          this.ship.showStatusBars = this.showStatusBars;
+          for (const s of this.ships) {
+            s.showStatusBars = this.showStatusBars;
+          }
           try {
             localStorage.setItem('spaceship_flight_show_status_bars', this.showStatusBars.toString());
           } catch (err) { }
@@ -3019,12 +3151,14 @@
         this.domElements.settingUnlimitedShield.checked = this.unlimitedShield;
         this.domElements.settingUnlimitedShield.addEventListener('change', (e) => {
           this.unlimitedShield = e.target.checked;
-          this.ship.unlimitedShield = this.unlimitedShield;
-          this.ship.unlimitedAmmo = this.unlimitedShield;
-          this.ship.invincible = this.unlimitedShield;
-          if (this.unlimitedShield) {
-            this.ship.energy = this.ship.maxEnergy;
-            this.ship.shieldEnergy = this.ship.maxShieldEnergy;
+          for (const s of this.ships) {
+            s.unlimitedShield = this.unlimitedShield;
+            s.unlimitedAmmo = this.unlimitedShield;
+            s.invincible = this.unlimitedShield;
+            if (this.unlimitedShield) {
+              s.energy = s.maxEnergy;
+              s.shieldEnergy = s.maxShieldEnergy;
+            }
           }
           this.updateEnergyDisplay();
           try {
@@ -3080,7 +3214,14 @@
       }
     }
 
-    startGame() {
+    startMultiplayer() {
+      this.startGame('multiplayer');
+    }
+
+    startGame(mode = 'solo') {
+      this.gameMode = mode;
+      this.p1Kills = 0;
+      this.p2Kills = 0;
       this.rlMode = null;
       if (this.rlAgent) this.rlAgent.mode = 'idle';
       this.lastStepDecision = null;
@@ -3091,6 +3232,7 @@
       this.soundFx.resume();
       this.soundFx.stopThrust(true);
       this.keys.up = false;
+      if (this.keysP2) this.keysP2.up = false;
       this.hideModals();
       this.domElements.startScreen.classList.remove('active');
 
@@ -3102,8 +3244,47 @@
       this.ufo = null;
       this.ufoBullets = [];
       this.ufoSpawnTimer = 0;
+      this.ufoTargetShip = null;
+      this.ufoTargetTimer = 0;
       this.particles.clear();
-      this.ship.reset(true);
+
+      if (this.gameMode === 'multiplayer') {
+        if (this.domElements.hud) {
+          this.domElements.hud.classList.add('multiplayer-active');
+        }
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        this.ship1.selectedSkin = 'red';
+        this.ship1.playerId = 1;
+        this.ship1.powerMode = this.powerMode;
+        this.ship1.showStatusBars = this.showStatusBars;
+        this.ship1.unlimitedShield = this.unlimitedShield;
+        this.ship1.unlimitedAmmo = this.unlimitedShield;
+        this.ship1.reset(true, w * 0.38, h * 0.55);
+
+        this.ship2.selectedSkin = 'blue';
+        this.ship2.playerId = 2;
+        this.ship2.powerMode = this.powerMode;
+        this.ship2.showStatusBars = this.showStatusBars;
+        this.ship2.unlimitedShield = this.unlimitedShield;
+        this.ship2.unlimitedAmmo = this.unlimitedShield;
+        this.ship2.reset(true, w * 0.62, h * 0.55);
+
+        this.ships = [this.ship1, this.ship2];
+        this.ship = this.ship1;
+      } else {
+        if (this.domElements.hud) {
+          this.domElements.hud.classList.remove('multiplayer-active');
+        }
+        this.ship1.reset(true);
+        this.ship1.powerMode = this.powerMode;
+        this.ship1.showStatusBars = this.showStatusBars;
+        this.ship1.unlimitedShield = this.unlimitedShield;
+        this.ship1.unlimitedAmmo = this.unlimitedShield;
+        this.ships = [this.ship1];
+        this.ship = this.ship1;
+      }
+
       this.updateLivesDisplay();
       this.updateEnergyDisplay();
 
@@ -3282,7 +3463,7 @@
       } else if (this.rlMode === 'training') {
         this.startWatchAITraining();
       } else {
-        this.startGame();
+        this.startGame(this.gameMode);
       }
     }
 
@@ -3292,9 +3473,14 @@
       this.lastStepDecision = null;
       if (this.domElements.aiTelemetryHud) this.domElements.aiTelemetryHud.classList.add('hidden');
       if (this.domElements.rlTrainingHud) this.domElements.rlTrainingHud.classList.add('hidden');
+      if (this.domElements.hud) {
+        this.domElements.hud.classList.remove('multiplayer-active');
+      }
 
       this.hideModals();
-      this.ship.setThrust(false);
+      for (const s of this.ships) {
+        s.setThrust(false);
+      }
       this.ufo = null;
       this.ufoBullets = [];
       this.ufoSpawnTimer = 0;
@@ -3312,60 +3498,118 @@
     updateScore(val) {
       this.score = val;
       this.domElements.scoreDisplay.textContent = this.score;
+      if (this.domElements.scoreDisplayMp) {
+        this.domElements.scoreDisplayMp.textContent = this.score;
+      }
 
       if (this.score > this.highScore) {
         this.highScore = this.score;
         this.domElements.highScoreDisplay.textContent = this.highScore;
+        if (this.domElements.highScoreDisplayMp) {
+          this.domElements.highScoreDisplayMp.textContent = this.highScore;
+        }
         localStorage.setItem('spaceship_flight_high_score', this.highScore.toString());
       }
     }
 
     updateLivesDisplay() {
-      this.domElements.livesIcons.forEach((icon, idx) => {
-        const poly = icon.querySelector('polygon');
-        if (idx < this.ship.lives) {
-          icon.classList.add('active');
-          if (poly) poly.setAttribute('fill', '#00f0ff');
-        } else {
-          icon.classList.remove('active');
-          if (poly) poly.setAttribute('fill', '#334155');
+      if (this.gameMode === 'multiplayer') {
+        if (this.domElements.p1LivesIcons) {
+          const p1Icons = this.domElements.p1LivesIcons.querySelectorAll('.life-icon');
+          p1Icons.forEach((icon, idx) => {
+            const poly = icon.querySelector('polygon');
+            if (idx < this.ship1.lives) {
+              icon.classList.add('active');
+              if (poly) poly.setAttribute('fill', '#ef4444');
+            } else {
+              icon.classList.remove('active');
+              if (poly) poly.setAttribute('fill', '#334155');
+            }
+          });
         }
-      });
+        if (this.domElements.p2LivesIcons) {
+          const p2Icons = this.domElements.p2LivesIcons.querySelectorAll('.life-icon');
+          p2Icons.forEach((icon, idx) => {
+            const poly = icon.querySelector('polygon');
+            if (idx < this.ship2.lives) {
+              icon.classList.add('active');
+              if (poly) poly.setAttribute('fill', '#38bdf8');
+            } else {
+              icon.classList.remove('active');
+              if (poly) poly.setAttribute('fill', '#334155');
+            }
+          });
+        }
+      } else {
+        this.domElements.livesIcons.forEach((icon, idx) => {
+          const poly = icon.querySelector('polygon');
+          if (idx < this.ship.lives) {
+            icon.classList.add('active');
+            if (poly) poly.setAttribute('fill', '#00f0ff');
+          } else {
+            icon.classList.remove('active');
+            if (poly) poly.setAttribute('fill', '#334155');
+          }
+        });
+      }
     }
 
-    applyCombatSiphon() {
-      if (this.powerMode === 'shared') {
-        // Shared Reactor: +6% to shared battery per rock destroyed
-        this.ship.energy = Math.min(this.ship.maxEnergy, this.ship.energy + 6);
-      } else if (this.powerMode === 'dual') {
-        // Dual Capacitors: +3% to ammo battery AND +3% to shield capacitor
-        this.ship.energy = Math.min(this.ship.maxEnergy, this.ship.energy + 3);
-        this.ship.shieldEnergy = Math.min(this.ship.maxShieldEnergy, this.ship.shieldEnergy + 3);
-      } else if (this.powerMode === 'shield_only') {
-        // Shield Charger: +3% to shield capacitor (ammo is unlimited)
-        this.ship.shieldEnergy = Math.min(this.ship.maxShieldEnergy, this.ship.shieldEnergy + 3);
+    applyCombatSiphon(shooterId = 1) {
+      const shooter = (shooterId === 2) ? this.ship2 : this.ship1;
+      const partner = (shooterId === 2) ? this.ship1 : this.ship2;
+
+      const siphonToShip = (s, fullAmt) => {
+        if (!s || !s.alive) return;
+        if (s.powerMode === 'shared') {
+          s.energy = Math.min(s.maxEnergy, s.energy + fullAmt * 2);
+        } else if (s.powerMode === 'dual') {
+          s.energy = Math.min(s.maxEnergy, s.energy + fullAmt);
+          s.shieldEnergy = Math.min(s.maxShieldEnergy, s.shieldEnergy + fullAmt);
+        } else if (s.powerMode === 'shield_only') {
+          s.shieldEnergy = Math.min(s.maxShieldEnergy, s.shieldEnergy + fullAmt);
+        }
+      };
+
+      siphonToShip(shooter, 3);
+      if (this.gameMode === 'multiplayer') {
+        siphonToShip(partner, 1.5);
       }
       this.updateEnergyDisplay();
     }
 
-    applyUFOSiphon() {
-      if (this.powerMode === 'shared') {
-        // Shared Reactor: +10% to shared battery
-        this.ship.energy = Math.min(this.ship.maxEnergy, this.ship.energy + 10);
-      } else if (this.powerMode === 'dual') {
-        // Dual Capacitors: +5% to ammo battery AND +5% to shield capacitor
-        this.ship.energy = Math.min(this.ship.maxEnergy, this.ship.energy + 5);
-        this.ship.shieldEnergy = Math.min(this.ship.maxShieldEnergy, this.ship.shieldEnergy + 5);
-      } else if (this.powerMode === 'shield_only') {
-        // Shield Charger: +10% to shield capacitor
-        this.ship.shieldEnergy = Math.min(this.ship.maxShieldEnergy, this.ship.shieldEnergy + 10);
+    applyUFOSiphon(shooterId = 1) {
+      const shooter = (shooterId === 2) ? this.ship2 : this.ship1;
+      const partner = (shooterId === 2) ? this.ship1 : this.ship2;
+
+      const siphonToShip = (s, fullAmt) => {
+        if (!s || !s.alive) return;
+        if (s.powerMode === 'shared') {
+          s.energy = Math.min(s.maxEnergy, s.energy + fullAmt * 2);
+        } else if (s.powerMode === 'dual') {
+          s.energy = Math.min(s.maxEnergy, s.energy + fullAmt);
+          s.shieldEnergy = Math.min(s.maxShieldEnergy, s.shieldEnergy + fullAmt);
+        } else if (s.powerMode === 'shield_only') {
+          s.shieldEnergy = Math.min(s.maxShieldEnergy, s.shieldEnergy + fullAmt);
+        }
+      };
+
+      siphonToShip(shooter, 5);
+      if (this.gameMode === 'multiplayer') {
+        siphonToShip(partner, 2.5);
       }
       this.updateEnergyDisplay();
     }
 
     spawnUFO() {
       if (!this.enableUFO) return;
-      this.ufo = new UFO(this.canvas, this.soundFx, this.particles, this.difficulty, this.ship, this.rocks);
+      const living = this.ships.filter(s => s && s.alive);
+      if (living.length > 0) {
+        this.ufoTargetShip = living[Math.floor(Math.random() * living.length)];
+      } else {
+        this.ufoTargetShip = this.ship;
+      }
+      this.ufoTargetTimer = 0;
+      this.ufo = new UFO(this.canvas, this.soundFx, this.particles, this.difficulty, this.ufoTargetShip, this.rocks);
       this.soundFx.playUFOWarning();
       // Visual warp-in shockwave effect to ensure player notices UFO arrival
       this.particles.addExplosion(this.ufo.x, this.ufo.y, '#c084fc', 22);
@@ -3373,6 +3617,43 @@
     }
 
     updateEnergyDisplay() {
+      if (this.gameMode === 'multiplayer') {
+        const updateShipGauges = (s, valEl, barEl, shieldValEl, shieldBarEl) => {
+          if (!s || !valEl || !barEl) return;
+          const energyVal = Math.round(s.energy);
+          const fillPct = Math.max(0, Math.min(100, energyVal));
+          valEl.textContent = `${energyVal}%`;
+          barEl.style.width = `${fillPct}%`;
+          barEl.className = 'energy-bar-fill' + (energyVal < 15 ? ' depleted' : '');
+
+          if (shieldValEl && shieldBarEl) {
+            const shieldVal = Math.round(s.shieldEnergy);
+            const isReady = shieldVal >= 100;
+            const shieldPct = Math.max(0, Math.min(100, shieldVal));
+            shieldValEl.textContent = `${shieldVal}%`;
+            shieldValEl.className = 'energy-percent shield-mode' + (isReady ? ' ready' : '');
+            shieldBarEl.style.width = `${shieldPct}%`;
+            shieldBarEl.className = 'energy-bar-fill shield-mode' + (isReady ? ' ready' : '');
+          }
+        };
+
+        updateShipGauges(
+          this.ship1,
+          this.domElements.p1EnergyVal,
+          this.domElements.p1EnergyBarFill,
+          this.domElements.p1ShieldVal,
+          this.domElements.p1ShieldBarFill
+        );
+        updateShipGauges(
+          this.ship2,
+          this.domElements.p2EnergyVal,
+          this.domElements.p2EnergyBarFill,
+          this.domElements.p2ShieldVal,
+          this.domElements.p2ShieldBarFill
+        );
+        return;
+      }
+
       if (!this.domElements.energyHud) return;
 
       const isDual = this.powerMode === 'dual';
@@ -3529,41 +3810,83 @@
       }
     }
 
-    handlePlayerHit() {
+    handlePlayerHit(targetShip = null) {
+      const ship = targetShip || this.ship;
+      if (!ship || !ship.alive) return;
+
       this.soundFx.stopThrust(true);
-      this.ship.setThrust(false);
-      this.keys.up = false;
+      ship.setThrust(false);
+      if (ship === this.ship1) this.keys.up = false;
+      if (ship === this.ship2 && this.keysP2) this.keysP2.up = false;
+
       this.soundFx.playExplosion(true);
       this.screenShake = 16;
-      this.particles.addExplosion(this.ship.x, this.ship.y, '#f43f5e', 35);
+      this.particles.addExplosion(ship.x, ship.y, '#f43f5e', 35);
 
       if (this.rlMode === 'training') {
         this.finishTrainingEpisode(-15);
         return;
       }
 
-      this.ship.lives--;
+      ship.lives--;
       this.updateLivesDisplay();
 
-      if (this.ship.lives <= 0) {
-        this.gameOver();
+      if (this.gameMode === 'multiplayer') {
+        if (ship.lives <= 0) {
+          ship.alive = false;
+          const anyAlive = this.ships.some(s => s && s.alive && s.lives > 0);
+          if (!anyAlive) {
+            this.gameOver();
+          }
+        } else {
+          const spawnX = (ship.playerId === 2) ? this.canvas.width * 0.62 : this.canvas.width * 0.38;
+          const spawnY = this.canvas.height * 0.55;
+          ship.reset(false, spawnX, spawnY);
+          ship.energy = ship.maxEnergy;
+          ship.shieldEnergy = ship.maxShieldEnergy;
+          this.updateEnergyDisplay();
+        }
       } else {
-        this.ship.reset(false);
-        this.ship.energy = this.ship.maxEnergy; // Guarantee fresh 100% on respawn
-        this.ship.shieldEnergy = this.ship.maxShieldEnergy; // Guarantee fresh 100% on respawn
-        this.updateEnergyDisplay();
+        if (ship.lives <= 0) {
+          ship.alive = false;
+          this.gameOver();
+        } else {
+          ship.reset(false);
+          ship.energy = ship.maxEnergy;
+          ship.shieldEnergy = ship.maxShieldEnergy;
+          this.updateEnergyDisplay();
+        }
       }
     }
 
     gameOver() {
       this.state = 'GAMEOVER';
       this.soundFx.stopThrust(true);
-      this.ship.setThrust(false);
+      for (const s of this.ships) {
+        s.setThrust(false);
+      }
       this.keys.up = false;
+      if (this.keysP2) this.keysP2.up = false;
       this.soundFx.playGameOver();
 
       this.domElements.finalScoreVal.textContent = this.score;
       this.domElements.bestScoreVal.textContent = this.highScore;
+
+      if (this.gameMode === 'multiplayer') {
+        if (this.domElements.multiplayerResultsStats) {
+          this.domElements.multiplayerResultsStats.classList.remove('hidden');
+        }
+        if (this.domElements.p1ScoreVal) {
+          this.domElements.p1ScoreVal.textContent = this.p1Kills;
+        }
+        if (this.domElements.p2ScoreVal) {
+          this.domElements.p2ScoreVal.textContent = this.p2Kills;
+        }
+      } else {
+        if (this.domElements.multiplayerResultsStats) {
+          this.domElements.multiplayerResultsStats.classList.add('hidden');
+        }
+      }
 
       if (this.score >= this.highScore && this.score > 0) {
         this.domElements.newHighScoreBanner.classList.remove('hidden');
@@ -3612,14 +3935,25 @@
             this.ship.triggerEmergencyShield();
             this.updateEnergyDisplay();
           }
+        } else if (this.gameMode === 'multiplayer') {
+          // Human keyboard rotation for P1 and P2
+          if (this.keys.left && this.ship1.alive) this.ship1.rotateLeft();
+          if (this.keys.right && this.ship1.alive) this.ship1.rotateRight();
+          if (this.keysP2.left && this.ship2.alive) this.ship2.rotateLeft();
+          if (this.keysP2.right && this.ship2.alive) this.ship2.rotateRight();
         } else {
           // Continuous human keyboard rotation
-          if (this.keys.left) this.ship.rotateLeft();
-          if (this.keys.right) this.ship.rotateRight();
+          if (this.keys.left && this.ship.alive) this.ship.rotateLeft();
+          if (this.keys.right && this.ship.alive) this.ship.rotateRight();
         }
 
-        // Ship update (movement, thrust, kinetic battery recharge with dynamic dt)
-        this.ship.update(dtSeconds);
+        // Ships update (movement, thrust, kinetic battery recharge with dynamic dt)
+        // Collaborative co-op: Ships pass through each other with zero collision between hulls
+        for (const s of this.ships) {
+          if (s && s.alive) {
+            s.update(dtSeconds);
+          }
+        }
         this.updateEnergyDisplay();
 
         // Asteroid Spawning based on difficulty limits
@@ -3640,9 +3974,25 @@
           }
         }
 
-        // UFO update
-        if (this.ufo) {
-          const ufoAlive = this.ufo.update(this.ship, this.rocks, this.ufoBullets);
+        // UFO update & alternating targeting between living player ships
+        if (this.ufo && this.ufo.alive) {
+          if (this.gameMode === 'multiplayer') {
+            this.ufoTargetTimer = (this.ufoTargetTimer || 0) + 1;
+            const living = this.ships.filter(s => s && s.alive);
+            if (living.length > 1) {
+              // Alternate every 300 frames (~5s at 60fps) or immediately if current target died
+              if (this.ufoTargetTimer >= 300 || !this.ufoTargetShip || !this.ufoTargetShip.alive) {
+                this.ufoTargetTimer = 0;
+                this.ufoTargetShip = (this.ufoTargetShip === this.ship1) ? this.ship2 : this.ship1;
+              }
+            } else if (living.length === 1) {
+              this.ufoTargetShip = living[0];
+            }
+          } else {
+            this.ufoTargetShip = this.ship;
+          }
+
+          const ufoAlive = this.ufo.update(this.ufoTargetShip, this.rocks, this.ufoBullets);
           if (!ufoAlive) {
             this.ufo = null;
           }
@@ -3665,13 +4015,19 @@
           // Check player bullet against UFO
           if (this.ufo && this.ufo.alive && this.ufo.containsBullet(b)) {
             b.hit = true;
+            const shooterId = b.shooterId || 1;
+            if (shooterId === 2) {
+              this.p2Kills++;
+            } else {
+              this.p1Kills++;
+            }
             this.bullets.splice(i, 1);
             this.soundFx.playUFOExplosion();
             this.particles.addExplosion(this.ufo.x, this.ufo.y, '#c084fc', 32);
             this.particles.addExplosion(this.ufo.x, this.ufo.y, '#38bdf8', 18);
             this.particles.addExplosion(this.ufo.x, this.ufo.y, '#f43f5e', 12);
             this.updateScore(this.score + 5);
-            this.applyUFOSiphon();
+            this.applyUFOSiphon(shooterId);
             this.ufo = null;
             continue;
           }
@@ -3682,11 +4038,18 @@
             if (r && !r.popped && r.containsBullet(b)) {
               r.popped = true;
               b.hit = true;
+              const shooterId = b.shooterId || 1;
+              if (shooterId === 2) {
+                this.p2Kills++;
+              } else {
+                this.p1Kills++;
+              }
 
               this.soundFx.playExplosion(false);
-              this.particles.addExplosion(r.x, r.y, '#38bdf8', 20);
+              const popColor = shooterId === 2 ? '#00f0ff' : '#38bdf8';
+              this.particles.addExplosion(r.x, r.y, popColor, 20);
               this.updateScore(this.score + 1);
-              this.applyCombatSiphon();
+              this.applyCombatSiphon(shooterId);
 
               this.rocks.splice(j, 1);
               break;
@@ -3709,20 +4072,27 @@
           }
 
           // UFO bullet hits player ship
-          if (this.ship.containsBullet(ub)) {
-            ub.hit = true;
-            this.ufoBullets.splice(i, 1);
-            if (this.ship.invincible) {
-              // Shield absorbs laser with cyan deflection flare
-              this.particles.addExplosion(ub.x, ub.y, '#38bdf8', 16);
-              this.soundFx.playShieldSound();
-            } else {
-              const hitColor = ub.aimMode === 'predictive' ? '#c084fc' : '#00ff8e';
-              this.particles.addExplosion(ub.x, ub.y, hitColor, 18);
-              this.handlePlayerHit();
-              // If player was destroyed (Game Over or Training Reset), halt further updates this frame!
-              if (this.state !== 'PLAYING') return;
+          let hitPlayer = false;
+          for (const s of this.ships) {
+            if (s && s.alive && s.containsBullet(ub)) {
+              ub.hit = true;
+              hitPlayer = true;
+              if (s.invincible) {
+                // Shield absorbs laser with cyan deflection flare
+                this.particles.addExplosion(ub.x, ub.y, '#38bdf8', 16);
+                this.soundFx.playShieldSound();
+              } else {
+                const hitColor = ub.aimMode === 'predictive' ? '#c084fc' : '#00ff8e';
+                this.particles.addExplosion(ub.x, ub.y, hitColor, 18);
+                this.handlePlayerHit(s);
+                // If player was destroyed (Game Over or Training Reset), halt further updates this frame!
+                if (this.state !== 'PLAYING') return;
+              }
+              break;
             }
+          }
+          if (hitPlayer) {
+            this.ufoBullets.splice(i, 1);
             continue;
           }
 
@@ -3786,29 +4156,41 @@
           }
 
           // Exact 12-point Polygon-vs-Polygon collision with ship
-          if (!this.ship.invincible && !r.popped && r.collidesWithShip(this.ship)) {
-            r.popped = true;
-            this.rocks.splice(j, 1);
-            this.handlePlayerHit();
-            if (this.state !== 'PLAYING') return;
+          let rockHitShip = false;
+          for (const s of this.ships) {
+            if (s && s.alive && !s.invincible && !r.popped && r.collidesWithShip(s)) {
+              r.popped = true;
+              this.rocks.splice(j, 1);
+              this.handlePlayerHit(s);
+              rockHitShip = true;
+              if (this.state !== 'PLAYING') return;
+              break;
+            }
+          }
+          if (rockHitShip) {
             break;
           }
         }
 
         // Direct UFO vs Player ship hull collision
-        if (this.ufo && this.ufo.alive && this.ufo.collidesWithShip(this.ship)) {
-          this.soundFx.playUFOExplosion();
-          this.particles.addExplosion(this.ufo.x, this.ufo.y, '#c084fc', 35);
-          this.ufo = null;
-          if (this.ship.invincible) {
-            // Shield repels UFO explosion, awards score & siphon
-            this.particles.addExplosion(this.ship.x, this.ship.y, '#38bdf8', 22);
-            this.updateScore(this.score + 5);
-            this.applyUFOSiphon();
-          } else {
-            this.particles.addExplosion(this.ship.x, this.ship.y, '#ef4444', 25);
-            this.handlePlayerHit();
-            if (this.state !== 'PLAYING') return;
+        if (this.ufo && this.ufo.alive) {
+          for (const s of this.ships) {
+            if (s && s.alive && this.ufo.collidesWithShip(s)) {
+              this.soundFx.playUFOExplosion();
+              this.particles.addExplosion(this.ufo.x, this.ufo.y, '#c084fc', 35);
+              this.ufo = null;
+              if (s.invincible) {
+                // Shield repels UFO explosion, awards score & siphon
+                this.particles.addExplosion(s.x, s.y, '#38bdf8', 22);
+                this.updateScore(this.score + 5);
+                this.applyUFOSiphon(s.playerId || 1);
+              } else {
+                this.particles.addExplosion(s.x, s.y, '#ef4444', 25);
+                this.handlePlayerHit(s);
+                if (this.state !== 'PLAYING') return;
+              }
+              break;
+            }
           }
         }
 
@@ -3865,9 +4247,10 @@
       }
 
       // Starfield parallax & particles update
+      const leadShip = this.ships.find(s => s && s.alive) || this.ship1;
       this.starfield.update(
-        this.state === 'PLAYING' ? this.ship.dx : 0.2,
-        this.state === 'PLAYING' ? this.ship.dy : 0
+        this.state === 'PLAYING' ? leadShip.dx : 0.2,
+        this.state === 'PLAYING' ? leadShip.dy : 0
       );
       this.particles.update();
     }
@@ -3947,7 +4330,9 @@
       }
 
       if (this.state === 'PLAYING' || this.state === 'PAUSED') {
-        this.ship.draw(this.ctx);
+        for (const s of this.ships) {
+          if (s && s.alive) s.draw(this.ctx);
+        }
       }
 
       this.ctx.restore();

@@ -131,6 +131,117 @@ html, body {
   pointer-events: none;
 }
 
+.hud-view-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: clamp(4px, 1.2vw, 14px);
+  min-width: 0;
+}
+
+#hud.multiplayer-active #hudSolo {
+  display: none !important;
+}
+
+#hud:not(.multiplayer-active) #hudMultiplayer {
+  display: none !important;
+}
+
+#hud.multiplayer-active #hudMultiplayer {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: clamp(4px, 1vw, 10px);
+  min-width: 0;
+}
+
+/* Multiplayer Cockpit Layout */
+.hud-mp-player {
+  display: flex;
+  align-items: center;
+  gap: clamp(4px, 0.8vw, 8px);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.hud-mp-p1 {
+  justify-content: flex-start;
+}
+
+.hud-mp-p2 {
+  justify-content: flex-end;
+}
+
+.hud-mp-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mp-player-badge {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+  padding: 4px clamp(5px, 0.8vw, 8px);
+}
+
+.mp-player-badge.p1-badge {
+  border-color: rgba(239, 68, 68, 0.45);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+}
+
+.mp-player-badge.p2-badge {
+  border-color: rgba(56, 189, 248, 0.45);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+}
+
+.mp-tag {
+  font-family: var(--font-display);
+  font-size: clamp(9px, 1.5vw, 11px);
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  white-space: nowrap;
+}
+
+.mp-tag.red {
+  color: #f87171;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
+}
+
+.mp-tag.blue {
+  color: #38bdf8;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.7);
+}
+
+.p1-life.active polygon {
+  fill: #ef4444 !important;
+  filter: drop-shadow(0 0 6px #ef4444);
+}
+
+.p2-life.active polygon {
+  fill: #00f0ff !important;
+  filter: drop-shadow(0 0 6px #00f0ff);
+}
+
+.mp-gauge {
+  min-width: 0;
+  max-width: 110px;
+  flex: 1 1 auto;
+  padding: 3px clamp(4px, 0.8vw, 8px);
+  gap: 2px;
+}
+
+.mp-gauge .energy-percent {
+  font-size: clamp(9px, 1.8vw, 12px);
+}
+
+.mp-gauge .hud-label {
+  font-size: clamp(7.5px, 1.3vw, 9.5px);
+}
+
 .hud-left {
   display: flex;
   align-items: center;
@@ -756,6 +867,19 @@ html, body {
   transform: translateY(1px);
 }
 
+.multiplayer-menu-btn {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.4) 0%, rgba(56, 189, 248, 0.4) 100%) !important;
+  color: #ffffff !important;
+  border-color: rgba(56, 189, 248, 0.6) !important;
+  box-shadow: 0 4px 20px rgba(56, 189, 248, 0.35), 0 0 15px rgba(239, 68, 68, 0.25) !important;
+}
+
+.multiplayer-menu-btn:hover {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.6) 0%, rgba(56, 189, 248, 0.6) 100%) !important;
+  box-shadow: 0 6px 28px rgba(56, 189, 248, 0.6), 0 0 20px rgba(239, 68, 68, 0.4) !important;
+  transform: translateY(-2px);
+}
+
 .secondary-btn {
   background: rgba(30, 41, 59, 0.6);
   color: var(--text-primary);
@@ -1197,6 +1321,21 @@ html, body {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-bottom: 28px;
+}
+
+.results-stats.mp-results-stats {
+  margin-top: -12px;
+  margin-bottom: 24px;
+}
+
+.p1-result-box {
+  border-color: rgba(239, 68, 68, 0.35) !important;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
+}
+
+.p2-result-box {
+  border-color: rgba(56, 189, 248, 0.35) !important;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.15);
 }
 
 .result-box {

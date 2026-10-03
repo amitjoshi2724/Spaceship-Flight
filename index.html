@@ -35,53 +35,134 @@
 
     <!-- Top HUD Bar -->
     <header id="hud">
-      <div class="hud-left">
-        <div class="hud-stat score-container">
-          <div class="score-substat">
-            <span class="hud-label">SCORE</span>
-            <span id="scoreDisplay" class="hud-value">0</span>
+      <!-- Solo HUD Container -->
+      <div id="hudSolo" class="hud-view-group">
+        <div class="hud-left">
+          <div class="hud-stat score-container">
+            <div class="score-substat">
+              <span class="hud-label">SCORE</span>
+              <span id="scoreDisplay" class="hud-value">0</span>
+            </div>
+            <div class="score-divider"></div>
+            <div class="score-substat">
+              <span class="hud-label">HIGH SCORE</span>
+              <span id="highScoreDisplay" class="hud-value">0</span>
+            </div>
           </div>
-          <div class="score-divider"></div>
-          <div class="score-substat">
-            <span class="hud-label">HIGH SCORE</span>
-            <span id="highScoreDisplay" class="hud-value">0</span>
+        </div>
+
+        <div class="hud-center">
+          <div class="hud-stat lives-container">
+            <span class="hud-label">SHIPS</span>
+            <div id="livesIcons" class="lives-icons">
+              <span class="life-icon active" title="Ship 1"><svg viewBox="0 0 16 20">
+                  <polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" />
+                </svg></span>
+              <span class="life-icon active" title="Ship 2"><svg viewBox="0 0 16 20">
+                  <polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" />
+                </svg></span>
+              <span class="life-icon active" title="Ship 3"><svg viewBox="0 0 16 20">
+                  <polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" />
+                </svg></span>
+            </div>
+          </div>
+
+          <div id="energyHud" class="hud-stat energy-container">
+            <div class="energy-header">
+              <span id="energyLabel" class="hud-label">ENERGY</span>
+              <span id="energyVal" class="energy-percent">100%</span>
+            </div>
+            <div class="energy-bar-track">
+              <div id="energyBarFill" class="energy-bar-fill"></div>
+            </div>
+          </div>
+
+          <div id="shieldHud" class="hud-stat energy-container shield-container hidden">
+            <div class="energy-header">
+              <span id="shieldLabel" class="hud-label">SHIELD</span>
+              <span id="shieldVal" class="energy-percent shield-mode">100%</span>
+            </div>
+            <div class="energy-bar-track shield-mode">
+              <div id="shieldBarFill" class="energy-bar-fill shield-mode"></div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="hud-center">
-        <div class="hud-stat lives-container">
-          <span class="hud-label">SHIPS</span>
-          <div id="livesIcons" class="lives-icons">
-            <span class="life-icon active" title="Ship 1"><svg viewBox="0 0 16 20">
-                <polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" />
-              </svg></span>
-            <span class="life-icon active" title="Ship 2"><svg viewBox="0 0 16 20">
-                <polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" />
-              </svg></span>
-            <span class="life-icon active" title="Ship 3"><svg viewBox="0 0 16 20">
-                <polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" />
-              </svg></span>
+      <!-- Multiplayer Co-op HUD Container (Active in 2-Player mode) -->
+      <div id="hudMultiplayer" class="hud-view-group mp-hud hidden">
+        <!-- Player 1 (Red) Cockpit Gauges -->
+        <div class="hud-mp-player hud-mp-p1">
+          <div class="hud-stat mp-player-badge p1-badge">
+            <span class="mp-tag red">P1 RED</span>
+            <div id="p1LivesIcons" class="lives-icons p1-lives">
+              <span class="life-icon active p1-life" title="P1 Hull 1"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#ef4444" /></svg></span>
+              <span class="life-icon active p1-life" title="P1 Hull 2"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#ef4444" /></svg></span>
+              <span class="life-icon active p1-life" title="P1 Hull 3"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#ef4444" /></svg></span>
+            </div>
+          </div>
+          <div id="p1EnergyHud" class="hud-stat mp-gauge p1-ammo">
+            <div class="energy-header">
+              <span class="hud-label">AMMO</span>
+              <span id="p1EnergyVal" class="energy-percent">100%</span>
+            </div>
+            <div class="energy-bar-track">
+              <div id="p1EnergyBarFill" class="energy-bar-fill"></div>
+            </div>
+          </div>
+          <div id="p1ShieldHud" class="hud-stat mp-gauge p1-shield">
+            <div class="energy-header">
+              <span class="hud-label">SHIELD</span>
+              <span id="p1ShieldVal" class="energy-percent shield-mode">100%</span>
+            </div>
+            <div class="energy-bar-track shield-mode">
+              <div id="p1ShieldBarFill" class="energy-bar-fill shield-mode"></div>
+            </div>
           </div>
         </div>
 
-        <div id="energyHud" class="hud-stat energy-container">
-          <div class="energy-header">
-            <span id="energyLabel" class="hud-label">ENERGY</span>
-            <span id="energyVal" class="energy-percent">100%</span>
-          </div>
-          <div class="energy-bar-track">
-            <div id="energyBarFill" class="energy-bar-fill"></div>
+        <!-- Shared Team Score -->
+        <div class="hud-mp-center">
+          <div class="hud-stat score-container">
+            <div class="score-substat">
+              <span class="hud-label">TEAM SCORE</span>
+              <span id="scoreDisplayMp" class="hud-value">0</span>
+            </div>
+            <div class="score-divider"></div>
+            <div class="score-substat">
+              <span class="hud-label">HIGH SCORE</span>
+              <span id="highScoreDisplayMp" class="hud-value">0</span>
+            </div>
           </div>
         </div>
 
-        <div id="shieldHud" class="hud-stat energy-container shield-container hidden">
-          <div class="energy-header">
-            <span id="shieldLabel" class="hud-label">SHIELD</span>
-            <span id="shieldVal" class="energy-percent shield-mode">100%</span>
+        <!-- Player 2 (Blue) Cockpit Gauges -->
+        <div class="hud-mp-player hud-mp-p2">
+          <div id="p2ShieldHud" class="hud-stat mp-gauge p2-shield">
+            <div class="energy-header">
+              <span class="hud-label">SHIELD</span>
+              <span id="p2ShieldVal" class="energy-percent shield-mode">100%</span>
+            </div>
+            <div class="energy-bar-track shield-mode">
+              <div id="p2ShieldBarFill" class="energy-bar-fill shield-mode"></div>
+            </div>
           </div>
-          <div class="energy-bar-track shield-mode">
-            <div id="shieldBarFill" class="energy-bar-fill shield-mode"></div>
+          <div id="p2EnergyHud" class="hud-stat mp-gauge p2-ammo">
+            <div class="energy-header">
+              <span class="hud-label">AMMO</span>
+              <span id="p2EnergyVal" class="energy-percent">100%</span>
+            </div>
+            <div class="energy-bar-track">
+              <div id="p2EnergyBarFill" class="energy-bar-fill"></div>
+            </div>
+          </div>
+          <div class="hud-stat mp-player-badge p2-badge">
+            <div id="p2LivesIcons" class="lives-icons p2-lives">
+              <span class="life-icon active p2-life" title="P2 Hull 1"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" /></svg></span>
+              <span class="life-icon active p2-life" title="P2 Hull 2"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" /></svg></span>
+              <span class="life-icon active p2-life" title="P2 Hull 3"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" /></svg></span>
+            </div>
+            <span class="mp-tag blue">P2 BLUE</span>
           </div>
         </div>
       </div>
@@ -210,7 +291,8 @@
         </div>
 
         <nav class="menu-nav">
-          <button id="playBtn" class="menu-btn primary-btn">PLAY</button>
+          <button id="playBtn" class="menu-btn primary-btn">PLAY (SOLO)</button>
+          <button id="multiplayerBtn" class="menu-btn primary-btn multiplayer-menu-btn">👥 2-PLAYER LOCAL CO-OP</button>
           <a href="asteroidle/index.html" class="menu-btn secondary-btn" style="text-decoration: none; display: flex; align-items: center; justify-content: center; background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; color: #e0f2fe; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);">🎯 PLAY ASTEROIDLE (DAILY)</a>
           <button id="watchTrainedBtn" class="menu-btn secondary-btn rl-menu-btn rl-trained-btn">🤖 WATCH TRAINED AI PLAY</button>
           <button id="watchTrainBtn" class="menu-btn secondary-btn rl-menu-btn rl-train-btn">🧬 WATCH AI TRAIN (FROM SEED)</button>
@@ -220,8 +302,7 @@
         </nav>
 
         <div class="desktop-hints">
-          <span>⌨️ Desktop: <b>[← / → / A / D]</b> Rotate &bull; <b>[↑ / W]</b> Thrust &bull; <b>[↓ / S / Shift]</b>
-            Shield &bull; <b>[SPACE]</b> Fire &bull; <b>[P]</b> Pause</span>
+          <span>⌨️ Solo: <b>[Arrows / WASD]</b> Move &bull; <b>[SPACE]</b> Fire &bull; <b>[↓ / S / Shift]</b> Shield | 👥 2-Player: <b>P1 (🔴) Arrows+Space</b> vs <b>P2 (🔵) WASD+Shift</b></span>
         </div>
       </div>
     </div>
@@ -384,7 +465,7 @@
               </ul>
             </div>
             <div class="guide-col">
-              <h3>💻 Keyboard & Mouse</h3>
+              <h3>💻 Keyboard Solo</h3>
               <ul>
                 <li><b>Left / Right or A / D:</b> Rotate ship</li>
                 <li><b>Up Arrow or W:</b> Thrust engine</li>
@@ -393,11 +474,34 @@
                 <li><b>P or Escape:</b> Pause game</li>
               </ul>
             </div>
+            <div class="guide-col" style="grid-column: 1 / -1; background: rgba(15, 23, 42, 0.4); border-radius: 8px; padding: 10px; border: 1px solid rgba(56, 189, 248, 0.2);">
+              <h3 style="color: #38bdf8; margin-top: 0; margin-bottom: 8px;">👥 2-Player Local Co-op (Shared Keyboard)</h3>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                <div>
+                  <h4 style="color: #f87171; margin: 0 0 6px 0; font-size: 13px;">🔴 Player 1 (Classic Crimson Red)</h4>
+                  <ul style="margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6;">
+                    <li><b>Arrow Left / Right (← / →):</b> Rotate</li>
+                    <li><b>Arrow Up (↑):</b> Thrust Engine</li>
+                    <li><b>Spacebar (or Enter):</b> Fire Plasma</li>
+                    <li><b>Arrow Down (↓):</b> Deploy Shield</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 style="color: #38bdf8; margin: 0 0 6px 0; font-size: 13px;">🔵 Player 2 (Cobalt Blue)</h4>
+                  <ul style="margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6;">
+                    <li><b>A / D Keys:</b> Rotate</li>
+                    <li><b>W Key:</b> Thrust Engine</li>
+                    <li><b>Left Shift (or Q):</b> Fire Plasma</li>
+                    <li><b>S Key (or E):</b> Deploy Shield</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="scoring-tip">
             ⚡ <b>Power Systems:</b> Lasers consume ammo energy. Shield consumes shield capacitor / reactor power.
-            Thrusters recharge ammo 1.6x faster (Kinetic Dynamo)! In Dual Capacitors mode, weapons and shields have dedicated power gauges.
+            Thrusters recharge ammo 1.6x faster (Kinetic Dynamo)! In 2-Player Co-op, each player has independent ammo and shield gauges.
           </div>
         </div>
 
@@ -482,6 +586,17 @@
           <div class="result-box">
             <span class="result-label">BEST RECORD</span>
             <span id="bestScoreVal" class="result-number">0</span>
+          </div>
+        </div>
+
+        <div id="multiplayerResultsStats" class="results-stats mp-results-stats hidden">
+          <div class="result-box p1-result-box">
+            <span class="result-label" style="color: #f87171;">🔴 P1 (RED) ROCKS</span>
+            <span id="p1ScoreVal" class="result-number" style="color: #f87171;">0</span>
+          </div>
+          <div class="result-box p2-result-box">
+            <span class="result-label" style="color: #38bdf8;">🔵 P2 (BLUE) ROCKS</span>
+            <span id="p2ScoreVal" class="result-number" style="color: #38bdf8;">0</span>
           </div>
         </div>
 
