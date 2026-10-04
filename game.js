@@ -2433,6 +2433,62 @@
         fire: false
       };
 
+      // Customizable Keybindings
+      this.defaultControlsSolo = {
+        thrust: 'ArrowUp',
+        rotateLeft: 'ArrowLeft',
+        rotateRight: 'ArrowRight',
+        fire: 'Space',
+        shield: 'ArrowDown'
+      };
+
+      this.defaultControlsP1 = {
+        thrust: 'KeyO',
+        rotateLeft: 'KeyK',
+        rotateRight: 'Semicolon',
+        fire: 'KeyM',
+        shield: 'KeyL'
+      };
+
+      this.defaultControlsP2 = {
+        thrust: 'KeyW',
+        rotateLeft: 'KeyA',
+        rotateRight: 'KeyD',
+        fire: 'ShiftLeft',
+        shield: 'KeyS'
+      };
+
+      this.presetsSolo = {
+        arrows: { thrust: 'ArrowUp', rotateLeft: 'ArrowLeft', rotateRight: 'ArrowRight', fire: 'Space', shield: 'ArrowDown' },
+        wasd: { thrust: 'KeyW', rotateLeft: 'KeyA', rotateRight: 'KeyD', fire: 'Space', shield: 'KeyS' },
+        okl: { thrust: 'KeyO', rotateLeft: 'KeyK', rotateRight: 'Semicolon', fire: 'KeyM', shield: 'KeyL' },
+        ijkl: { thrust: 'KeyI', rotateLeft: 'KeyJ', rotateRight: 'KeyL', fire: 'Space', shield: 'KeyK' }
+      };
+
+      this.presetsMp = {
+        okl_wasd: {
+          p1: { thrust: 'KeyO', rotateLeft: 'KeyK', rotateRight: 'Semicolon', fire: 'KeyM', shield: 'KeyL' },
+          p2: { thrust: 'KeyW', rotateLeft: 'KeyA', rotateRight: 'KeyD', fire: 'ShiftLeft', shield: 'KeyS' }
+        },
+        arrows_wasd: {
+          p1: { thrust: 'ArrowUp', rotateLeft: 'ArrowLeft', rotateRight: 'ArrowRight', fire: 'Space', shield: 'ArrowDown' },
+          p2: { thrust: 'KeyW', rotateLeft: 'KeyA', rotateRight: 'KeyD', fire: 'ShiftLeft', shield: 'KeyS' }
+        },
+        ijkl_wasd: {
+          p1: { thrust: 'KeyI', rotateLeft: 'KeyJ', rotateRight: 'KeyL', fire: 'Space', shield: 'KeyK' },
+          p2: { thrust: 'KeyW', rotateLeft: 'KeyA', rotateRight: 'KeyD', fire: 'ShiftLeft', shield: 'KeyS' }
+        },
+        numpad_wasd: {
+          p1: { thrust: 'Numpad8', rotateLeft: 'Numpad4', rotateRight: 'Numpad6', fire: 'Numpad0', shield: 'Numpad5' },
+          p2: { thrust: 'KeyW', rotateLeft: 'KeyA', rotateRight: 'KeyD', fire: 'ShiftLeft', shield: 'KeyS' }
+        }
+      };
+
+      this.controlsSolo = this.loadControls('solo');
+      this.controlsP1 = this.loadControls('p1');
+      this.controlsP2 = this.loadControls('p2');
+      this.listeningKeycap = null;
+
       this.domElements = {
         hud: document.getElementById('hud'),
         hudSolo: document.getElementById('hudSolo'),
@@ -2523,6 +2579,20 @@
         settingSound: document.getElementById('settingSound'),
         settingTouchControls: document.getElementById('settingTouchControls'),
         menuShipPreview: document.getElementById('menuShipPreview'),
+
+        // Customizable Controls UI
+        presetSoloSelect: document.getElementById('presetSoloSelect'),
+        presetMpSelect: document.getElementById('presetMpSelect'),
+        resetSoloControlsBtn: document.getElementById('resetSoloControlsBtn'),
+        resetMpControlsBtn: document.getElementById('resetMpControlsBtn'),
+        soloConflictBanner: document.getElementById('soloConflictBanner'),
+        mpConflictBanner: document.getElementById('mpConflictBanner'),
+        settingsTabBtns: document.querySelectorAll('.settings-tab-btn'),
+        settingsTabPanes: document.querySelectorAll('.settings-tab-pane'),
+        keycapBtns: document.querySelectorAll('.keycap-btn'),
+        soloInstructionsList: document.getElementById('soloInstructionsList'),
+        p1InstructionsList: document.getElementById('p1InstructionsList'),
+        p2InstructionsList: document.getElementById('p2InstructionsList'),
 
         // Results
         finalScoreVal: document.getElementById('finalScoreVal'),
@@ -2650,6 +2720,327 @@
       } catch (err) { }
     }
 
+    formatKeyLabel(code) {
+      if (!code) return '???';
+      if (code.startsWith('Key')) return code.slice(3).toUpperCase();
+      if (code.startsWith('Digit')) return code.slice(5);
+      if (code.startsWith('Numpad')) return 'NUM ' + code.slice(6);
+
+      const map = {
+        'ArrowUp': '↑',
+        'ArrowDown': '↓',
+        'ArrowLeft': '←',
+        'ArrowRight': '→',
+        'Space': 'SPACE',
+        'ShiftLeft': 'L-SHIFT',
+        'ShiftRight': 'R-SHIFT',
+        'ControlLeft': 'L-CTRL',
+        'ControlRight': 'R-CTRL',
+        'AltLeft': 'L-ALT',
+        'AltRight': 'R-ALT',
+        'MetaLeft': 'L-CMD',
+        'MetaRight': 'R-CMD',
+        'Enter': 'ENTER',
+        'Backspace': 'BACK',
+        'Tab': 'TAB',
+        'CapsLock': 'CAPS',
+        'Semicolon': ';',
+        'Quote': "'",
+        'Comma': ',',
+        'Period': '.',
+        'Slash': '/',
+        'Backslash': '\\',
+        'BracketLeft': '[',
+        'BracketRight': ']',
+        'Minus': '-',
+        'Equal': '=',
+        'Backquote': '`'
+      };
+      return map[code] || code.toUpperCase();
+    }
+
+    loadControls(type) {
+      let defaults = {};
+      let storageKey = '';
+      if (type === 'solo') {
+        defaults = this.defaultControlsSolo;
+        storageKey = 'spaceship_flight_controls_solo';
+      } else if (type === 'p1') {
+        defaults = this.defaultControlsP1;
+        storageKey = 'spaceship_flight_controls_p1';
+      } else if (type === 'p2') {
+        defaults = this.defaultControlsP2;
+        storageKey = 'spaceship_flight_controls_p2';
+      }
+
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          return { ...defaults, ...parsed };
+        }
+      } catch (err) {
+        console.error('Error loading controls for', type, err);
+      }
+      return { ...defaults };
+    }
+
+    saveControls(type) {
+      let controls = {};
+      let storageKey = '';
+      if (type === 'solo') {
+        controls = this.controlsSolo;
+        storageKey = 'spaceship_flight_controls_solo';
+      } else if (type === 'p1') {
+        controls = this.controlsP1;
+        storageKey = 'spaceship_flight_controls_p1';
+      } else if (type === 'p2') {
+        controls = this.controlsP2;
+        storageKey = 'spaceship_flight_controls_p2';
+      }
+
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(controls));
+      } catch (err) {
+        console.error('Error saving controls for', type, err);
+      }
+    }
+
+    startKeyListening(btn, player, action) {
+      if (this.listeningKeycap && this.listeningKeycap.btn) {
+        this.listeningKeycap.btn.classList.remove('listening');
+        const prevCode = this.listeningKeycap.btn.dataset.code;
+        this.listeningKeycap.btn.textContent = this.formatKeyLabel(prevCode);
+      }
+      this.listeningKeycap = { btn, player, action };
+      btn.classList.add('listening');
+      btn.textContent = 'PRESS KEY...';
+    }
+
+    cancelKeyListening() {
+      if (this.listeningKeycap && this.listeningKeycap.btn) {
+        this.listeningKeycap.btn.classList.remove('listening');
+        const code = this.listeningKeycap.btn.dataset.code;
+        this.listeningKeycap.btn.textContent = this.formatKeyLabel(code);
+      }
+      this.listeningKeycap = null;
+    }
+
+    updateControlsUI() {
+      // 1. Update Keycap Buttons text and data-code
+      if (this.domElements.keycapBtns) {
+        this.domElements.keycapBtns.forEach(btn => {
+          const player = btn.dataset.player;
+          const action = btn.dataset.action;
+          let code = '';
+          if (player === 'solo') code = this.controlsSolo[action];
+          else if (player === 'p1') code = this.controlsP1[action];
+          else if (player === 'p2') code = this.controlsP2[action];
+
+          if (code) {
+            btn.dataset.code = code;
+            if (!this.listeningKeycap || this.listeningKeycap.btn !== btn) {
+              btn.textContent = this.formatKeyLabel(code);
+            }
+          }
+        });
+      }
+
+      // 2. Conflict detection for Solo Controls
+      const soloCodes = Object.values(this.controlsSolo);
+      const soloDuplicates = new Set(soloCodes.filter((code, idx) => soloCodes.indexOf(code) !== idx));
+      if (this.domElements.soloConflictBanner) {
+        if (soloDuplicates.size > 0) {
+          this.domElements.soloConflictBanner.classList.remove('hidden');
+        } else {
+          this.domElements.soloConflictBanner.classList.add('hidden');
+        }
+      }
+
+      // 3. Conflict detection for Multiplayer Controls (P1 vs P2 or internal duplicates)
+      const mpCodes = [...Object.values(this.controlsP1), ...Object.values(this.controlsP2)];
+      const mpDuplicates = new Set(mpCodes.filter((code, idx) => mpCodes.indexOf(code) !== idx));
+      if (this.domElements.mpConflictBanner) {
+        if (mpDuplicates.size > 0) {
+          this.domElements.mpConflictBanner.classList.remove('hidden');
+        } else {
+          this.domElements.mpConflictBanner.classList.add('hidden');
+        }
+      }
+
+      // Mark individual keycap buttons with conflict style if needed
+      if (this.domElements.keycapBtns) {
+        this.domElements.keycapBtns.forEach(btn => {
+          const player = btn.dataset.player;
+          const code = btn.dataset.code;
+          let isConflict = false;
+          if (player === 'solo' && soloDuplicates.has(code)) {
+            isConflict = true;
+          } else if ((player === 'p1' || player === 'p2') && mpDuplicates.has(code)) {
+            isConflict = true;
+          }
+          if (isConflict) {
+            btn.classList.add('conflict');
+          } else {
+            btn.classList.remove('conflict');
+          }
+        });
+      }
+
+      // 4. Update Preset Dropdown values if matching a preset
+      if (this.domElements.presetSoloSelect) {
+        let matchedPreset = 'custom';
+        for (const [presetKey, presetMap] of Object.entries(this.presetsSolo)) {
+          const matches = Object.keys(presetMap).every(act => presetMap[act] === this.controlsSolo[act]);
+          if (matches) {
+            matchedPreset = presetKey;
+            break;
+          }
+        }
+        this.domElements.presetSoloSelect.value = matchedPreset;
+      }
+
+      if (this.domElements.presetMpSelect) {
+        let matchedPreset = 'custom';
+        for (const [presetKey, presetData] of Object.entries(this.presetsMp)) {
+          const p1Match = Object.keys(presetData.p1).every(act => presetData.p1[act] === this.controlsP1[act]);
+          const p2Match = Object.keys(presetData.p2).every(act => presetData.p2[act] === this.controlsP2[act]);
+          if (p1Match && p2Match) {
+            matchedPreset = presetKey;
+            break;
+          }
+        }
+        this.domElements.presetMpSelect.value = matchedPreset;
+      }
+
+      // 5. Update Dynamic Instruction Lists in Instructions Modal
+      if (this.domElements.soloInstructionsList) {
+        this.domElements.soloInstructionsList.innerHTML = `
+          <li><b>Rotate:</b> [${this.formatKeyLabel(this.controlsSolo.rotateLeft)}] / [${this.formatKeyLabel(this.controlsSolo.rotateRight)}]</li>
+          <li><b>Thrust Engine:</b> [${this.formatKeyLabel(this.controlsSolo.thrust)}]</li>
+          <li><b>Fire Laser:</b> [${this.formatKeyLabel(this.controlsSolo.fire)}]</li>
+          <li><b>Deploy Shield:</b> [${this.formatKeyLabel(this.controlsSolo.shield)}]</li>
+          <li><b>Pause / Resume:</b> [P] or [ESC]</li>
+        `;
+      }
+
+      if (this.domElements.p1InstructionsList) {
+        this.domElements.p1InstructionsList.innerHTML = `
+          <li><b>Rotate:</b> [${this.formatKeyLabel(this.controlsP1.rotateLeft)}] / [${this.formatKeyLabel(this.controlsP1.rotateRight)}]</li>
+          <li><b>Thrust:</b> [${this.formatKeyLabel(this.controlsP1.thrust)}]</li>
+          <li><b>Fire:</b> [${this.formatKeyLabel(this.controlsP1.fire)}]</li>
+          <li><b>Shield:</b> [${this.formatKeyLabel(this.controlsP1.shield)}]</li>
+        `;
+      }
+
+      if (this.domElements.p2InstructionsList) {
+        this.domElements.p2InstructionsList.innerHTML = `
+          <li><b>Rotate:</b> [${this.formatKeyLabel(this.controlsP2.rotateLeft)}] / [${this.formatKeyLabel(this.controlsP2.rotateRight)}]</li>
+          <li><b>Thrust:</b> [${this.formatKeyLabel(this.controlsP2.thrust)}]</li>
+          <li><b>Fire:</b> [${this.formatKeyLabel(this.controlsP2.fire)}]</li>
+          <li><b>Shield:</b> [${this.formatKeyLabel(this.controlsP2.shield)}]</li>
+        `;
+      }
+    }
+
+    bindControlsUI() {
+      // Tab switching in Settings
+      if (this.domElements.settingsTabBtns) {
+        this.domElements.settingsTabBtns.forEach(btn => {
+          btn.addEventListener('click', () => {
+            const targetTab = btn.dataset.tab;
+            this.cancelKeyListening();
+
+            this.domElements.settingsTabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            if (this.domElements.settingsTabPanes) {
+              this.domElements.settingsTabPanes.forEach(pane => {
+                pane.classList.remove('active');
+              });
+            }
+
+            if (targetTab === 'general' && document.getElementById('settingsPaneGeneral')) {
+              document.getElementById('settingsPaneGeneral').classList.add('active');
+            } else if (targetTab === 'solo' && document.getElementById('settingsPaneSolo')) {
+              document.getElementById('settingsPaneSolo').classList.add('active');
+            } else if (targetTab === 'multiplayer' && document.getElementById('settingsPaneMultiplayer')) {
+              document.getElementById('settingsPaneMultiplayer').classList.add('active');
+            }
+          });
+        });
+      }
+
+      // Preset dropdown listeners
+      if (this.domElements.presetSoloSelect) {
+        this.domElements.presetSoloSelect.addEventListener('change', (e) => {
+          const val = e.target.value;
+          if (this.presetsSolo[val]) {
+            this.controlsSolo = { ...this.presetsSolo[val] };
+            this.saveControls('solo');
+            this.updateControlsUI();
+          }
+        });
+      }
+
+      if (this.domElements.presetMpSelect) {
+        this.domElements.presetMpSelect.addEventListener('change', (e) => {
+          const val = e.target.value;
+          if (this.presetsMp[val]) {
+            this.controlsP1 = { ...this.presetsMp[val].p1 };
+            this.controlsP2 = { ...this.presetsMp[val].p2 };
+            this.saveControls('p1');
+            this.saveControls('p2');
+            this.updateControlsUI();
+          }
+        });
+      }
+
+      // Reset buttons
+      if (this.domElements.resetSoloControlsBtn) {
+        this.domElements.resetSoloControlsBtn.addEventListener('click', () => {
+          this.cancelKeyListening();
+          this.controlsSolo = { ...this.defaultControlsSolo };
+          this.saveControls('solo');
+          this.updateControlsUI();
+        });
+      }
+
+      if (this.domElements.resetMpControlsBtn) {
+        this.domElements.resetMpControlsBtn.addEventListener('click', () => {
+          this.cancelKeyListening();
+          this.controlsP1 = { ...this.defaultControlsP1 };
+          this.controlsP2 = { ...this.defaultControlsP2 };
+          this.saveControls('p1');
+          this.saveControls('p2');
+          this.updateControlsUI();
+        });
+      }
+
+      // Keycap click listener to start listening
+      if (this.domElements.keycapBtns) {
+        this.domElements.keycapBtns.forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const player = btn.dataset.player;
+            const action = btn.dataset.action;
+            if (this.listeningKeycap && this.listeningKeycap.btn === btn) {
+              this.cancelKeyListening();
+            } else {
+              this.startKeyListening(btn, player, action);
+            }
+          });
+        });
+      }
+
+      // Click outside keycap cancels listening
+      window.addEventListener('click', (e) => {
+        if (this.listeningKeycap && !e.target.closest('.keycap-btn')) {
+          this.cancelKeyListening();
+        }
+      });
+    }
+
     init() {
       this.resizeCanvas();
       window.addEventListener('resize', () => this.resizeCanvas());
@@ -2667,6 +3058,8 @@
         this.domElements.settingSound.checked = this.soundFx.enabled;
       }
       this.bindInputs();
+      this.bindControlsUI();
+      this.updateControlsUI();
       this.bindUI();
 
       // Main Loop with Fixed Timestep Accumulator (Decoupled 60 FPS Physics)
@@ -2733,58 +3126,99 @@
     bindInputs() {
       // Keyboard input
       window.addEventListener('keydown', (e) => {
-        if (e.repeat && (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'Enter')) return;
+        // If rebinding a key in Settings, intercept immediately
+        if (this.listeningKeycap) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.code === 'Escape') {
+            this.cancelKeyListening();
+            return;
+          }
+          const { player, action } = this.listeningKeycap;
+          if (player === 'solo') {
+            this.controlsSolo[action] = e.code;
+            this.saveControls('solo');
+          } else if (player === 'p1') {
+            this.controlsP1[action] = e.code;
+            this.saveControls('p1');
+          } else if (player === 'p2') {
+            this.controlsP2[action] = e.code;
+            this.saveControls('p2');
+          }
+          this.cancelKeyListening();
+          this.updateControlsUI();
+          return;
+        }
+
+        const isActionFireOrShield = (
+          e.code === this.controlsSolo.fire ||
+          e.code === this.controlsSolo.shield ||
+          e.code === this.controlsP1.fire ||
+          e.code === this.controlsP1.shield ||
+          e.code === this.controlsP2.fire ||
+          e.code === this.controlsP2.shield ||
+          e.code === 'Space' ||
+          e.code === 'Enter' ||
+          e.code === 'ShiftLeft' ||
+          e.code === 'ShiftRight'
+        );
+        if (e.repeat && isActionFireOrShield) return;
 
         if (this.gameMode === 'multiplayer') {
-          // --- PLAYER 1 (Arrow Keys + Space / ArrowDown) ---
-          if (e.code === 'ArrowLeft') this.keys.left = true;
-          if (e.code === 'ArrowRight') this.keys.right = true;
-          if (e.code === 'ArrowUp') {
+          // --- PLAYER 1 (Customizable, default OKL; + M) ---
+          if (e.code === this.controlsP1.rotateLeft) this.keys.left = true;
+          if (e.code === this.controlsP1.rotateRight) this.keys.right = true;
+          if (e.code === this.controlsP1.thrust) {
             this.keys.up = true;
             if (this.state === 'PLAYING' && this.ship1.alive) this.ship1.setThrust(true);
           }
-          if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Numpad0') {
+          if (e.code === this.controlsP1.fire) {
             this.keys.fire = true;
             if (this.state === 'PLAYING' && this.ship1.alive) this.ship1.fire(this.bullets);
           }
-          if (e.code === 'ArrowDown' || e.code === 'ShiftRight') {
+          if (e.code === this.controlsP1.shield) {
             if (this.state === 'PLAYING' && this.ship1.alive) {
               this.ship1.triggerEmergencyShield();
               this.updateEnergyDisplay();
             }
           }
 
-          // --- PLAYER 2 (WASD + ShiftLeft / KeyS) ---
-          if (e.code === 'KeyA') this.keysP2.left = true;
-          if (e.code === 'KeyD') this.keysP2.right = true;
-          if (e.code === 'KeyW') {
+          // --- PLAYER 2 (Customizable, default WASD + Shift) ---
+          if (e.code === this.controlsP2.rotateLeft) this.keysP2.left = true;
+          if (e.code === this.controlsP2.rotateRight) this.keysP2.right = true;
+          if (e.code === this.controlsP2.thrust) {
             this.keysP2.up = true;
             if (this.state === 'PLAYING' && this.ship2.alive) this.ship2.setThrust(true);
           }
-          if (e.code === 'ShiftLeft' || e.code === 'KeyQ') {
+          if (e.code === this.controlsP2.fire) {
             this.keysP2.fire = true;
             if (this.state === 'PLAYING' && this.ship2.alive) this.ship2.fire(this.bullets);
           }
-          if (e.code === 'KeyS' || e.code === 'KeyE') {
+          if (e.code === this.controlsP2.shield) {
             if (this.state === 'PLAYING' && this.ship2.alive) {
               this.ship2.triggerEmergencyShield();
               this.updateEnergyDisplay();
             }
           }
         } else {
-          // --- SOLO MODE (Unified Arrows or WASD) ---
-          if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.keys.left = true;
-          if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keys.right = true;
-          if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+          // --- SOLO MODE (Customizable, with classic WASD/Arrow secondary fallbacks) ---
+          const isSoloLeft = (e.code === this.controlsSolo.rotateLeft) || (this.controlsSolo.rotateLeft === 'ArrowLeft' && e.code === 'KeyA');
+          const isSoloRight = (e.code === this.controlsSolo.rotateRight) || (this.controlsSolo.rotateRight === 'ArrowRight' && e.code === 'KeyD');
+          const isSoloThrust = (e.code === this.controlsSolo.thrust) || (this.controlsSolo.thrust === 'ArrowUp' && e.code === 'KeyW');
+          const isSoloFire = (e.code === this.controlsSolo.fire);
+          const isSoloShield = (e.code === this.controlsSolo.shield) || (this.controlsSolo.shield === 'ArrowDown' && (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyS' || e.code === 'KeyE'));
+
+          if (isSoloLeft) this.keys.left = true;
+          if (isSoloRight) this.keys.right = true;
+          if (isSoloThrust) {
             this.keys.up = true;
             if (this.state === 'PLAYING' && this.ship.alive) this.ship.setThrust(true);
           }
-          if (e.code === 'Space' || e.code === 'KeyL') {
+          if (isSoloFire) {
             this.keys.fire = true;
             if (this.state === 'PLAYING' && this.ship.alive) this.ship.fire(this.bullets);
           }
-          // Emergency Shield activation: Shift, KeyS, KeyE, or ArrowDown
-          if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyS' || e.code === 'KeyE' || e.code === 'ArrowDown') {
+          if (isSoloShield) {
             if (this.state === 'PLAYING' && this.ship.alive) {
               this.ship.triggerEmergencyShield();
               this.updateEnergyDisplay();
@@ -2793,6 +3227,19 @@
         }
 
         if (e.code === 'KeyP' || e.code === 'Escape') {
+          if (this.domElements.settingsModal && this.domElements.settingsModal.classList.contains('active')) {
+            this.hideModals();
+            return;
+          }
+          if (this.domElements.instructionsModal && this.domElements.instructionsModal.classList.contains('active')) {
+            this.hideModals();
+            return;
+          }
+          if (this.domElements.creditsModal && this.domElements.creditsModal.classList.contains('active')) {
+            this.hideModals();
+            return;
+          }
+
           if (this.rlMode) {
             this.exitRLMode();
           } else {
@@ -2826,31 +3273,36 @@
       window.addEventListener('keyup', (e) => {
         if (this.gameMode === 'multiplayer') {
           // --- PLAYER 1 ---
-          if (e.code === 'ArrowLeft') this.keys.left = false;
-          if (e.code === 'ArrowRight') this.keys.right = false;
-          if (e.code === 'ArrowUp') {
+          if (e.code === this.controlsP1.rotateLeft) this.keys.left = false;
+          if (e.code === this.controlsP1.rotateRight) this.keys.right = false;
+          if (e.code === this.controlsP1.thrust) {
             this.keys.up = false;
             if (this.state === 'PLAYING' && this.ship1.alive) this.ship1.setThrust(false);
           }
-          if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Numpad0') this.keys.fire = false;
+          if (e.code === this.controlsP1.fire) this.keys.fire = false;
 
           // --- PLAYER 2 ---
-          if (e.code === 'KeyA') this.keysP2.left = false;
-          if (e.code === 'KeyD') this.keysP2.right = false;
-          if (e.code === 'KeyW') {
+          if (e.code === this.controlsP2.rotateLeft) this.keysP2.left = false;
+          if (e.code === this.controlsP2.rotateRight) this.keysP2.right = false;
+          if (e.code === this.controlsP2.thrust) {
             this.keysP2.up = false;
             if (this.state === 'PLAYING' && this.ship2.alive) this.ship2.setThrust(false);
           }
-          if (e.code === 'ShiftLeft' || e.code === 'KeyQ') this.keysP2.fire = false;
+          if (e.code === this.controlsP2.fire) this.keysP2.fire = false;
         } else {
           // --- SOLO MODE ---
-          if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.keys.left = false;
-          if (e.code === 'ArrowRight' || e.code === 'KeyD') this.keys.right = false;
-          if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+          const isSoloLeft = (e.code === this.controlsSolo.rotateLeft) || (this.controlsSolo.rotateLeft === 'ArrowLeft' && e.code === 'KeyA');
+          const isSoloRight = (e.code === this.controlsSolo.rotateRight) || (this.controlsSolo.rotateRight === 'ArrowRight' && e.code === 'KeyD');
+          const isSoloThrust = (e.code === this.controlsSolo.thrust) || (this.controlsSolo.thrust === 'ArrowUp' && e.code === 'KeyW');
+          const isSoloFire = (e.code === this.controlsSolo.fire);
+
+          if (isSoloLeft) this.keys.left = false;
+          if (isSoloRight) this.keys.right = false;
+          if (isSoloThrust) {
             this.keys.up = false;
             if (this.state === 'PLAYING' && this.ship.alive) this.ship.setThrust(false);
           }
-          if (e.code === 'Space' || e.code === 'KeyL') this.keys.fire = false;
+          if (isSoloFire) this.keys.fire = false;
         }
       });
 
@@ -3216,6 +3668,7 @@
     }
 
     hideModals() {
+      this.cancelKeyListening();
       this.domElements.settingsModal.classList.remove('active');
       this.domElements.instructionsModal.classList.remove('active');
       this.domElements.creditsModal.classList.remove('active');
@@ -3243,8 +3696,16 @@
       this.soundFx.init();
       this.soundFx.resume();
       this.soundFx.stopThrust(true);
+      this.keys.left = false;
+      this.keys.right = false;
       this.keys.up = false;
-      if (this.keysP2) this.keysP2.up = false;
+      this.keys.fire = false;
+      if (this.keysP2) {
+        this.keysP2.left = false;
+        this.keysP2.right = false;
+        this.keysP2.up = false;
+        this.keysP2.fire = false;
+      }
       this.hideModals();
       this.domElements.startScreen.classList.remove('active');
 

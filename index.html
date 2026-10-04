@@ -21,7 +21,7 @@
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
     rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=2.1.1">
+  <link rel="stylesheet" href="style.css?v=2.2.0">
   <link rel="manifest" href="manifest.json?v=2.0.2">
   <link rel="icon" type="image/png" sizes="64x64" href="images/newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="images/newspaceship.png">
@@ -306,143 +306,284 @@
         </nav>
 
         <div class="desktop-hints">
-          <span>⌨️ Solo: <b>[Arrows / WASD]</b> Move &bull; <b>[SPACE]</b> Fire &bull; <b>[↓ / S / Shift]</b> Shield | 👥 2-Player: <b>P1 (🔴) Arrows+Space</b> vs <b>P2 (🔵) WASD+Shift</b></span>
+          <span>⌨️ Solo: <b>[Arrows / WASD]</b> Move &bull; <b>[SPACE]</b> Fire &bull; <b>[↓ / S / Shift]</b> Shield | 👥 2-Player: <b>P1 (🔴) [OKL; + M]</b> vs <b>P2 (🔵) [WASD + Shift]</b> (Customizable in Settings)</span>
         </div>
       </div>
     </div>
 
     <!-- Settings Modal -->
     <div id="settingsModal" class="overlay">
-      <div class="modal-card glass-panel">
+      <div class="modal-card glass-panel settings-card">
         <h2 class="modal-title">SETTINGS</h2>
 
-        <div class="setting-group">
-          <label class="setting-label">SELECT SPACESHIP</label>
-          <div class="ship-selector">
-            <button id="selectRedShip" class="ship-option active" data-ship="red">
-              <img src="images/newspaceship.png" alt="Red & White Spaceship">
-              <span>Classic Crimson Red</span>
-            </button>
-            <button id="selectBlueShip" class="ship-option" data-ship="blue">
-              <img src="images/bluenewspaceship.png" alt="Blue Spaceship">
-              <span>Cobalt Blue</span>
-            </button>
+        <!-- Settings Tabs Navigation -->
+        <div class="settings-tabs-nav">
+          <button type="button" class="settings-tab-btn active" data-tab="general">⚙️ GENERAL</button>
+          <button type="button" class="settings-tab-btn" data-tab="solo">👤 1-PLAYER CONTROLS</button>
+          <button type="button" class="settings-tab-btn" data-tab="multiplayer">👥 2-PLAYER CONTROLS</button>
+        </div>
+
+        <!-- Tab 1: General Gameplay & Audio Settings -->
+        <div id="settingsPaneGeneral" class="settings-tab-pane active">
+          <div class="setting-group">
+            <label class="setting-label">SELECT SPACESHIP</label>
+            <div class="ship-selector">
+              <button id="selectRedShip" class="ship-option active" data-ship="red">
+                <img src="images/newspaceship.png" alt="Red & White Spaceship">
+                <span>Classic Crimson Red</span>
+              </button>
+              <button id="selectBlueShip" class="ship-option" data-ship="blue">
+                <img src="images/bluenewspaceship.png" alt="Blue Spaceship">
+                <span>Cobalt Blue</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="slider-header">
+              <label for="settingShipSize" class="setting-label">SPACESHIP SIZE</label>
+              <span id="shipSizeVal" class="setting-value">100%</span>
+            </div>
+            <input type="range" id="settingShipSize" min="70" max="130" value="100" step="5" class="custom-slider">
+            <div class="slider-labels">
+              <span>Compact (70%)</span>
+              <span>Standard (100%)</span>
+              <span>Enlarged (130%)</span>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="toggle-row">
+              <label for="settingStars" class="setting-label">BACKGROUND STARS</label>
+              <input type="checkbox" id="settingStars" checked class="custom-toggle">
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="toggle-row">
+              <label for="settingDifficulty" class="setting-label">DIFFICULTY</label>
+              <select id="settingDifficulty" class="custom-select">
+                <option value="easy">Easy (Casual)</option>
+                <option value="medium" selected>Medium (Standard)</option>
+                <option value="hard">Hard (Asteroid Storm)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="toggle-row">
+              <label for="settingUFO" class="setting-label">ALIEN UFO / SAUCER</label>
+              <input type="checkbox" id="settingUFO" checked class="custom-toggle">
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <span class="setting-label">POWER & SHIELD SYSTEM</span>
+            <div class="power-mode-selector" id="powerModeSelector">
+              <button type="button" class="power-mode-card" data-mode="shared">
+                <div class="power-mode-header">
+                  <span class="power-mode-title">SHARED REACTOR</span>
+                  <span class="power-mode-badge">+6% SIPHON</span>
+                </div>
+                <p class="power-mode-desc">1 battery for ammo (12%/shot) & shield (50%). Requires ≥50% to activate.</p>
+              </button>
+              <button type="button" class="power-mode-card active" data-mode="dual">
+                <div class="power-mode-header">
+                  <span class="power-mode-title">DUAL CAPACITORS</span>
+                  <span class="power-mode-badge dual">+3% / +3%</span>
+                </div>
+                <p class="power-mode-desc">Dedicated Kinetic Dynamo ammo battery & 5%/s shield capacitor. Destroying rocks
+                  recharges both.</p>
+              </button>
+              <button type="button" class="power-mode-card" data-mode="shield_only">
+                <div class="power-mode-header">
+                  <span class="power-mode-title">SHIELD CHARGER</span>
+                  <span class="power-mode-badge shield">+3% SIPHON</span>
+                </div>
+                <p class="power-mode-desc">Infinite ammo. 2%/s passive shield recharge boosted by +3% per rock destroyed.
+                </p>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="toggle-row">
+              <label for="settingStatusBars" class="setting-label">ON-SHIP AMMO & SHIELD BARS</label>
+              <input type="checkbox" id="settingStatusBars" class="custom-toggle">
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="toggle-row">
+              <label for="settingUnlimitedShield" class="setting-label">UNLIMITED SHIELD (GOD MODE)</label>
+              <input type="checkbox" id="settingUnlimitedShield" class="custom-toggle">
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="toggle-row">
+              <label for="settingSound" class="setting-label">SOUND EFFECTS</label>
+              <input type="checkbox" id="settingSound" class="custom-toggle">
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="toggle-row">
+              <label for="settingTouchControls" class="setting-label">ON-SCREEN BUTTONS</label>
+              <select id="settingTouchControls" class="custom-select">
+                <option value="auto">Auto (Touch Devices)</option>
+                <option value="always">Always Show</option>
+                <option value="hidden">Hide</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="setting-group" id="btnSizeSettingGroup">
+            <div class="slider-header">
+              <label for="settingBtnSize" class="setting-label">BUTTON SIZE</label>
+              <span id="btnSizeVal" class="setting-value">72px</span>
+            </div>
+            <input type="range" id="settingBtnSize" min="54" max="96" value="72" step="2" class="custom-slider">
+            <div class="slider-labels">
+              <span>Compact (54px)</span>
+              <span>Default (72px)</span>
+              <span>Large (96px)</span>
+            </div>
           </div>
         </div>
 
-        <div class="setting-group">
-          <div class="slider-header">
-            <label for="settingShipSize" class="setting-label">SPACESHIP SIZE</label>
-            <span id="shipSizeVal" class="setting-value">100%</span>
+        <!-- Tab 2: 1-Player Solo Controls Mapping -->
+        <div id="settingsPaneSolo" class="settings-tab-pane">
+          <div class="controls-toolbar">
+            <div class="preset-select-wrapper">
+              <label class="setting-label">PRESET LAYOUT</label>
+              <select id="presetSoloSelect" class="custom-select preset-dropdown">
+                <option value="arrows">Classic Arcade (Arrows + Space)</option>
+                <option value="wasd">WASD Gamer (WASD + Space)</option>
+                <option value="okl">Right-Hand Pilot (OKL; + M)</option>
+                <option value="ijkl">IJKL Pilot (IJKL + Space)</option>
+                <option value="custom">Custom Configuration</option>
+              </select>
+            </div>
+            <button type="button" id="resetSoloControlsBtn" class="reset-controls-btn" title="Reset 1-Player controls to default">↺ RESET TO DEFAULT</button>
           </div>
-          <input type="range" id="settingShipSize" min="70" max="130" value="100" step="5" class="custom-slider">
-          <div class="slider-labels">
-            <span>Compact (70%)</span>
-            <span>Standard (100%)</span>
-            <span>Enlarged (130%)</span>
+
+          <p class="controls-hint-text">Click any key slot below, then press any key on your keyboard to rebind. Press <kbd>ESC</kbd> to cancel.</p>
+
+          <div class="key-binder-grid solo-binder-grid">
+            <div class="key-binder-row">
+              <span class="binder-action-label">Thrust Engine</span>
+              <button type="button" class="keycap-btn" data-player="solo" data-action="thrust" data-code="ArrowUp">↑</button>
+            </div>
+            <div class="key-binder-row">
+              <span class="binder-action-label">Rotate Left</span>
+              <button type="button" class="keycap-btn" data-player="solo" data-action="rotateLeft" data-code="ArrowLeft">←</button>
+            </div>
+            <div class="key-binder-row">
+              <span class="binder-action-label">Rotate Right</span>
+              <button type="button" class="keycap-btn" data-player="solo" data-action="rotateRight" data-code="ArrowRight">→</button>
+            </div>
+            <div class="key-binder-row">
+              <span class="binder-action-label">Fire Plasma Cannon</span>
+              <button type="button" class="keycap-btn" data-player="solo" data-action="fire" data-code="Space">SPACE</button>
+            </div>
+            <div class="key-binder-row">
+              <span class="binder-action-label">Deploy Shield</span>
+              <button type="button" class="keycap-btn" data-player="solo" data-action="shield" data-code="ArrowDown">↓</button>
+            </div>
+          </div>
+
+          <div id="soloConflictBanner" class="controls-conflict-banner hidden">
+            ⚠️ Some actions share the same key! Please assign unique keys.
           </div>
         </div>
 
-        <div class="setting-group">
-          <div class="toggle-row">
-            <label for="settingStars" class="setting-label">BACKGROUND STARS</label>
-            <input type="checkbox" id="settingStars" checked class="custom-toggle">
+        <!-- Tab 3: 2-Player Co-op Controls Mapping -->
+        <div id="settingsPaneMultiplayer" class="settings-tab-pane">
+          <div class="controls-toolbar">
+            <div class="preset-select-wrapper">
+              <label class="setting-label">PRESET LAYOUT</label>
+              <select id="presetMpSelect" class="custom-select preset-dropdown">
+                <option value="okl_wasd">Ergonomic Split (P1: OKL; + M | P2: WASD + Shift)</option>
+                <option value="arrows_wasd">Classic Split (P1: Arrows + Space | P2: WASD + Shift)</option>
+                <option value="ijkl_wasd">IJKL Split (P1: IJKL + Space | P2: WASD + Shift)</option>
+                <option value="numpad_wasd">Numpad Split (P1: Numpad | P2: WASD + Shift)</option>
+                <option value="custom">Custom Configuration</option>
+              </select>
+            </div>
+            <button type="button" id="resetMpControlsBtn" class="reset-controls-btn" title="Reset 2-Player controls to default">↺ RESET TO DEFAULT</button>
           </div>
-        </div>
 
-        <div class="setting-group">
-          <div class="toggle-row">
-            <label for="settingDifficulty" class="setting-label">DIFFICULTY</label>
-            <select id="settingDifficulty" class="custom-select">
-              <option value="easy">Easy (Casual)</option>
-              <option value="medium" selected>Medium (Standard)</option>
-              <option value="hard">Hard (Asteroid Storm)</option>
-            </select>
-          </div>
-        </div>
+          <p class="controls-hint-text">Click any key slot to rebind. Symmetrical layout keeps left & right hands separated!</p>
 
-        <div class="setting-group">
-          <div class="toggle-row">
-            <label for="settingUFO" class="setting-label">ALIEN UFO / SAUCER</label>
-            <input type="checkbox" id="settingUFO" checked class="custom-toggle">
-          </div>
-        </div>
-
-        <div class="setting-group">
-          <span class="setting-label">POWER & SHIELD SYSTEM</span>
-          <div class="power-mode-selector" id="powerModeSelector">
-            <button type="button" class="power-mode-card" data-mode="shared">
-              <div class="power-mode-header">
-                <span class="power-mode-title">SHARED REACTOR</span>
-                <span class="power-mode-badge">+6% SIPHON</span>
+          <div class="controls-mp-columns">
+            <!-- Player 1 (Red) Column -->
+            <div class="player-controls-box p1-controls-box">
+              <div class="player-box-header p1-header">
+                <span class="player-box-title">🔴 PLAYER 1 (CRIMSON RED)</span>
+                <span class="player-box-sub">Right Hand (OKL; + M)</span>
               </div>
-              <p class="power-mode-desc">1 battery for ammo (12%/shot) & shield (50%). Requires ≥50% to activate.</p>
-            </button>
-            <button type="button" class="power-mode-card active" data-mode="dual">
-              <div class="power-mode-header">
-                <span class="power-mode-title">DUAL CAPACITORS</span>
-                <span class="power-mode-badge dual">+3% / +3%</span>
+              <div class="key-binder-grid">
+                <div class="key-binder-row">
+                  <span class="binder-action-label">Thrust Engine</span>
+                  <button type="button" class="keycap-btn p1-btn" data-player="p1" data-action="thrust" data-code="KeyO">O</button>
+                </div>
+                <div class="key-binder-row">
+                  <span class="binder-action-label">Rotate Left</span>
+                  <button type="button" class="keycap-btn p1-btn" data-player="p1" data-action="rotateLeft" data-code="KeyK">K</button>
+                </div>
+                <div class="key-binder-row">
+                  <span class="binder-action-label">Rotate Right</span>
+                  <button type="button" class="keycap-btn p1-btn" data-player="p1" data-action="rotateRight" data-code="Semicolon">;</button>
+                </div>
+                <div class="key-binder-row">
+                  <span class="binder-action-label">Fire Cannon</span>
+                  <button type="button" class="keycap-btn p1-btn" data-player="p1" data-action="fire" data-code="KeyM">M</button>
+                </div>
+                <div class="key-binder-row">
+                  <span class="binder-action-label">Deploy Shield</span>
+                  <button type="button" class="keycap-btn p1-btn" data-player="p1" data-action="shield" data-code="KeyL">L</button>
+                </div>
               </div>
-              <p class="power-mode-desc">Dedicated Kinetic Dynamo ammo battery & 5%/s shield capacitor. Destroying rocks
-                recharges both.</p>
-            </button>
-            <button type="button" class="power-mode-card" data-mode="shield_only">
-              <div class="power-mode-header">
-                <span class="power-mode-title">SHIELD CHARGER</span>
-                <span class="power-mode-badge shield">+3% SIPHON</span>
+            </div>
+
+            <!-- Player 2 (Blue) Column -->
+            <div class="player-controls-box p2-controls-box">
+              <div class="player-box-header p2-header">
+                <span class="player-box-title">🔵 PLAYER 2 (COBALT BLUE)</span>
+                <span class="player-box-sub">Left Hand (WASD + Shift)</span>
               </div>
-              <p class="power-mode-desc">Infinite ammo. 2%/s passive shield recharge boosted by +3% per rock destroyed.
-              </p>
-            </button>
+              <div class="key-binder-grid">
+                <div class="key-binder-row">
+                  <span class="binder-action-label">Thrust Engine</span>
+                  <button type="button" class="keycap-btn p2-btn" data-player="p2" data-action="thrust" data-code="KeyW">W</button>
+                </div>
+                <div class="key-binder-row">
+                  <span class="binder-action-label">Rotate Left</span>
+                  <button type="button" class="keycap-btn p2-btn" data-player="p2" data-action="rotateLeft" data-code="KeyA">A</button>
+                </div>
+                <div class="key-binder-row">
+                  <span class="binder-action-label">Rotate Right</span>
+                  <button type="button" class="keycap-btn p2-btn" data-player="p2" data-action="rotateRight" data-code="KeyD">D</button>
+                </div>
+                <div class="key-binder-row">
+                  <span class="binder-action-label">Fire Cannon</span>
+                  <button type="button" class="keycap-btn p2-btn" data-player="p2" data-action="fire" data-code="ShiftLeft">L-SHIFT</button>
+                </div>
+                <div class="key-binder-row">
+                  <span class="binder-action-label">Deploy Shield</span>
+                  <button type="button" class="keycap-btn p2-btn" data-player="p2" data-action="shield" data-code="KeyS">S</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="mpConflictBanner" class="controls-conflict-banner hidden">
+            ⚠️ Key conflict detected! Player 1 and Player 2 have overlapping keys.
           </div>
         </div>
 
-        <div class="setting-group">
-          <div class="toggle-row">
-            <label for="settingStatusBars" class="setting-label">ON-SHIP AMMO & SHIELD BARS</label>
-            <input type="checkbox" id="settingStatusBars" class="custom-toggle">
-          </div>
-        </div>
-
-        <div class="setting-group">
-          <div class="toggle-row">
-            <label for="settingUnlimitedShield" class="setting-label">UNLIMITED SHIELD (GOD MODE)</label>
-            <input type="checkbox" id="settingUnlimitedShield" class="custom-toggle">
-          </div>
-        </div>
-
-        <div class="setting-group">
-          <div class="toggle-row">
-            <label for="settingSound" class="setting-label">SOUND EFFECTS</label>
-            <input type="checkbox" id="settingSound" class="custom-toggle">
-          </div>
-        </div>
-
-        <div class="setting-group">
-          <div class="toggle-row">
-            <label for="settingTouchControls" class="setting-label">ON-SCREEN BUTTONS</label>
-            <select id="settingTouchControls" class="custom-select">
-              <option value="auto">Auto (Touch Devices)</option>
-              <option value="always">Always Show</option>
-              <option value="hidden">Hide</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="setting-group" id="btnSizeSettingGroup">
-          <div class="slider-header">
-            <label for="settingBtnSize" class="setting-label">BUTTON SIZE</label>
-            <span id="btnSizeVal" class="setting-value">72px</span>
-          </div>
-          <input type="range" id="settingBtnSize" min="54" max="96" value="72" step="2" class="custom-slider">
-          <div class="slider-labels">
-            <span>Compact (54px)</span>
-            <span>Default (72px)</span>
-            <span>Large (96px)</span>
-          </div>
-        </div>
-
-        <button id="closeSettingsBtn" class="menu-btn primary-btn">DONE</button>
+        <button id="closeSettingsBtn" class="menu-btn primary-btn" style="margin-top: 18px;">DONE</button>
       </div>
     </div>
 
@@ -470,36 +611,38 @@
             </div>
             <div class="guide-col">
               <h3>💻 Keyboard Solo</h3>
-              <ul>
-                <li><b>Left / Right or A / D:</b> Rotate ship</li>
-                <li><b>Up Arrow or W:</b> Thrust engine</li>
-                <li><b>Spacebar or Left Click:</b> Fire laser</li>
-                <li><b>Shift / S / Down:</b> Deploy Shield</li>
+              <ul id="soloInstructionsList">
+                <li><b>Left / Right (← / →):</b> Rotate ship</li>
+                <li><b>Up Arrow (↑):</b> Thrust engine</li>
+                <li><b>Spacebar:</b> Fire laser</li>
+                <li><b>Down / Shift / S:</b> Deploy Shield</li>
                 <li><b>P or Escape:</b> Pause game</li>
               </ul>
+              <small style="color: #38bdf8; display: block; margin-top: 6px;">⚙️ Fully remappable in Settings!</small>
             </div>
             <div class="guide-col" style="grid-column: 1 / -1; background: rgba(15, 23, 42, 0.4); border-radius: 8px; padding: 10px; border: 1px solid rgba(56, 189, 248, 0.2);">
               <h3 style="color: #38bdf8; margin-top: 0; margin-bottom: 8px;">👥 2-Player Local Co-op (Shared Keyboard)</h3>
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
                 <div>
                   <h4 style="color: #f87171; margin: 0 0 6px 0; font-size: 13px;">🔴 Player 1 (Classic Crimson Red)</h4>
-                  <ul style="margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6;">
-                    <li><b>Arrow Left / Right (← / →):</b> Rotate</li>
-                    <li><b>Arrow Up (↑):</b> Thrust Engine</li>
-                    <li><b>Spacebar (or Enter):</b> Fire Plasma</li>
-                    <li><b>Arrow Down (↓):</b> Deploy Shield</li>
+                  <ul id="p1InstructionsList" style="margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6;">
+                    <li><b>K / ; Keys:</b> Rotate</li>
+                    <li><b>O Key:</b> Thrust Engine</li>
+                    <li><b>M Key:</b> Fire Plasma</li>
+                    <li><b>L Key:</b> Deploy Shield</li>
                   </ul>
                 </div>
                 <div>
                   <h4 style="color: #38bdf8; margin: 0 0 6px 0; font-size: 13px;">🔵 Player 2 (Cobalt Blue)</h4>
-                  <ul style="margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6;">
+                  <ul id="p2InstructionsList" style="margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6;">
                     <li><b>A / D Keys:</b> Rotate</li>
                     <li><b>W Key:</b> Thrust Engine</li>
-                    <li><b>Left Shift (or Q):</b> Fire Plasma</li>
-                    <li><b>S Key (or E):</b> Deploy Shield</li>
+                    <li><b>Left Shift:</b> Fire Plasma</li>
+                    <li><b>S Key:</b> Deploy Shield</li>
                   </ul>
                 </div>
               </div>
+              <small style="color: #38bdf8; display: block; margin-top: 8px;">⚙️ Fully remappable anytime in Settings &gt; 2-Player Controls</small>
             </div>
           </div>
 
@@ -613,7 +756,7 @@
   </div>
 
   <script src="rl_agent.js?v=2.1.0"></script>
-  <script src="game.js?v=2.1.1"></script>
+  <script src="game.js?v=2.2.0"></script>
 </body>
 
 </html>
