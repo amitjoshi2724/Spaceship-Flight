@@ -25,6 +25,10 @@
   --radius-lg: 20px;
 }
 
+.hidden {
+  display: none !important;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -124,14 +128,21 @@ html, body {
   box-sizing: border-box;
   padding: max(10px, env(safe-area-inset-top, 10px)) max(12px, env(safe-area-inset-right, 12px)) 6px max(12px, env(safe-area-inset-left, 12px));
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: clamp(4px, 1.2vw, 14px);
   z-index: 10;
   pointer-events: none;
 }
 
 .hud-view-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: clamp(4px, 1.2vw, 14px);
+  min-width: 0;
+}
+
+#hudSolo {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -155,6 +166,14 @@ html, body {
   width: 100%;
   gap: clamp(4px, 1vw, 10px);
   min-width: 0;
+}
+
+.mp-hud-right {
+  display: flex;
+  align-items: center;
+  gap: clamp(4px, 0.8vw, 8px);
+  margin-left: 6px;
+  flex-shrink: 0;
 }
 
 /* Multiplayer Cockpit Layout */

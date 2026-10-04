@@ -2445,7 +2445,9 @@
         p1LivesIcons: document.getElementById('p1LivesIcons'),
         p2LivesIcons: document.getElementById('p2LivesIcons'),
         pauseBtn: document.getElementById('pauseBtn'),
+        pauseBtnMp: document.getElementById('pauseBtnMp'),
         soundToggleBtn: document.getElementById('soundToggleBtn'),
+        soundToggleBtnMp: document.getElementById('soundToggleBtnMp'),
         touchControls: document.getElementById('touchControls'),
 
         energyHud: document.getElementById('energyHud'),
@@ -2659,9 +2661,8 @@
       }
 
       this.domElements.highScoreDisplay.textContent = this.highScore;
-      if (this.domElements.soundToggleBtn) {
-        this.domElements.soundToggleBtn.textContent = this.soundFx.enabled ? '🔊' : '🔇';
-      }
+      this.updateSoundButtons(this.soundFx.enabled);
+      this.setHudMode('solo');
       if (this.domElements.settingSound) {
         this.domElements.settingSound.checked = this.soundFx.enabled;
       }
@@ -2994,6 +2995,9 @@
 
       // Pause Menu
       this.domElements.pauseBtn.addEventListener('click', () => this.togglePause());
+      if (this.domElements.pauseBtnMp) {
+        this.domElements.pauseBtnMp.addEventListener('click', () => this.togglePause());
+      }
       this.domElements.resumeBtn.addEventListener('click', () => this.resumeGame());
       this.domElements.restartBtn.addEventListener('click', () => this.restartGame());
       this.domElements.pauseSettingsBtn.addEventListener('click', () => this.showModal('settings'));
@@ -3010,19 +3014,24 @@
       this.domElements.gameOverQuitBtn.addEventListener('click', () => this.quitToMainMenu());
 
       // Sound Toggle
-      this.domElements.soundToggleBtn.addEventListener('click', () => {
+      const toggleSoundAction = () => {
         this.soundFx.enabled = !this.soundFx.enabled;
-        this.domElements.soundToggleBtn.textContent = this.soundFx.enabled ? '🔊' : '🔇';
+        this.updateSoundButtons(this.soundFx.enabled);
         if (this.domElements.settingSound) this.domElements.settingSound.checked = this.soundFx.enabled;
         try {
           localStorage.setItem('spaceship_flight_sound', this.soundFx.enabled.toString());
         } catch (e) { }
-      });
+      };
+
+      this.domElements.soundToggleBtn.addEventListener('click', toggleSoundAction);
+      if (this.domElements.soundToggleBtnMp) {
+        this.domElements.soundToggleBtnMp.addEventListener('click', toggleSoundAction);
+      }
 
       if (this.domElements.settingSound) {
         this.domElements.settingSound.addEventListener('change', (e) => {
           this.soundFx.enabled = e.target.checked;
-          this.domElements.soundToggleBtn.textContent = this.soundFx.enabled ? '🔊' : '🔇';
+          this.updateSoundButtons(this.soundFx.enabled);
           try {
             localStorage.setItem('spaceship_flight_sound', this.soundFx.enabled.toString());
           } catch (e) { }
@@ -3249,10 +3258,9 @@
       this.ufoTargetTimer = 0;
       this.particles.clear();
 
+      this.setHudMode(this.gameMode);
+
       if (this.gameMode === 'multiplayer') {
-        if (this.domElements.hud) {
-          this.domElements.hud.classList.add('multiplayer-active');
-        }
         const w = this.canvas.width;
         const h = this.canvas.height;
         this.ship1.selectedSkin = 'red';
@@ -3274,9 +3282,6 @@
         this.ships = [this.ship1, this.ship2];
         this.ship = this.ship1;
       } else {
-        if (this.domElements.hud) {
-          this.domElements.hud.classList.remove('multiplayer-active');
-        }
         this.ship1.reset(true);
         this.ship1.powerMode = this.powerMode;
         this.ship1.showStatusBars = this.showStatusBars;
@@ -3310,7 +3315,8 @@
       this.soundFx.stopThrust(true);
       // Explicitly mute sound for AI play as requested
       this.soundFx.enabled = false;
-      if (this.domElements.soundToggleBtn) this.domElements.soundToggleBtn.textContent = '🔇';
+      this.updateSoundButtons(false);
+      this.setHudMode('solo');
       if (this.domElements.settingSound) this.domElements.settingSound.checked = false;
       this.keys.up = false;
       this.hideModals();
@@ -3354,7 +3360,8 @@
       this.soundFx.stopThrust(true);
       // Explicitly mute audio during training so high-speed multi-tick training produces zero noise
       this.soundFx.enabled = false;
-      if (this.domElements.soundToggleBtn) this.domElements.soundToggleBtn.textContent = '🔇';
+      this.updateSoundButtons(false);
+      this.setHudMode('solo');
       if (this.domElements.settingSound) this.domElements.settingSound.checked = false;
       this.keys.up = false;
       this.hideModals();
@@ -3428,15 +3435,51 @@
       this.quitToMainMenu();
     }
 
+    setHudMode(mode = 'solo') {
+      const isMp = mode === 'multiplayer';
+      if (this.domElements.hud) {
+        if (isMp) {
+          this.domElements.hud.classList.add('multiplayer-active');
+        } else {
+          this.domElements.hud.classList.remove('multiplayer-active');
+        }
+      }
+      if (this.domElements.hudSolo) {
+        this.domElements.hudSolo.style.display = isMp ? 'none' : 'flex';
+        this.domElements.hudSolo.classList.toggle('hidden', isMp);
+      }
+      if (this.domElements.hudMultiplayer) {
+        this.domElements.hudMultiplayer.style.display = isMp ? 'flex' : 'none';
+        this.domElements.hudMultiplayer.classList.toggle('hidden', !isMp);
+      }
+    }
+
+    updateSoundButtons(enabled) {
+      const icon = enabled ? '🔊' : '🔇';
+      if (this.domElements.soundToggleBtn) this.domElements.soundToggleBtn.textContent = icon;
+      if (this.domElements.soundToggleBtnMp) this.domElements.soundToggleBtnMp.textContent = icon;
+    }
+
+    updatePauseButtons(paused) {
+      const text = paused ? '▶' : '| |';
+      const label = paused ? 'Resume Game' : 'Pause Game';
+      if (this.domElements.pauseBtn) {
+        this.domElements.pauseBtn.textContent = text;
+        this.domElements.pauseBtn.setAttribute('title', label);
+        this.domElements.pauseBtn.setAttribute('aria-label', label);
+      }
+      if (this.domElements.pauseBtnMp) {
+        this.domElements.pauseBtnMp.textContent = text;
+        this.domElements.pauseBtnMp.setAttribute('title', label);
+        this.domElements.pauseBtnMp.setAttribute('aria-label', label);
+      }
+    }
+
     togglePause() {
       if (this.state === 'PLAYING') {
         this.state = 'PAUSED';
         this.ship.setThrust(false);
-        if (this.domElements.pauseBtn) {
-          this.domElements.pauseBtn.textContent = '▶';
-          this.domElements.pauseBtn.setAttribute('title', 'Resume Game');
-          this.domElements.pauseBtn.setAttribute('aria-label', 'Resume Game');
-        }
+        this.updatePauseButtons(true);
         this.showModal('pause');
       } else if (this.state === 'PAUSED') {
         this.resumeGame();
@@ -3446,19 +3489,11 @@
     resumeGame() {
       this.hideModals();
       this.state = 'PLAYING';
-      if (this.domElements.pauseBtn) {
-        this.domElements.pauseBtn.textContent = '| |';
-        this.domElements.pauseBtn.setAttribute('title', 'Pause Game');
-        this.domElements.pauseBtn.setAttribute('aria-label', 'Pause Game');
-      }
+      this.updatePauseButtons(false);
     }
 
     restartGame() {
-      if (this.domElements.pauseBtn) {
-        this.domElements.pauseBtn.textContent = '| |';
-        this.domElements.pauseBtn.setAttribute('title', 'Pause Game');
-        this.domElements.pauseBtn.setAttribute('aria-label', 'Pause Game');
-      }
+      this.updatePauseButtons(false);
       if (this.rlMode === 'trained') {
         this.startWatchTrainedAI();
       } else if (this.rlMode === 'training') {
@@ -3474,9 +3509,7 @@
       this.lastStepDecision = null;
       if (this.domElements.aiTelemetryHud) this.domElements.aiTelemetryHud.classList.add('hidden');
       if (this.domElements.rlTrainingHud) this.domElements.rlTrainingHud.classList.add('hidden');
-      if (this.domElements.hud) {
-        this.domElements.hud.classList.remove('multiplayer-active');
-      }
+      this.setHudMode('solo');
 
       this.hideModals();
       for (const s of this.ships) {
@@ -3488,11 +3521,7 @@
       this.rocks = [];
       this.rockSpawnTimer = 0;
       this.state = 'START';
-      if (this.domElements.pauseBtn) {
-        this.domElements.pauseBtn.textContent = '| |';
-        this.domElements.pauseBtn.setAttribute('title', 'Pause Game');
-        this.domElements.pauseBtn.setAttribute('aria-label', 'Pause Game');
-      }
+      this.updatePauseButtons(false);
       this.domElements.startScreen.classList.add('active');
     }
 

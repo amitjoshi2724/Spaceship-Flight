@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spaceship-flight-2.0.5';
+const CACHE_NAME = 'spaceship-flight-2.1.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -46,7 +46,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event: Network-first for scripts & navigation, Cache-first for images/audio
+// Fetch Event: Network-first for scripts, styles & navigation, Cache-first for images/audio
 self.addEventListener('fetch', (event) => {
   // Only handle GET requests
   if (event.request.method !== 'GET') return;
@@ -65,7 +65,9 @@ self.addEventListener('fetch', (event) => {
 
   const isCodeOrDoc = event.request.mode === 'navigate' ||
                       event.request.destination === 'script' ||
+                      event.request.destination === 'style' ||
                       url.pathname.endsWith('.js') ||
+                      url.pathname.endsWith('.css') ||
                       url.pathname.endsWith('.html');
 
   if (isCodeOrDoc) {

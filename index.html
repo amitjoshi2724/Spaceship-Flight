@@ -21,7 +21,7 @@
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
     rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=1.0.0">
+  <link rel="stylesheet" href="style.css?v=2.1.0">
   <link rel="manifest" href="manifest.json?v=2.0.2">
   <link rel="icon" type="image/png" sizes="64x64" href="images/newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="images/newspaceship.png">
@@ -35,7 +35,7 @@
 
     <!-- Top HUD Bar -->
     <header id="hud">
-      <!-- Solo HUD Container -->
+      <!-- Solo HUD Container (3-column layout: Score on Left, Gauges Centered, Controls on Right) -->
       <div id="hudSolo" class="hud-view-group">
         <div class="hud-left">
           <div class="hud-stat score-container">
@@ -87,10 +87,15 @@
             </div>
           </div>
         </div>
+
+        <div class="hud-right">
+          <button id="soundToggleBtn" class="hud-btn sound-btn" aria-label="Toggle Sound" title="Toggle Sound">🔇</button>
+          <button id="pauseBtn" class="hud-btn" aria-label="Pause Game" title="Pause Game">| |</button>
+        </div>
       </div>
 
-      <!-- Multiplayer Co-op HUD Container (Active in 2-Player mode) -->
-      <div id="hudMultiplayer" class="hud-view-group mp-hud hidden">
+      <!-- Multiplayer Co-op HUD Container (Guaranteed inline display:none until 2-Player mode is started) -->
+      <div id="hudMultiplayer" class="hud-view-group mp-hud hidden" style="display: none;">
         <!-- Player 1 (Red) Cockpit Gauges -->
         <div class="hud-mp-player hud-mp-p1">
           <div class="hud-stat mp-player-badge p1-badge">
@@ -136,7 +141,7 @@
           </div>
         </div>
 
-        <!-- Player 2 (Blue) Cockpit Gauges -->
+        <!-- Player 2 (Blue) Cockpit Gauges & Controls -->
         <div class="hud-mp-player hud-mp-p2">
           <div id="p2ShieldHud" class="hud-stat mp-gauge p2-shield">
             <div class="energy-header">
@@ -164,12 +169,11 @@
             </div>
             <span class="mp-tag blue">P2 BLUE</span>
           </div>
+          <div class="hud-right mp-hud-right">
+            <button id="soundToggleBtnMp" class="hud-btn sound-btn" aria-label="Toggle Sound" title="Toggle Sound">🔇</button>
+            <button id="pauseBtnMp" class="hud-btn" aria-label="Pause Game" title="Pause Game">| |</button>
+          </div>
         </div>
-      </div>
-
-      <div class="hud-right">
-        <button id="soundToggleBtn" class="hud-btn sound-btn" aria-label="Toggle Sound" title="Toggle Sound">🔇</button>
-        <button id="pauseBtn" class="hud-btn" aria-label="Pause Game" title="Pause Game">| |</button>
       </div>
     </header>
 
@@ -608,8 +612,8 @@
     </div>
   </div>
 
-  <script src="rl_agent.js?v=2.0.5"></script>
-  <script src="game.js?v=2.0.5"></script>
+  <script src="rl_agent.js?v=2.1.0"></script>
+  <script src="game.js?v=2.1.0"></script>
 </body>
 
 </html>
