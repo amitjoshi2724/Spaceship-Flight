@@ -3007,6 +3007,8 @@
       this.domElements.retryBtn.addEventListener('click', () => {
         if (this.rlMode === 'trained') {
           this.startWatchTrainedAI();
+        } else if (this.rlMode === 'training') {
+          this.startWatchAITraining();
         } else {
           this.startGame(this.gameMode);
         }
@@ -3306,6 +3308,14 @@
 
     startWatchTrainedAI() {
       if (!this.rlAgent) return;
+      this.gameMode = 'solo';
+      this.ships = [this.ship1];
+      this.ship = this.ship1;
+      this.ship.selectedSkin = this.selectedSkin || 'red';
+      this.ship.powerMode = this.powerMode;
+      this.ship.showStatusBars = this.showStatusBars;
+      this.ship.unlimitedShield = this.unlimitedShield;
+      this.ship.unlimitedAmmo = this.unlimitedShield;
       this.rlMode = 'trained';
       this.rlAgent.mode = 'play';
       this.lastStepDecision = null;
@@ -3350,6 +3360,14 @@
 
     startWatchAITraining() {
       if (!this.rlAgent) return;
+      this.gameMode = 'solo';
+      this.ships = [this.ship1];
+      this.ship = this.ship1;
+      this.ship.selectedSkin = this.selectedSkin || 'red';
+      this.ship.powerMode = this.powerMode;
+      this.ship.showStatusBars = this.showStatusBars;
+      this.ship.unlimitedShield = this.unlimitedShield;
+      this.ship.unlimitedAmmo = this.unlimitedShield;
       this.rlMode = 'training';
       this.rlAgent.mode = 'train';
       this.rlAgent.resetForNewTraining();
@@ -3902,19 +3920,17 @@
       this.domElements.finalScoreVal.textContent = this.score;
       this.domElements.bestScoreVal.textContent = this.highScore;
 
-      if (this.gameMode === 'multiplayer') {
-        if (this.domElements.multiplayerResultsStats) {
-          this.domElements.multiplayerResultsStats.classList.remove('hidden');
-        }
+      const isMultiplayerGame = this.gameMode === 'multiplayer' && !this.rlMode;
+      if (this.domElements.multiplayerResultsStats) {
+        this.domElements.multiplayerResultsStats.style.display = isMultiplayerGame ? 'grid' : 'none';
+        this.domElements.multiplayerResultsStats.classList.toggle('hidden', !isMultiplayerGame);
+      }
+      if (isMultiplayerGame) {
         if (this.domElements.p1ScoreVal) {
           this.domElements.p1ScoreVal.textContent = this.p1Kills;
         }
         if (this.domElements.p2ScoreVal) {
           this.domElements.p2ScoreVal.textContent = this.p2Kills;
-        }
-      } else {
-        if (this.domElements.multiplayerResultsStats) {
-          this.domElements.multiplayerResultsStats.classList.add('hidden');
         }
       }
 

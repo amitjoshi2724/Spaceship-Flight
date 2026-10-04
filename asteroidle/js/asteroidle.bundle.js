@@ -1123,9 +1123,11 @@
           subtext: "Perfect ballistic lead solution."
         };
       } else {
-        const M = this.minSurfaceDistance / R;
-        if (M <= 3) {
-          score = Math.max(0, Math.round(100 * Math.pow(1 - M / 3, 1.5)));
+        const threshold = Math.max(95, R * 2.6);
+        const missDist = Math.max(0, this.minSurfaceDistance);
+        if (missDist <= threshold) {
+          const ratio = missDist / threshold;
+          score = Math.max(0, Math.round(100 * Math.pow(1 - ratio, 1.35)));
         } else {
           score = 0;
         }
@@ -1133,11 +1135,12 @@
         const optimalDeg = (optimalRad * 180 / Math.PI + 90 + 360) % 360;
         let angleDiff = Math.abs(this.ship.angle - optimalDeg);
         if (angleDiff > 180) angleDiff = 360 - angleDiff;
+        const missPixels = Math.round(missDist);
         this.resultTelemetry = {
           score,
           isHit: false,
-          message: score > 75 ? "\u26A1 GRAZING NEAR-MISS!" : score > 40 ? "\u26A0\uFE0F CLOSE SHAVE" : "\u274C BALLISTIC DEFLECTION",
-          subtext: `Missed by ${M.toFixed(2)}x rock radii (Angle error: ~${angleDiff.toFixed(1)}\xB0)`
+          message: score >= 75 ? "\u26A1 GRAZING NEAR-MISS!" : score >= 40 ? "\u26A0\uFE0F CLOSE SHAVE" : score > 0 ? "\u26A0\uFE0F NEAR MISS" : "\u274C BALLISTIC DEFLECTION",
+          subtext: `Missed surface by ${missPixels}px (Angle error: ~${angleDiff.toFixed(1)}\xB0)`
         };
       }
       this.roundScore = score;
@@ -1268,9 +1271,16 @@
           if (settingSound) settingSound.checked = nextState;
         });
       }
+      const resultBanner = document.getElementById("round-result-banner");
+      if (resultBanner) {
+        resultBanner.addEventListener("click", () => this.advanceNextRound());
+      }
       const nextBtn = document.getElementById("next-round-btn");
       if (nextBtn) {
-        nextBtn.addEventListener("click", () => this.advanceNextRound());
+        nextBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.advanceNextRound();
+        });
       }
       window.addEventListener("keydown", (e) => {
         if (e.code === "Space") {
@@ -1432,7 +1442,10 @@
       const ch = this.challenges[this.currentRound - 1];
       if (!ch) return;
       const resultBanner = document.getElementById("round-result-banner");
-      if (resultBanner) resultBanner.classList.remove("visible");
+      if (resultBanner) {
+        resultBanner.classList.remove("visible");
+        resultBanner.style.display = "none";
+      }
       this.updateHeaderBanner();
       this.updatePips();
       this.engine.loadChallenge(ch);
@@ -1453,13 +1466,32 @@
       if (points) points.textContent = `+${score} PTS`;
       if (subtext) subtext.textContent = telem.subtext;
       if (nextBtn) {
-        nextBtn.textContent = this.currentRound < 5 ? "NEXT ASTEROID [SPACE] \u2794" : "VIEW MISSION INTEL [SPACE] \u{1F4CA}";
+        const isLastRound = this.currentRound >= 5;
+        const mainLabel = nextBtn.querySelector(".btn-main-label");
+        const subLabel = nextBtn.querySelector(".btn-sub-label");
+        if (mainLabel) {
+          mainLabel.textContent = isLastRound ? "VIEW MISSION INTEL \u{1F4CA}" : "NEXT ASTEROID \u2794";
+        } else {
+          nextBtn.textContent = isLastRound ? "VIEW MISSION INTEL [SPACE] \u{1F4CA}" : "NEXT ASTEROID [SPACE] \u2794";
+        }
+        if (subLabel) {
+          subLabel.textContent = "PRESS [SPACE] OR CLICK TO CONTINUE";
+        }
       }
-      if (resultBanner) resultBanner.classList.add("visible");
+      if (resultBanner) {
+        resultBanner.classList.remove("hidden");
+        resultBanner.style.display = "flex";
+        requestAnimationFrame(() => {
+          resultBanner.classList.add("visible");
+        });
+      }
     }
     advanceNextRound() {
       const resultBanner = document.getElementById("round-result-banner");
-      if (resultBanner) resultBanner.classList.remove("visible");
+      if (resultBanner) {
+        resultBanner.classList.remove("visible");
+        resultBanner.style.display = "none";
+      }
       this.currentRound++;
       if (this.currentRound <= 5) {
         this.loadCurrentRound();

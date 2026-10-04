@@ -92,10 +92,17 @@ export class DailyManager {
             });
         }
 
-        // Next Round button in result banner
+        // Next Round button and overlay click in result banner
+        const resultBanner = document.getElementById('round-result-banner');
+        if (resultBanner) {
+            resultBanner.addEventListener('click', () => this.advanceNextRound());
+        }
         const nextBtn = document.getElementById('next-round-btn');
         if (nextBtn) {
-            nextBtn.addEventListener('click', () => this.advanceNextRound());
+            nextBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.advanceNextRound();
+            });
         }
 
         // Space key advances round if result banner is active
@@ -290,7 +297,10 @@ export class DailyManager {
 
         // Hide result banner
         const resultBanner = document.getElementById('round-result-banner');
-        if (resultBanner) resultBanner.classList.remove('visible');
+        if (resultBanner) {
+            resultBanner.classList.remove('visible');
+            resultBanner.style.display = 'none';
+        }
 
         this.updateHeaderBanner();
         this.updatePips();
@@ -318,15 +328,34 @@ export class DailyManager {
         if (points) points.textContent = `+${score} PTS`;
         if (subtext) subtext.textContent = telem.subtext;
         if (nextBtn) {
-            nextBtn.textContent = this.currentRound < 5 ? 'NEXT ASTEROID [SPACE] ➔' : 'VIEW MISSION INTEL [SPACE] 📊';
+            const isLastRound = this.currentRound >= 5;
+            const mainLabel = nextBtn.querySelector('.btn-main-label');
+            const subLabel = nextBtn.querySelector('.btn-sub-label');
+            if (mainLabel) {
+                mainLabel.textContent = isLastRound ? 'VIEW MISSION INTEL 📊' : 'NEXT ASTEROID ➔';
+            } else {
+                nextBtn.textContent = isLastRound ? 'VIEW MISSION INTEL [SPACE] 📊' : 'NEXT ASTEROID [SPACE] ➔';
+            }
+            if (subLabel) {
+                subLabel.textContent = 'PRESS [SPACE] OR CLICK TO CONTINUE';
+            }
         }
 
-        if (resultBanner) resultBanner.classList.add('visible');
+        if (resultBanner) {
+            resultBanner.classList.remove('hidden');
+            resultBanner.style.display = 'flex';
+            requestAnimationFrame(() => {
+                resultBanner.classList.add('visible');
+            });
+        }
     }
 
     advanceNextRound() {
         const resultBanner = document.getElementById('round-result-banner');
-        if (resultBanner) resultBanner.classList.remove('visible');
+        if (resultBanner) {
+            resultBanner.classList.remove('visible');
+            resultBanner.style.display = 'none';
+        }
 
         this.currentRound++;
         if (this.currentRound <= 5) {

@@ -129,12 +129,15 @@
     </div>
 
     <!-- Round Result Floating Banner Overlay -->
-    <div id="round-result-banner" class="round-result-banner hidden">
-      <div class="result-card glass-panel">
+    <div id="round-result-banner" class="round-result-banner" style="display: none;">
+      <div class="result-card glass-panel" id="round-result-card">
         <div id="round-score-headline" class="result-headline">DIRECT HIT!</div>
         <div id="round-score-points" class="result-points">+100 PTS</div>
-        <div id="round-score-subtext" class="result-subtext">Missed by 0.12x rock radii</div>
-        <button id="next-round-btn" class="menu-btn primary-btn">NEXT ASTEROID [SPACE] ➔</button>
+        <div id="round-score-subtext" class="result-subtext">Missed by 18px</div>
+        <button id="next-round-btn" class="menu-btn primary-btn next-asteroid-btn" title="Proceed to next asteroid">
+          <span class="btn-main-label">NEXT ASTEROID ➔</span>
+          <span class="btn-sub-label">PRESS [SPACE] OR CLICK TO CONTINUE</span>
+        </button>
       </div>
     </div>
 
@@ -319,8 +322,8 @@
               <strong>Continuous Proximity Scoring:</strong>
               <ul class="help-scoring-list">
                 <li>🎯 <b>Direct Hit:</b> 100 PTS</li>
-                <li>⚡ <b>Near-Miss:</b> Continuous points based on surface proximity distance.</li>
-                <li>❌ <b>Distant Whiff (&gt; 3.0x rock radius):</b> 0 PTS</li>
+                <li>⚡ <b>Near-Miss:</b> Fair proximity points based on pixel distance to asteroid surface (close grazes earn 75–95+ PTS).</li>
+                <li>❌ <b>Distant Whiff:</b> 0 PTS</li>
               </ul>
               5 rounds per mission. Total score is out of <b>500</b>!
             </div>

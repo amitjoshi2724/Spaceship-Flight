@@ -675,10 +675,17 @@ export class AsteroidleEngine {
                 subtext: "Perfect ballistic lead solution."
             };
         } else {
-            // Normalized continuous Surface Proximity:
-            const M = this.minSurfaceDistance / R;
-            if (M <= 3.0) {
-                score = Math.max(0, Math.round(100 * Math.pow(1 - (M / 3.0), 1.5)));
+            // Fair proximity scoring:
+            // Small rocks are already harder to hit directly, so they should NEVER be penalized with a smaller forgiveness cushion!
+            // We use a generous baseline proximity threshold of at least 95px (or 2.6x rock radius for large asteroids),
+            // giving small rocks an equal and fair near-miss scoring zone.
+            const threshold = Math.max(95, R * 2.6);
+            const missDist = Math.max(0, this.minSurfaceDistance);
+
+            if (missDist <= threshold) {
+                // Smooth power curve: close grazes (< 20px) score 75-95 pts; distant misses decay smoothly to 0
+                const ratio = missDist / threshold;
+                score = Math.max(0, Math.round(100 * Math.pow(1 - ratio, 1.35)));
             } else {
                 score = 0;
             }
@@ -688,11 +695,12 @@ export class AsteroidleEngine {
             let angleDiff = Math.abs(this.ship.angle - optimalDeg);
             if (angleDiff > 180) angleDiff = 360 - angleDiff;
 
+            const missPixels = Math.round(missDist);
             this.resultTelemetry = {
                 score,
                 isHit: false,
-                message: score > 75 ? "⚡ GRAZING NEAR-MISS!" : score > 40 ? "⚠️ CLOSE SHAVE" : "❌ BALLISTIC DEFLECTION",
-                subtext: `Missed by ${M.toFixed(2)}x rock radii (Angle error: ~${angleDiff.toFixed(1)}°)`
+                message: score >= 75 ? "⚡ GRAZING NEAR-MISS!" : score >= 40 ? "⚠️ CLOSE SHAVE" : score > 0 ? "⚠️ NEAR MISS" : "❌ BALLISTIC DEFLECTION",
+                subtext: `Missed surface by ${missPixels}px (Angle error: ~${angleDiff.toFixed(1)}°)`
             };
         }
 
