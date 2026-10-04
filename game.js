@@ -2593,6 +2593,9 @@
         soloInstructionsList: document.getElementById('soloInstructionsList'),
         p1InstructionsList: document.getElementById('p1InstructionsList'),
         p2InstructionsList: document.getElementById('p2InstructionsList'),
+        p1ControlsSub: document.getElementById('p1ControlsSub'),
+        p2ControlsSub: document.getElementById('p2ControlsSub'),
+        desktopHintsText: document.getElementById('desktopHintsText'),
 
         // Results
         finalScoreVal: document.getElementById('finalScoreVal'),
@@ -2826,6 +2829,34 @@
       this.listeningKeycap = null;
     }
 
+    getControlsSummary(controls, player) {
+      if (!controls) return '';
+      const hand = (player === 'p1') ? 'Right Hand' : 'Left Hand';
+
+      let movement = '';
+      if (controls.thrust === 'ArrowUp' && controls.rotateLeft === 'ArrowLeft' && controls.rotateRight === 'ArrowRight') {
+        movement = 'Arrows';
+      } else if (controls.thrust === 'KeyW' && controls.rotateLeft === 'KeyA' && controls.rotateRight === 'KeyD') {
+        movement = 'WASD';
+      } else if (controls.thrust === 'KeyI' && controls.rotateLeft === 'KeyJ' && controls.rotateRight === 'KeyL') {
+        movement = 'IJKL';
+      } else if (controls.thrust === 'KeyO' && controls.rotateLeft === 'KeyK' && controls.rotateRight === 'Semicolon') {
+        movement = 'OKL;';
+      } else if (controls.thrust === 'Numpad8' && controls.rotateLeft === 'Numpad4' && controls.rotateRight === 'Numpad6') {
+        movement = 'Numpad';
+      } else {
+        const t = this.formatKeyLabel(controls.thrust);
+        const l = this.formatKeyLabel(controls.rotateLeft);
+        const r = this.formatKeyLabel(controls.rotateRight);
+        movement = `${t}, ${l}, ${r}`;
+      }
+
+      let fire = this.formatKeyLabel(controls.fire);
+      if (fire === 'L-SHIFT') fire = 'Shift';
+
+      return `${hand} (${movement} + ${fire})`;
+    }
+
     updateControlsUI() {
       // 1. Update Keycap Buttons text and data-code
       if (this.domElements.keycapBtns) {
@@ -2913,7 +2944,24 @@
         this.domElements.presetMpSelect.value = matchedPreset;
       }
 
-      // 5. Update Dynamic Instruction Lists in Instructions Modal
+      // 5. Update Dynamic Player Subtitles in 2-Player Controls Card
+      const p1Summary = this.getControlsSummary(this.controlsP1, 'p1');
+      const p2Summary = this.getControlsSummary(this.controlsP2, 'p2');
+      if (this.domElements.p1ControlsSub) {
+        this.domElements.p1ControlsSub.textContent = p1Summary;
+      }
+      if (this.domElements.p2ControlsSub) {
+        this.domElements.p2ControlsSub.textContent = p2Summary;
+      }
+
+      // 6. Update Desktop Hints on Start Menu
+      if (this.domElements.desktopHintsText) {
+        const p1Clean = p1Summary.replace('Right Hand ', '');
+        const p2Clean = p2Summary.replace('Left Hand ', '');
+        this.domElements.desktopHintsText.innerHTML = `⌨️ Solo: <b>[${this.formatKeyLabel(this.controlsSolo.rotateLeft)}/${this.formatKeyLabel(this.controlsSolo.rotateRight)}]</b> Move &bull; <b>[${this.formatKeyLabel(this.controlsSolo.fire)}]</b> Fire &bull; <b>[${this.formatKeyLabel(this.controlsSolo.shield)}]</b> Shield | 👥 2-Player: <b>P2 (🔵) ${p2Clean}</b> vs <b>P1 (🔴) ${p1Clean}</b> (Customizable in Settings)`;
+      }
+
+      // 7. Update Dynamic Instruction Lists in Instructions Modal
       if (this.domElements.soloInstructionsList) {
         this.domElements.soloInstructionsList.innerHTML = `
           <li><b>Rotate:</b> [${this.formatKeyLabel(this.controlsSolo.rotateLeft)}] / [${this.formatKeyLabel(this.controlsSolo.rotateRight)}]</li>
@@ -3732,7 +3780,7 @@
         this.ship1.showStatusBars = this.showStatusBars;
         this.ship1.unlimitedShield = this.unlimitedShield;
         this.ship1.unlimitedAmmo = this.unlimitedShield;
-        this.ship1.reset(true, w * 0.38, h * 0.55);
+        this.ship1.reset(true, w * 0.62, h * 0.55);
 
         this.ship2.selectedSkin = 'blue';
         this.ship2.playerId = 2;
@@ -3740,7 +3788,7 @@
         this.ship2.showStatusBars = this.showStatusBars;
         this.ship2.unlimitedShield = this.unlimitedShield;
         this.ship2.unlimitedAmmo = this.unlimitedShield;
-        this.ship2.reset(true, w * 0.62, h * 0.55);
+        this.ship2.reset(true, w * 0.38, h * 0.55);
 
         this.ships = [this.ship1, this.ship2];
         this.ship = this.ship1;
@@ -4348,7 +4396,7 @@
             this.gameOver();
           }
         } else {
-          const spawnX = (ship.playerId === 2) ? this.canvas.width * 0.62 : this.canvas.width * 0.38;
+          const spawnX = (ship.playerId === 2) ? this.canvas.width * 0.38 : this.canvas.width * 0.62;
           const spawnY = this.canvas.height * 0.55;
           ship.reset(false, spawnX, spawnY);
           ship.energy = ship.maxEnergy;

@@ -197,11 +197,11 @@ html, body {
   flex: 1 1 auto;
 }
 
-.hud-mp-p1 {
+.hud-mp-p2 {
   justify-content: flex-start;
 }
 
-.hud-mp-p2 {
+.hud-mp-p1 {
   justify-content: flex-end;
 }
 
