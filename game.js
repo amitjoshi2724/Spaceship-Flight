@@ -1027,6 +1027,7 @@
     }
 
     reset(full = false, spawnX = null, spawnY = null) {
+      this.recalculateSize();
       this.x = spawnX !== null ? spawnX : this.canvas.width / 2;
       this.y = spawnY !== null ? spawnY : this.canvas.height / 2;
       this.dx = 0;
@@ -2405,7 +2406,7 @@
       this.ship2.selectedSkin = 'blue';
 
       this.ship = this.ship1;
-      this.ships = [this.ship1];
+      this.ships = [this.ship1, this.ship2];
       this.gameMode = 'solo'; // 'solo' or 'multiplayer'
       this.p1Kills = 0;
       this.p2Kills = 0;
@@ -2718,7 +2719,7 @@
         this.canvas.height = Math.floor(screenH);
       }
 
-      for (const s of this.ships) {
+      for (const s of [this.ship1, this.ship2]) {
         if (s) s.recalculateSize();
       }
       if (this.ufo) {
@@ -3054,8 +3055,8 @@
         }
         this.domElements.settingShipSize.addEventListener('input', (e) => {
           const val = parseInt(e.target.value, 10);
-          for (const s of this.ships) {
-            s.setScalePercent(val);
+          for (const s of [this.ship1, this.ship2]) {
+            if (s) s.setScalePercent(val);
           }
           if (this.ufo) {
             this.ufo.recalculateSize();
