@@ -74,7 +74,7 @@
         this.isHost = true;
         this.hostRole = preferredHostRole;
         this.guestRole = preferredHostRole === 'red' ? 'blue' : 'red';
-        this.pilotName = (pilotName || '').trim();
+        this.pilotName = (pilotName || '').trim().slice(0, 30);
         this.peerPilotName = '';
         this.roomCode = generateRoomCode();
         const peerId = getPeerIdForRoom(this.roomCode);
@@ -150,7 +150,7 @@
 
         this.disconnect();
         this.isHost = false;
-        this.pilotName = (pilotName || '').trim();
+        this.pilotName = (pilotName || '').trim().slice(0, 30);
         this.peerPilotName = '';
         this.roomCode = cleanCode;
         const hostPeerId = getPeerIdForRoom(this.roomCode);
@@ -241,7 +241,7 @@
      * Updates local player callsign and notifies remote peer
      */
     updatePilotName(newName) {
-      this.pilotName = (newName || '').trim();
+      this.pilotName = (newName || '').trim().slice(0, 30);
       if (this.conn && this.conn.open) {
         this.send({
           type: 'PILOT_RENAME',
@@ -326,7 +326,7 @@
 
         case 'PILOT_HELLO':
           if (this.isHost) {
-            this.peerPilotName = (data.pilotName || '').trim();
+            this.peerPilotName = (data.pilotName || '').trim().slice(0, 30);
             console.log('[Network] Co-pilot announced name:', this.peerPilotName);
             const state = {
               type: 'LOBBY_STATE',
@@ -349,7 +349,7 @@
           break;
 
         case 'PILOT_RENAME':
-          this.peerPilotName = (data.pilotName || '').trim();
+          this.peerPilotName = (data.pilotName || '').trim().slice(0, 30);
           if (this.isHost) {
             this.send({
               type: 'LOBBY_STATE',
@@ -372,10 +372,10 @@
           this.hostRole = data.hostRole;
           this.guestRole = data.guestRole;
           if (data.hostName && !this.isHost) {
-            this.peerPilotName = data.hostName;
+            this.peerPilotName = String(data.hostName).trim().slice(0, 30);
           }
           if (data.guestName && this.isHost) {
-            this.peerPilotName = data.guestName;
+            this.peerPilotName = String(data.guestName).trim().slice(0, 30);
           }
           if (this.onPilotUpdate) {
             this.onPilotUpdate({

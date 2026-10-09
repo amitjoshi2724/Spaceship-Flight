@@ -235,6 +235,11 @@ html, body {
   font-weight: 900;
   letter-spacing: 0.8px;
   white-space: nowrap;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  transition: font-size 0.2s ease, letter-spacing 0.2s ease;
 }
 
 .mp-tag.red {
@@ -2320,6 +2325,7 @@ html, body {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 1px;
+  transition: font-size 0.15s ease, letter-spacing 0.15s ease;
 }
 
 .pilot-name-input::placeholder {
@@ -2530,6 +2536,9 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: 1px;
+  min-width: 0;
+  max-width: 100%;
+  transition: font-size 0.15s ease, letter-spacing 0.15s ease;
 }
 
 .crew-name.waiting {
@@ -2703,6 +2712,11 @@ html, body {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  transition: font-size 0.15s ease;
 }
 
 .online-status-card {
@@ -2781,6 +2795,8 @@ html, body {
   font-weight: 700;
   letter-spacing: 1px;
   color: #ffffff;
+  word-break: break-word;
+  transition: font-size 0.15s ease, letter-spacing 0.15s ease;
 }
 
 .online-status-subtitle {

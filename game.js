@@ -3252,10 +3252,12 @@
       // Pilot Name Input (Optional - players can enter their name if they want)
       if (this.domElements.onlinePilotNameInput) {
         this.domElements.onlinePilotNameInput.value = this.pilotName || '';
+        this.scalePilotNameInputFont();
 
         const saveAndSyncName = () => {
-          const name = (this.domElements.onlinePilotNameInput.value || '').trim();
+          const name = (this.domElements.onlinePilotNameInput.value || '').trim().slice(0, 30);
           this.pilotName = name;
+          this.scalePilotNameInputFont();
           try {
             if (name) {
               localStorage.setItem('spaceship_flight_pilot_name', name);
@@ -3274,7 +3276,10 @@
           this.updateCrewManifestUI();
         };
 
-        this.domElements.onlinePilotNameInput.addEventListener('input', saveAndSyncName);
+        this.domElements.onlinePilotNameInput.addEventListener('input', () => {
+          this.scalePilotNameInputFont();
+          saveAndSyncName();
+        });
         this.domElements.onlinePilotNameInput.addEventListener('blur', saveAndSyncName);
         this.domElements.onlinePilotNameInput.addEventListener('keydown', (e) => {
           if (e.key === 'Enter') {
@@ -3392,10 +3397,56 @@
       this.updateCrewManifestUI();
     }
 
+    scalePilotNameInputFont() {
+      const input = this.domElements.onlinePilotNameInput;
+      if (!input) return;
+      const len = (input.value || '').length;
+      if (len <= 14) {
+        input.style.fontSize = '13px';
+        input.style.letterSpacing = '1px';
+      } else if (len <= 20) {
+        input.style.fontSize = '11.5px';
+        input.style.letterSpacing = '0.7px';
+      } else if (len <= 25) {
+        input.style.fontSize = '10.5px';
+        input.style.letterSpacing = '0.4px';
+      } else {
+        input.style.fontSize = '9.5px';
+        input.style.letterSpacing = '0.2px';
+      }
+    }
+
+    scaleCrewNameFont(el, name, isWaiting = false) {
+      if (!el) return;
+      el.textContent = name;
+      if (isWaiting) {
+        el.className = 'crew-name waiting';
+        el.style.fontSize = '';
+        el.style.letterSpacing = '';
+        return;
+      }
+      el.className = 'crew-name';
+      const len = (name || '').length;
+      if (len <= 12) {
+        el.style.fontSize = '13px';
+        el.style.letterSpacing = '1px';
+      } else if (len <= 18) {
+        el.style.fontSize = '11.5px';
+        el.style.letterSpacing = '0.6px';
+      } else if (len <= 24) {
+        el.style.fontSize = '10px';
+        el.style.letterSpacing = '0.3px';
+      } else {
+        el.style.fontSize = '9px';
+        el.style.letterSpacing = '0.1px';
+      }
+    }
+
     openOnlineLobby(tab = 'create') {
       this.showModal('onlineLobby');
       if (this.domElements.onlinePilotNameInput) {
-        this.domElements.onlinePilotNameInput.value = this.pilotName;
+        this.domElements.onlinePilotNameInput.value = this.pilotName || '';
+        this.scalePilotNameInputFont();
       }
       this.switchOnlineTab(tab);
       if (tab === 'create') {
@@ -3409,9 +3460,8 @@
       const guestName = this.onlineGuestName || (!this.isOnlineHost ? this.pilotName : (this.network && this.network.peerPilotName)) || '';
 
       // 1. Host Pane Manifest
-      if (this.domElements.crewHostNameDisplay) {
-        this.domElements.crewHostNameDisplay.textContent = hostName || 'Host';
-      }
+      this.scaleCrewNameFont(this.domElements.crewHostNameDisplay, hostName || 'Host', false);
+
       if (this.domElements.crewHostShipBadge) {
         const isHostRed = (this.onlineRole === 'red');
         this.domElements.crewHostShipBadge.textContent = isHostRed ? 'RED (P1)' : 'BLUE (P2)';
@@ -3424,11 +3474,14 @@
       }
 
       const guestLabel = guestName ? `CO-PILOT (${guestName})` : 'CO-PILOT';
+      const guestSubFontSize = (guestName && guestName.length > 20) ? '8.5px' : ((guestName && guestName.length > 14) ? '9px' : '10px');
       if (this.domElements.roleSelectRedSub) {
         this.domElements.roleSelectRedSub.textContent = `${guestLabel}: BLUE (P2)`;
+        this.domElements.roleSelectRedSub.style.fontSize = guestSubFontSize;
       }
       if (this.domElements.roleSelectBlueSub) {
         this.domElements.roleSelectBlueSub.textContent = `${guestLabel}: RED (P1)`;
+        this.domElements.roleSelectBlueSub.style.fontSize = guestSubFontSize;
       }
 
       if (this.domElements.crewRoomStatusBadge) {
@@ -3443,8 +3496,11 @@
         this.domElements.crewGuestAvatar.textContent = isConnected ? '🚀' : '⏳';
       }
       if (this.domElements.crewGuestNameDisplay) {
-        this.domElements.crewGuestNameDisplay.textContent = isConnected ? (guestName || 'Co-Pilot') : 'Waiting to join...';
-        this.domElements.crewGuestNameDisplay.className = isConnected ? 'crew-name' : 'crew-name waiting';
+        if (isConnected) {
+          this.scaleCrewNameFont(this.domElements.crewGuestNameDisplay, guestName || 'Co-Pilot', false);
+        } else {
+          this.scaleCrewNameFont(this.domElements.crewGuestNameDisplay, 'Waiting to join...', true);
+        }
       }
       if (this.domElements.crewGuestStatusBadge) {
         this.domElements.crewGuestStatusBadge.textContent = isConnected ? 'READY' : 'WAITING';
@@ -3455,12 +3511,9 @@
       if (this.domElements.joinCrewManifestBox) {
         this.domElements.joinCrewManifestBox.style.display = isConnected ? 'block' : 'none';
       }
-      if (this.domElements.joinHostNameDisplay) {
-        this.domElements.joinHostNameDisplay.textContent = hostName || 'Host';
-      }
-      if (this.domElements.joinGuestNameDisplay) {
-        this.domElements.joinGuestNameDisplay.textContent = this.pilotName || 'Co-Pilot';
-      }
+      this.scaleCrewNameFont(this.domElements.joinHostNameDisplay, hostName || 'Host', false);
+      this.scaleCrewNameFont(this.domElements.joinGuestNameDisplay, this.pilotName || 'Co-Pilot', false);
+
       if (this.domElements.joinHostShipBadge && this.domElements.joinGuestShipBadge) {
         const isHostRed = (this.onlineRole === 'red');
         this.domElements.joinHostShipBadge.textContent = isHostRed ? 'RED (P1)' : 'BLUE (P2)';
@@ -3516,9 +3569,11 @@
       }
       const coPilotName = this.onlineGuestName || (this.network && this.network.peerPilotName) || '';
       if (this.domElements.createStatusTitle) {
-        this.domElements.createStatusTitle.textContent = connected
+        const titleText = connected
           ? (coPilotName ? `${coPilotName.toUpperCase()} CONNECTED!` : 'CO-PILOT CONNECTED!')
           : 'WAITING FOR CO-PILOT...';
+        this.domElements.createStatusTitle.textContent = titleText;
+        this.domElements.createStatusTitle.style.fontSize = (titleText.length > 25) ? '10px' : ((titleText.length > 18) ? '11px' : '12px');
       }
       if (this.domElements.createStatusSub) {
         this.domElements.createStatusSub.textContent = connected
@@ -3580,9 +3635,11 @@
       }
       const hostName = this.onlineHostName || (this.network && this.network.peerPilotName) || '';
       if (this.domElements.joinStatusTitle) {
-        this.domElements.joinStatusTitle.textContent = connected
+        const titleText = connected
           ? (hostName ? `CONNECTED TO ${hostName.toUpperCase()}!` : 'CONNECTED TO HOST!')
           : 'READY TO CONNECT';
+        this.domElements.joinStatusTitle.textContent = titleText;
+        this.domElements.joinStatusTitle.style.fontSize = (titleText.length > 25) ? '10px' : ((titleText.length > 18) ? '11px' : '12px');
       }
       if (this.domElements.joinStatusSub) {
         this.domElements.joinStatusSub.textContent = connected
@@ -5134,16 +5191,47 @@
           const p2Pilot = (this.onlineRole === 'red')
             ? (this.onlineGuestName ? this.onlineGuestName.toUpperCase() : 'P2 BLUE')
             : (this.onlineHostName ? this.onlineHostName.toUpperCase() : 'P2 BLUE');
-          if (isLocalRed) {
-            this.domElements.p1TagText.innerHTML = `${p1Pilot} <span style="font-size:9px;color:#f87171;font-weight:900;letter-spacing:1px;margin-left:3px;">(YOU)</span>`;
-            this.domElements.p2TagText.innerHTML = `${p2Pilot} <span style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-left:3px;">(CO-PILOT)</span>`;
-          } else {
-            this.domElements.p1TagText.innerHTML = `${p1Pilot} <span style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-left:3px;">(CO-PILOT)</span>`;
-            this.domElements.p2TagText.innerHTML = `${p2Pilot} <span style="font-size:9px;color:#38bdf8;font-weight:900;letter-spacing:1px;margin-left:3px;">(YOU)</span>`;
-          }
+
+          const renderPilotTag = (el, name, isYou, shipColor) => {
+            if (!el) return;
+            const len = name.length;
+            let tagSize = '11px';
+            let letterSpacing = '0.8px';
+            let badgeSize = '9px';
+            if (len > 22) {
+              tagSize = '7.5px';
+              letterSpacing = '0.1px';
+              badgeSize = '7px';
+            } else if (len > 16) {
+              tagSize = '8.5px';
+              letterSpacing = '0.3px';
+              badgeSize = '7.5px';
+            } else if (len > 11) {
+              tagSize = '9.5px';
+              letterSpacing = '0.5px';
+              badgeSize = '8px';
+            }
+            el.style.fontSize = tagSize;
+            el.style.letterSpacing = letterSpacing;
+            const badgeColor = isYou ? (shipColor === 'red' ? '#f87171' : '#38bdf8') : '#94a3b8';
+            const badgeWeight = isYou ? '900' : '700';
+            const badgeText = isYou ? '(YOU)' : '(CO-PILOT)';
+            el.innerHTML = `${name} <span style="font-size:${badgeSize};color:${badgeColor};font-weight:${badgeWeight};letter-spacing:1px;margin-left:3px;">${badgeText}</span>`;
+          };
+
+          renderPilotTag(this.domElements.p1TagText, p1Pilot, isLocalRed, 'red');
+          renderPilotTag(this.domElements.p2TagText, p2Pilot, !isLocalRed, 'blue');
         } else {
-          this.domElements.p1TagText.textContent = 'P1 RED';
-          this.domElements.p2TagText.textContent = 'P2 BLUE';
+          if (this.domElements.p1TagText) {
+            this.domElements.p1TagText.textContent = 'P1 RED';
+            this.domElements.p1TagText.style.fontSize = '';
+            this.domElements.p1TagText.style.letterSpacing = '';
+          }
+          if (this.domElements.p2TagText) {
+            this.domElements.p2TagText.textContent = 'P2 BLUE';
+            this.domElements.p2TagText.style.fontSize = '';
+            this.domElements.p2TagText.style.letterSpacing = '';
+          }
         }
       }
     }
