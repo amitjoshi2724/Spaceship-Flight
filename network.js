@@ -216,10 +216,18 @@
         });
       }
 
+      if (this.onLobbyState) {
+        this.onLobbyState({
+          hostRole: this.hostRole,
+          guestRole: this.guestRole,
+          roomCode: this.roomCode
+        });
+      }
       if (this.onLobbyUpdate) {
         this.onLobbyUpdate({
           hostRole: this.hostRole,
-          guestRole: this.guestRole
+          guestRole: this.guestRole,
+          roomCode: this.roomCode
         });
       }
     }
@@ -244,6 +252,7 @@
           if (this.onConnected) this.onConnected({ isHost: true, hostRole: this.hostRole, guestRole: this.guestRole });
         } else {
           if (this.onStatusChange) this.onStatusChange('Connected to Host! Synchronizing mission...');
+          if (this.onConnected) this.onConnected({ isHost: false, hostRole: this.hostRole, guestRole: this.guestRole });
         }
 
         this._startPingInterval();
@@ -276,12 +285,20 @@
         case 'PONG':
           if (data.t) {
             this.ping = Math.max(1, Math.round(performance.now() - data.t));
+            if (this.onPingUpdate) this.onPingUpdate(this.ping);
           }
           break;
 
         case 'LOBBY_STATE':
           this.hostRole = data.hostRole;
           this.guestRole = data.guestRole;
+          if (this.onLobbyState) {
+            this.onLobbyState({
+              hostRole: data.hostRole,
+              guestRole: data.guestRole,
+              roomCode: data.roomCode
+            });
+          }
           if (this.onLobbyUpdate) {
             this.onLobbyUpdate({
               hostRole: data.hostRole,
@@ -297,16 +314,20 @@
           break;
 
         case 'START_GAME':
-          if (this.onGameStart) this.onGameStart(data);
+          if (this.onStartGame) this.onStartGame(data);
+          else if (this.onGameStart) this.onGameStart(data);
           break;
 
         case 'RESTART_GAME':
-          if (this.onGameRestart) this.onGameRestart();
+          if (this.onRestartGame) this.onRestartGame(data);
+          else if (this.onGameRestart) this.onGameRestart(data);
           break;
 
         case 'INPUT':
-          if (this.isHost && this.onInput) {
-            this.onInput(data);
+          if (this.isHost) {
+            const keys = data.keys || data;
+            if (this.onGuestInput) this.onGuestInput(keys);
+            else if (this.onInput) this.onInput(keys);
           }
           break;
 
@@ -359,17 +380,22 @@
      */
     launchGame(config = {}) {
       if (!this.isHost || !this.conn || !this.conn.open) return false;
+      const hostRole = config.hostRole || this.hostRole || 'red';
+      const guestRole = (hostRole === 'red') ? 'blue' : 'red';
       const payload = {
         type: 'START_GAME',
-        hostRole: this.hostRole,
-        guestRole: this.guestRole,
+        hostRole,
+        guestRole,
         powerMode: config.powerMode || 'dual',
         difficulty: config.difficulty || 'medium',
         timestamp: Date.now()
       };
       this.send(payload);
-      if (this.onGameStart) this.onGameStart(payload);
       return true;
+    }
+
+    sendStartGame(hostRole = 'red') {
+      return this.launchGame({ hostRole });
     }
 
     /**
@@ -378,7 +404,34 @@
     restartGame() {
       if (!this.isHost || !this.conn || !this.conn.open) return false;
       this.send({ type: 'RESTART_GAME' });
-      if (this.onGameRestart) this.onGameRestart();
+      return true;
+    }
+
+    sendRestartGame() {
+      return this.restartGame();
+    }
+
+    /**
+     * Guest streams player input keys to Host
+     */
+    sendInput(keys) {
+      if (!this.conn || !this.conn.open) return false;
+      this.send({
+        type: 'INPUT',
+        keys
+      });
+      return true;
+    }
+
+    /**
+     * Host broadcasts authoritative game snapshot to Guest
+     */
+    sendSnapshot(snapshot) {
+      if (!this.conn || !this.conn.open) return false;
+      this.send({
+        type: 'SNAPSHOT',
+        ...snapshot
+      });
       return true;
     }
 
