@@ -2411,6 +2411,18 @@
       this.p1Kills = 0;
       this.p2Kills = 0;
 
+      // Online Multiplayer State
+      this.isOnline = false;
+      this.isOnlineHost = false;
+      this.onlineRole = 'red'; // Host ship selection: 'red' (P1) or 'blue' (P2)
+      this.onlineLocalPlayerId = 1;
+      this.onlineLocalShip = this.ship1;
+      this.onlineRemoteShip = this.ship2;
+      this.network = null;
+      this.networkEvents = [];
+      this.guestInputState = { left: false, right: false, up: false, fire: false, shield: false };
+      this.rockIdSeq = 0;
+
       this.bullets = [];
       this.rocks = [];
       this.rockSpawnTimer = 0;
@@ -2625,7 +2637,37 @@
         rlAvgRewardVal: document.getElementById('rlAvgRewardVal'),
         reseedRlBtn: document.getElementById('reseedRlBtn'),
         exitTrainBtn: document.getElementById('exitTrainBtn'),
-        rlSpeedBtns: document.querySelectorAll('.rl-speed-btn')
+        rlSpeedBtns: document.querySelectorAll('.rl-speed-btn'),
+
+        // Online 2-Player Co-op Elements
+        onlineMultiplayerBtn: document.getElementById('onlineMultiplayerBtn'),
+        onlineLobbyModal: document.getElementById('onlineLobbyModal'),
+        onlineTabCreateBtn: document.getElementById('onlineTabCreateBtn'),
+        onlineTabJoinBtn: document.getElementById('onlineTabJoinBtn'),
+        onlinePaneCreate: document.getElementById('onlinePaneCreate'),
+        onlinePaneJoin: document.getElementById('onlinePaneJoin'),
+        onlineRoomCodeDisplay: document.getElementById('onlineRoomCodeDisplay'),
+        copyRoomCodeBtn: document.getElementById('copyRoomCodeBtn'),
+        copyRoomLinkBtn: document.getElementById('copyRoomLinkBtn'),
+        copyToastMessage: document.getElementById('copyToastMessage'),
+        roleSelectRed: document.getElementById('roleSelectRed'),
+        roleSelectBlue: document.getElementById('roleSelectBlue'),
+        createRadarPulse: document.getElementById('createRadarPulse'),
+        createStatusTitle: document.getElementById('createStatusTitle'),
+        createStatusSub: document.getElementById('createStatusSub'),
+        onlineStartGameBtn: document.getElementById('onlineStartGameBtn'),
+        onlineJoinCodeInput: document.getElementById('onlineJoinCodeInput'),
+        onlineConnectBtn: document.getElementById('onlineConnectBtn'),
+        joinRadarPulse: document.getElementById('joinRadarPulse'),
+        joinStatusTitle: document.getElementById('joinStatusTitle'),
+        joinStatusSub: document.getElementById('joinStatusSub'),
+        guestRoleNotice: document.getElementById('guestRoleNotice'),
+        guestRoleShipName: document.getElementById('guestRoleShipName'),
+        onlineLobbyCloseBtn: document.getElementById('onlineLobbyCloseBtn'),
+        onlineStatusBadge: document.getElementById('onlineStatusBadge'),
+        onlinePingText: document.getElementById('onlinePingText'),
+        p1TagText: document.getElementById('p1TagText'),
+        p2TagText: document.getElementById('p2TagText')
       };
 
       // Reinforcement Learning Controller
@@ -3089,6 +3131,723 @@
       });
     }
 
+    // ==========================================================================
+    // 2-PLAYER ONLINE CO-OP (P2P WEBRTC VIA PEERJS)
+    // ==========================================================================
+    setupNetworkHandlers() {
+      if (!this.network) return;
+
+      this.network.onConnected = () => {
+        console.log('[Game] Co-pilot peer connected!');
+        if (this.isOnlineHost) {
+          this.updateLobbyHostUI(true);
+        } else {
+          this.updateLobbyGuestUI(true);
+        }
+      };
+
+      this.network.onDisconnected = () => {
+        console.log('[Game] Peer disconnected');
+        this.handlePeerDisconnected();
+      };
+
+      this.network.onPingUpdate = (ping) => {
+        if (this.domElements.onlinePingText) {
+          this.domElements.onlinePingText.innerHTML = `ONLINE &bull; ${ping}ms`;
+        }
+      };
+
+      this.network.onLobbyState = (data) => {
+        const hostRole = data.hostRole || 'red';
+        this.onlineRole = hostRole;
+        const guestRole = (hostRole === 'red') ? 'blue' : 'red';
+        this.updateGuestRoleDisplay(guestRole);
+      };
+
+      this.network.onStartGame = (data) => {
+        console.log('[Game] Received START_GAME from host', data);
+        this.startOnlineGuestGame(data);
+      };
+
+      this.network.onRestartGame = () => {
+        console.log('[Game] Received RESTART_GAME from host');
+        if (!this.isOnlineHost) {
+          this.restartOnlineGuestGame();
+        }
+      };
+
+      this.network.onGuestInput = (keys) => {
+        this.applyGuestInput(keys);
+      };
+
+      this.network.onSnapshot = (snap) => {
+        this.applySnapshot(snap);
+      };
+    }
+
+    bindOnlineLobbyUI() {
+      if (typeof SpaceshipNetwork !== 'undefined') {
+        this.network = new SpaceshipNetwork();
+        this.setupNetworkHandlers();
+      }
+
+      if (this.domElements.onlineMultiplayerBtn) {
+        this.domElements.onlineMultiplayerBtn.addEventListener('click', () => {
+          this.openOnlineLobby('create');
+        });
+      }
+
+      // Lobby Tabs
+      if (this.domElements.onlineTabCreateBtn) {
+        this.domElements.onlineTabCreateBtn.addEventListener('click', () => {
+          this.switchOnlineTab('create');
+        });
+      }
+
+      if (this.domElements.onlineTabJoinBtn) {
+        this.domElements.onlineTabJoinBtn.addEventListener('click', () => {
+          this.switchOnlineTab('join');
+        });
+      }
+
+      // Copy Code & Link
+      if (this.domElements.copyRoomCodeBtn) {
+        this.domElements.copyRoomCodeBtn.addEventListener('click', () => {
+          if (!this.network || !this.network.roomCode) return;
+          this.copyToClipboard(this.network.roomCode, 'ROOM CODE COPIED!');
+        });
+      }
+
+      if (this.domElements.copyRoomLinkBtn) {
+        this.domElements.copyRoomLinkBtn.addEventListener('click', () => {
+          if (!this.network || !this.network.roomCode) return;
+          const cleanBase = window.location.origin + window.location.pathname;
+          const shareUrl = `${cleanBase}?room=${this.network.roomCode}`;
+          this.copyToClipboard(shareUrl, 'INVITE LINK COPIED!');
+        });
+      }
+
+      // Host Role Selection Cards (Host picks who flies Red and who flies Blue)
+      if (this.domElements.roleSelectRed) {
+        this.domElements.roleSelectRed.addEventListener('click', () => {
+          this.setHostRoleSelection('red');
+        });
+      }
+
+      if (this.domElements.roleSelectBlue) {
+        this.domElements.roleSelectBlue.addEventListener('click', () => {
+          this.setHostRoleSelection('blue');
+        });
+      }
+
+      // Launch Button (Host Only)
+      if (this.domElements.onlineStartGameBtn) {
+        this.domElements.onlineStartGameBtn.addEventListener('click', () => {
+          if (this.network && this.network.isConnected) {
+            this.startOnlineHostGame(this.onlineRole);
+          }
+        });
+      }
+
+      // Join Room Button & Enter key
+      if (this.domElements.onlineConnectBtn) {
+        this.domElements.onlineConnectBtn.addEventListener('click', () => {
+          const val = this.domElements.onlineJoinCodeInput ? this.domElements.onlineJoinCodeInput.value.trim() : '';
+          if (val) {
+            this.joinOnlineRoom(val);
+          }
+        });
+      }
+
+      if (this.domElements.onlineJoinCodeInput) {
+        this.domElements.onlineJoinCodeInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            const val = this.domElements.onlineJoinCodeInput.value.trim();
+            if (val) {
+              this.joinOnlineRoom(val);
+            }
+          }
+        });
+      }
+
+      // Close / Back Button
+      if (this.domElements.onlineLobbyCloseBtn) {
+        this.domElements.onlineLobbyCloseBtn.addEventListener('click', () => {
+          this.hideModals();
+          if (this.network && !this.isOnline) {
+            this.network.disconnect();
+          }
+        });
+      }
+    }
+
+    switchOnlineTab(tab) {
+      if (this.domElements.onlineTabCreateBtn) {
+        this.domElements.onlineTabCreateBtn.classList.toggle('active', tab === 'create');
+      }
+      if (this.domElements.onlineTabJoinBtn) {
+        this.domElements.onlineTabJoinBtn.classList.toggle('active', tab === 'join');
+      }
+      if (this.domElements.onlinePaneCreate) {
+        this.domElements.onlinePaneCreate.style.display = (tab === 'create') ? 'block' : 'none';
+        this.domElements.onlinePaneCreate.classList.toggle('active', tab === 'create');
+      }
+      if (this.domElements.onlinePaneJoin) {
+        this.domElements.onlinePaneJoin.style.display = (tab === 'join') ? 'block' : 'none';
+        this.domElements.onlinePaneJoin.classList.toggle('active', tab === 'join');
+      }
+    }
+
+    openOnlineLobby(tab = 'create') {
+      this.showModal('onlineLobby');
+      this.switchOnlineTab(tab);
+      if (tab === 'create') {
+        this.initHostRoom();
+      }
+    }
+
+    initHostRoom() {
+      if (!this.network) return;
+      this.isOnlineHost = true;
+      if (this.domElements.onlineRoomCodeDisplay) {
+        this.domElements.onlineRoomCodeDisplay.textContent = 'GENERATING...';
+      }
+      this.updateLobbyHostUI(false);
+
+      this.network.createRoom(this.onlineRole).then(code => {
+        if (this.domElements.onlineRoomCodeDisplay) {
+          this.domElements.onlineRoomCodeDisplay.textContent = code;
+        }
+      }).catch(err => {
+        console.error('[Game] Error creating room:', err);
+        if (this.domElements.createStatusTitle) {
+          this.domElements.createStatusTitle.textContent = 'CONNECTION ERROR';
+        }
+        if (this.domElements.createStatusSub) {
+          this.domElements.createStatusSub.textContent = 'Could not reach WebRTC relay. Please retry.';
+        }
+      });
+    }
+
+    setHostRoleSelection(role) {
+      this.onlineRole = role; // 'red' or 'blue'
+      if (this.domElements.roleSelectRed) {
+        this.domElements.roleSelectRed.classList.toggle('active', role === 'red');
+      }
+      if (this.domElements.roleSelectBlue) {
+        this.domElements.roleSelectBlue.classList.toggle('active', role === 'blue');
+      }
+      if (this.network) {
+        this.network.setHostRole(role);
+      }
+    }
+
+    updateLobbyHostUI(connected) {
+      if (this.domElements.createRadarPulse) {
+        this.domElements.createRadarPulse.className = connected ? 'radar-pulse connected' : 'radar-pulse';
+      }
+      if (this.domElements.createStatusTitle) {
+        this.domElements.createStatusTitle.textContent = connected ? 'CO-PILOT CONNECTED!' : 'WAITING FOR CO-PILOT...';
+      }
+      if (this.domElements.createStatusSub) {
+        this.domElements.createStatusSub.textContent = connected
+          ? 'Both cockpits synchronized! Click Launch when ready to fly.'
+          : 'Share your room code or invite link. Once joined, launch when ready!';
+      }
+      if (this.domElements.onlineStartGameBtn) {
+        this.domElements.onlineStartGameBtn.disabled = !connected;
+        this.domElements.onlineStartGameBtn.classList.toggle('disabled', !connected);
+      }
+    }
+
+    joinOnlineRoom(code) {
+      if (!this.network || !code) return;
+      this.isOnlineHost = false;
+      const cleanCode = code.trim().toUpperCase();
+
+      if (this.domElements.joinRadarPulse) {
+        this.domElements.joinRadarPulse.className = 'radar-pulse';
+      }
+      if (this.domElements.joinStatusTitle) {
+        this.domElements.joinStatusTitle.textContent = 'CONNECTING TO HOST...';
+      }
+      if (this.domElements.joinStatusSub) {
+        this.domElements.joinStatusSub.textContent = `Establishing P2P link with room ${cleanCode}...`;
+      }
+      if (this.domElements.onlineConnectBtn) {
+        this.domElements.onlineConnectBtn.disabled = true;
+      }
+
+      this.network.joinRoom(cleanCode).then(() => {
+        this.updateLobbyGuestUI(true);
+        if (this.domElements.onlineConnectBtn) {
+          this.domElements.onlineConnectBtn.disabled = false;
+        }
+      }).catch(err => {
+        console.error('[Game] Error joining room:', err);
+        if (this.domElements.joinRadarPulse) {
+          this.domElements.joinRadarPulse.className = 'radar-pulse error';
+        }
+        if (this.domElements.joinStatusTitle) {
+          this.domElements.joinStatusTitle.textContent = 'COULD NOT CONNECT';
+        }
+        if (this.domElements.joinStatusSub) {
+          this.domElements.joinStatusSub.textContent = 'Room not found or host offline. Check the room code and try again.';
+        }
+        if (this.domElements.onlineConnectBtn) {
+          this.domElements.onlineConnectBtn.disabled = false;
+        }
+      });
+    }
+
+    updateLobbyGuestUI(connected) {
+      if (this.domElements.joinRadarPulse) {
+        this.domElements.joinRadarPulse.className = connected ? 'radar-pulse connected' : 'radar-pulse';
+      }
+      if (this.domElements.joinStatusTitle) {
+        this.domElements.joinStatusTitle.textContent = connected ? 'CONNECTED TO HOST!' : 'READY TO CONNECT';
+      }
+      if (this.domElements.joinStatusSub) {
+        this.domElements.joinStatusSub.textContent = connected
+          ? 'Cockpit link established! Waiting for the room host to launch mission...'
+          : 'Enter your host\'s room code to join their cockpit simulation.';
+      }
+      if (this.domElements.guestRoleNotice) {
+        this.domElements.guestRoleNotice.style.display = connected ? 'block' : 'none';
+      }
+    }
+
+    updateGuestRoleDisplay(role) {
+      if (this.domElements.guestRoleShipName) {
+        this.domElements.guestRoleShipName.textContent = (role === 'red') ? 'CRIMSON RED (P1)' : 'COBALT BLUE (P2)';
+        this.domElements.guestRoleShipName.style.color = (role === 'red') ? '#ef4444' : '#00f0ff';
+      }
+      if (this.domElements.guestRoleNotice) {
+        this.domElements.guestRoleNotice.style.display = 'block';
+      }
+    }
+
+    copyToClipboard(text, message) {
+      const showToast = () => {
+        if (this.domElements.copyToastMessage) {
+          this.domElements.copyToastMessage.textContent = message || 'COPIED TO CLIPBOARD!';
+          this.domElements.copyToastMessage.style.display = 'block';
+          this.domElements.copyToastMessage.style.opacity = '1';
+          setTimeout(() => {
+            if (this.domElements.copyToastMessage) {
+              this.domElements.copyToastMessage.style.opacity = '0';
+              setTimeout(() => {
+                if (this.domElements.copyToastMessage) this.domElements.copyToastMessage.style.display = 'none';
+              }, 300);
+            }
+          }, 2000);
+        }
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(showToast).catch(() => {
+          this.fallbackCopy(text, showToast);
+        });
+      } else {
+        this.fallbackCopy(text, showToast);
+      }
+    }
+
+    fallbackCopy(text, cb) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        if (cb) cb();
+      } catch (_) {}
+      document.body.removeChild(ta);
+    }
+
+    checkUrlRoomParam() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomParam = urlParams.get('room');
+        if (roomParam) {
+          const code = roomParam.trim().toUpperCase();
+          const cleanUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+
+          setTimeout(() => {
+            this.openOnlineLobby('join');
+            if (this.domElements.onlineJoinCodeInput) {
+              this.domElements.onlineJoinCodeInput.value = code;
+            }
+            this.joinOnlineRoom(code);
+          }, 350);
+        }
+      } catch (_) {}
+    }
+
+    startOnlineHostGame(hostRole = 'red') {
+      this.isOnline = true;
+      this.isOnlineHost = true;
+      this.onlineRole = hostRole;
+      this.onlineLocalPlayerId = (hostRole === 'red') ? 1 : 2;
+      this.onlineLocalShip = (hostRole === 'red') ? this.ship1 : this.ship2;
+      this.onlineRemoteShip = (hostRole === 'red') ? this.ship2 : this.ship1;
+
+      if (this.network) {
+        this.network.sendStartGame(hostRole);
+      }
+      this.hideModals();
+      this.startGame('multiplayer');
+    }
+
+    startOnlineGuestGame(data = {}) {
+      this.isOnline = true;
+      this.isOnlineHost = false;
+      const hostRole = data.hostRole || 'red';
+      this.onlineRole = hostRole;
+      const guestRole = (hostRole === 'red') ? 'blue' : 'red';
+      this.onlineLocalPlayerId = (guestRole === 'red') ? 1 : 2;
+      this.onlineLocalShip = (guestRole === 'red') ? this.ship1 : this.ship2;
+      this.onlineRemoteShip = (guestRole === 'red') ? this.ship2 : this.ship1;
+
+      this.hideModals();
+      this.startGame('multiplayer');
+    }
+
+    restartOnlineGuestGame() {
+      this.startGame('multiplayer');
+    }
+
+    handlePeerDisconnected() {
+      if (this.domElements.onlinePingText) {
+        this.domElements.onlinePingText.innerHTML = 'DISCONNECTED 🔴';
+      }
+      if (this.state === 'PLAYING') {
+        alert('Co-Pilot has disconnected from the flight mission.');
+      }
+    }
+
+    sendGuestInput() {
+      if (!this.network || !this.network.isConnected) return;
+      this.network.sendInput(this.guestInputState);
+    }
+
+    applyGuestInput(keys) {
+      const guestShip = (this.onlineRole === 'red') ? this.ship2 : this.ship1;
+      const guestKeys = (this.onlineRole === 'red') ? this.keysP2 : this.keys;
+
+      guestKeys.left = !!keys.left;
+      guestKeys.right = !!keys.right;
+      guestKeys.up = !!keys.up;
+
+      if (this.state === 'PLAYING' && guestShip.alive) {
+        guestShip.setThrust(!!keys.up);
+        if (keys.fire && !guestKeys.fire) {
+          guestShip.fire(this.bullets);
+          this.networkEvents.push({ type: 'fire', shooterId: guestShip.playerId });
+        }
+        if (keys.shield && !guestKeys.shield) {
+          guestShip.triggerEmergencyShield();
+          this.updateEnergyDisplay();
+        }
+      }
+      guestKeys.fire = !!keys.fire;
+      guestKeys.shield = !!keys.shield;
+    }
+
+    sendHostSnapshot() {
+      const s1 = {
+        x: +(this.ship1.x.toFixed(1)),
+        y: +(this.ship1.y.toFixed(1)),
+        rot: +(this.ship1.rotation.toFixed(2)),
+        dx: +(this.ship1.dx.toFixed(2)),
+        dy: +(this.ship1.dy.toFixed(2)),
+        t: this.ship1.thrust,
+        sh: this.ship1.shield,
+        she: +(this.ship1.shieldEnergy.toFixed(1)),
+        e: +(this.ship1.energy.toFixed(1)),
+        l: this.ship1.lives,
+        al: this.ship1.alive
+      };
+      const s2 = {
+        x: +(this.ship2.x.toFixed(1)),
+        y: +(this.ship2.y.toFixed(1)),
+        rot: +(this.ship2.rotation.toFixed(2)),
+        dx: +(this.ship2.dx.toFixed(2)),
+        dy: +(this.ship2.dy.toFixed(2)),
+        t: this.ship2.thrust,
+        sh: this.ship2.shield,
+        she: +(this.ship2.shieldEnergy.toFixed(1)),
+        e: +(this.ship2.energy.toFixed(1)),
+        l: this.ship2.lives,
+        al: this.ship2.alive
+      };
+
+      const rocks = this.rocks.filter(r => !r.popped).map(r => ({
+        id: r.id || (r.id = ++this.rockIdSeq),
+        x: +(r.x.toFixed(1)),
+        y: +(r.y.toFixed(1)),
+        dx: +(r.dx.toFixed(2)),
+        dy: +(r.dy.toFixed(2)),
+        rot: +(r.rotation.toFixed(2)),
+        rotS: +(r.rotSpeed.toFixed(3)),
+        rad: +(r.radius.toFixed(1)),
+        sc: +(r.scale.toFixed(2)),
+        shp: r.shapeIndex || 0
+      }));
+
+      const bullets = this.bullets.filter(b => !b.hit).map(b => ({
+        x: +(b.x.toFixed(1)),
+        y: +(b.y.toFixed(1)),
+        sId: b.shooterId,
+        col: b.color
+      }));
+
+      let ufoData = null;
+      if (this.ufo && this.ufo.alive) {
+        ufoData = {
+          x: +(this.ufo.x.toFixed(1)),
+          y: +(this.ufo.y.toFixed(1)),
+          dx: +(this.ufo.dx.toFixed(2)),
+          dy: +(this.ufo.dy.toFixed(2)),
+          w: +(this.ufo.width.toFixed(1)),
+          h: +(this.ufo.height.toFixed(1))
+        };
+      }
+
+      const ufoBullets = this.ufoBullets.filter(ub => !ub.hit).map(ub => ({
+        x: +(ub.x.toFixed(1)),
+        y: +(ub.y.toFixed(1)),
+        aim: ub.aimMode,
+        tgt: ub.targetType,
+        col: ub.defensiveColor
+      }));
+
+      const packet = {
+        s1,
+        s2,
+        r: rocks,
+        b: bullets,
+        u: ufoData,
+        ub: ufoBullets,
+        sc: this.score,
+        hs: this.highScore,
+        p1k: this.p1Kills,
+        p2k: this.p2Kills,
+        st: this.state,
+        ev: this.networkEvents
+      };
+
+      this.network.sendSnapshot(packet);
+      this.networkEvents = [];
+    }
+
+    applySnapshot(snap) {
+      if (!snap) return;
+
+      if (snap.s1 && this.ship1) {
+        this.ship1.x = snap.s1.x;
+        this.ship1.y = snap.s1.y;
+        this.ship1.rotation = snap.s1.rot;
+        this.ship1.dx = snap.s1.dx;
+        this.ship1.dy = snap.s1.dy;
+        this.ship1.thrust = snap.s1.t;
+        this.ship1.shield = snap.s1.sh;
+        this.ship1.shieldEnergy = snap.s1.she;
+        this.ship1.energy = snap.s1.e;
+        this.ship1.lives = snap.s1.l;
+        this.ship1.alive = snap.s1.al;
+      }
+      if (snap.s2 && this.ship2) {
+        this.ship2.x = snap.s2.x;
+        this.ship2.y = snap.s2.y;
+        this.ship2.rotation = snap.s2.rot;
+        this.ship2.dx = snap.s2.dx;
+        this.ship2.dy = snap.s2.dy;
+        this.ship2.thrust = snap.s2.t;
+        this.ship2.shield = snap.s2.sh;
+        this.ship2.shieldEnergy = snap.s2.she;
+        this.ship2.energy = snap.s2.e;
+        this.ship2.lives = snap.s2.l;
+        this.ship2.alive = snap.s2.al;
+      }
+
+      if (Array.isArray(snap.r)) {
+        const existingMap = new Map();
+        for (const r of this.rocks) {
+          if (r && r.id) existingMap.set(r.id, r);
+        }
+        const newRocks = [];
+        for (const rData of snap.r) {
+          let rock = existingMap.get(rData.id);
+          if (!rock) {
+            rock = this.createNetworkRock(rData);
+          } else {
+            rock.x = rData.x;
+            rock.y = rData.y;
+            rock.dx = rData.dx;
+            rock.dy = rData.dy;
+            rock.rotation = rData.rot;
+            rock.rotSpeed = rData.rotS;
+          }
+          newRocks.push(rock);
+        }
+        this.rocks = newRocks;
+      }
+
+      if (Array.isArray(snap.b)) {
+        this.bullets = snap.b.map(bData => {
+          const b = new SpaceshipCore.Bullet(bData.x, bData.y, 0, 0, 0, 1.0, bData.sId, bData.col);
+          b.x = bData.x;
+          b.y = bData.y;
+          return b;
+        });
+      }
+
+      if (snap.u) {
+        if (!this.ufo) {
+          this.ufo = new UFO(this.canvas, this.soundFx, this.particles, this.difficulty, this.ship1, this.rocks);
+        }
+        this.ufo.alive = true;
+        this.ufo.x = snap.u.x;
+        this.ufo.y = snap.u.y;
+        this.ufo.dx = snap.u.dx;
+        this.ufo.dy = snap.u.dy;
+      } else {
+        if (this.ufo) this.ufo.alive = false;
+      }
+
+      if (Array.isArray(snap.ub)) {
+        this.ufoBullets = snap.ub.map(ubData => {
+          const ub = new UFOBullet(ubData.x, ubData.y, 0, 0, ubData.tgt, ubData.aim, ubData.col);
+          return ub;
+        });
+      }
+
+      if (typeof snap.sc === 'number') this.score = snap.sc;
+      if (typeof snap.hs === 'number') this.highScore = snap.hs;
+      if (typeof snap.p1k === 'number') this.p1Kills = snap.p1k;
+      if (typeof snap.p2k === 'number') this.p2Kills = snap.p2k;
+      this.updateScore(this.score);
+      this.updateLivesDisplay();
+      this.updateEnergyDisplay();
+
+      if (Array.isArray(snap.ev)) {
+        for (const ev of snap.ev) {
+          this.handleNetworkEvent(ev);
+        }
+      }
+
+      if (snap.st === 'GAMEOVER' && this.state !== 'GAMEOVER') {
+        this.gameOver();
+      }
+    }
+
+    createNetworkRock(rData) {
+      const rock = new Rock(this.canvas.width, this.canvas.height, 1.0, 0);
+      rock.id = rData.id;
+      rock.x = rData.x;
+      rock.y = rData.y;
+      rock.dx = rData.dx;
+      rock.dy = rData.dy;
+      rock.rotation = rData.rot;
+      rock.rotSpeed = rData.rotS;
+      rock.radius = rData.rad;
+      rock.scale = rData.sc;
+      rock.shapeIndex = rData.shp || 0;
+
+      const shapes = [
+        { x: [0, 25, 15, -5, -8], y: [0, 5, 30, 25, 15] },
+        { x: [-18, 6, 26, 18, -8, -24], y: [-20, -26, -6, 22, 26, 6] },
+        { x: [0, 20, 28, 12, -10, -26, -16], y: [-28, -14, 8, 26, 22, 2, -18] },
+        { x: [-14, 10, 26, 20, 8, -14, -28, -20], y: [-24, -22, -4, 16, 28, 24, 6, -12] },
+        { x: [-10, 14, 30, 16, -14, -24], y: [-30, -26, 6, 28, 30, -6] }
+      ];
+      const chosen = shapes[rock.shapeIndex] || shapes[0];
+      let sumX = 0, sumY = 0;
+      for (let i = 0; i < chosen.x.length; i++) {
+        sumX += chosen.x[i];
+        sumY += chosen.y[i];
+      }
+      const avgX = sumX / chosen.x.length;
+      const avgY = sumY / chosen.y.length;
+      rock.localPoints = [];
+      for (let i = 0; i < chosen.x.length; i++) {
+        rock.localPoints.push({
+          x: (chosen.x[i] - avgX) * rock.scale * 1.5,
+          y: (chosen.y[i] - avgY) * rock.scale * 1.5
+        });
+      }
+      return rock;
+    }
+
+    handleNetworkEvent(ev) {
+      if (!ev) return;
+      if (ev.type === 'rock_hit') {
+        const popColor = ev.shooterId === 2 ? '#00f0ff' : '#38bdf8';
+        this.particles.addExplosion(ev.x, ev.y, popColor, 20);
+        this.soundFx.playExplosion(false);
+      } else if (ev.type === 'ufo_hit') {
+        this.particles.addExplosion(ev.x, ev.y, '#c084fc', 32);
+        this.particles.addExplosion(ev.x, ev.y, '#38bdf8', 18);
+        this.particles.addExplosion(ev.x, ev.y, '#f43f5e', 12);
+        this.soundFx.playUFOExplosion();
+      } else if (ev.type === 'ship_hit') {
+        this.particles.addExplosion(ev.x, ev.y, '#f43f5e', 35);
+        this.soundFx.playExplosion();
+        this.screenShake = 16;
+      } else if (ev.type === 'fire') {
+        this.soundFx.playLaser();
+      }
+    }
+
+    updateGuestSimulation(dtSeconds) {
+      for (const s of this.ships) {
+        if (s && s.alive) {
+          s.x += s.dx;
+          s.y += s.dy;
+          if (s.x < -s.width) s.x = this.canvas.width + s.width;
+          else if (s.x > this.canvas.width + s.width) s.x = -s.width;
+          if (s.y < -s.height) s.y = this.canvas.height + s.height;
+          else if (s.y > this.canvas.height + s.height) s.y = -s.height;
+        }
+      }
+
+      for (const r of this.rocks) {
+        if (r && !r.popped) {
+          r.x += r.dx;
+          r.y += r.dy;
+          r.rotation += r.rotSpeed;
+        }
+      }
+
+      for (const b of this.bullets) {
+        if (b && !b.hit) {
+          b.x += b.dx;
+          b.y += b.dy;
+        }
+      }
+
+      for (const ub of this.ufoBullets) {
+        if (ub && !ub.hit) {
+          ub.x += ub.dx;
+          ub.y += ub.dy;
+        }
+      }
+
+      this.sendGuestInput();
+
+      const leadShip = this.ships.find(s => s && s.alive) || this.ship1;
+      this.starfield.update(
+        this.state === 'PLAYING' ? leadShip.dx : 0.2,
+        this.state === 'PLAYING' ? leadShip.dy : 0
+      );
+      this.particles.update();
+    }
+
     init() {
       this.resizeCanvas();
       window.addEventListener('resize', () => this.resizeCanvas());
@@ -3109,6 +3868,8 @@
       this.bindControlsUI();
       this.updateControlsUI();
       this.bindUI();
+      this.bindOnlineLobbyUI();
+      this.checkUrlRoomParam();
 
       // Main Loop with Fixed Timestep Accumulator (Decoupled 60 FPS Physics)
       let lastTime = performance.now();
@@ -3212,8 +3973,61 @@
         );
         if (e.repeat && isActionFireOrShield) return;
 
-        if (this.gameMode === 'multiplayer') {
-          // --- PLAYER 1 (Customizable, default OKL; + M) ---
+        if (this.isOnline) {
+          // --- ONLINE CO-OP (Each player uses their personal solo controls on their own device) ---
+          const isSoloLeft = (e.code === this.controlsSolo.rotateLeft) || (this.controlsSolo.rotateLeft === 'ArrowLeft' && e.code === 'KeyA');
+          const isSoloRight = (e.code === this.controlsSolo.rotateRight) || (this.controlsSolo.rotateRight === 'ArrowRight' && e.code === 'KeyD');
+          const isSoloThrust = (e.code === this.controlsSolo.thrust) || (this.controlsSolo.thrust === 'ArrowUp' && e.code === 'KeyW');
+          const isSoloFire = (e.code === this.controlsSolo.fire);
+          const isSoloShield = (e.code === this.controlsSolo.shield) || (this.controlsSolo.shield === 'ArrowDown' && (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyS' || e.code === 'KeyE'));
+
+          if (this.isOnlineHost) {
+            const hostShip = (this.onlineRole === 'red') ? this.ship1 : this.ship2;
+            const hostKeys = (this.onlineRole === 'red') ? this.keys : this.keysP2;
+
+            if (isSoloLeft) hostKeys.left = true;
+            if (isSoloRight) hostKeys.right = true;
+            if (isSoloThrust) {
+              hostKeys.up = true;
+              if (this.state === 'PLAYING' && hostShip.alive) hostShip.setThrust(true);
+            }
+            if (isSoloFire) {
+              hostKeys.fire = true;
+              if (this.state === 'PLAYING' && hostShip.alive) {
+                hostShip.fire(this.bullets);
+                this.networkEvents.push({ type: 'fire', shooterId: hostShip.playerId });
+              }
+            }
+            if (isSoloShield) {
+              if (this.state === 'PLAYING' && hostShip.alive) {
+                hostShip.triggerEmergencyShield();
+                this.updateEnergyDisplay();
+              }
+            }
+          } else {
+            // Guest client transmits key states to host
+            let inputChanged = false;
+            if (isSoloLeft && !this.guestInputState.left) { this.guestInputState.left = true; inputChanged = true; }
+            if (isSoloRight && !this.guestInputState.right) { this.guestInputState.right = true; inputChanged = true; }
+            if (isSoloThrust && !this.guestInputState.up) {
+              this.guestInputState.up = true;
+              inputChanged = true;
+              if (this.onlineLocalShip && this.onlineLocalShip.alive) this.onlineLocalShip.setThrust(true);
+            }
+            if (isSoloFire) {
+              this.guestInputState.fire = true;
+              inputChanged = true;
+            }
+            if (isSoloShield) {
+              this.guestInputState.shield = true;
+              inputChanged = true;
+            }
+            if (inputChanged) {
+              this.sendGuestInput();
+            }
+          }
+        } else if (this.gameMode === 'multiplayer') {
+          // --- LOCAL PLAYER 1 (Customizable, default OKL; + M) ---
           if (e.code === this.controlsP1.rotateLeft) this.keys.left = true;
           if (e.code === this.controlsP1.rotateRight) this.keys.right = true;
           if (e.code === this.controlsP1.thrust) {
@@ -3231,7 +4045,7 @@
             }
           }
 
-          // --- PLAYER 2 (Customizable, default WASD + Shift) ---
+          // --- LOCAL PLAYER 2 (Customizable, default WASD + Shift) ---
           if (e.code === this.controlsP2.rotateLeft) this.keysP2.left = true;
           if (e.code === this.controlsP2.rotateRight) this.keysP2.right = true;
           if (e.code === this.controlsP2.thrust) {
@@ -3319,7 +4133,38 @@
       });
 
       window.addEventListener('keyup', (e) => {
-        if (this.gameMode === 'multiplayer') {
+        if (this.isOnline) {
+          const isSoloLeft = (e.code === this.controlsSolo.rotateLeft) || (this.controlsSolo.rotateLeft === 'ArrowLeft' && e.code === 'KeyA');
+          const isSoloRight = (e.code === this.controlsSolo.rotateRight) || (this.controlsSolo.rotateRight === 'ArrowRight' && e.code === 'KeyD');
+          const isSoloThrust = (e.code === this.controlsSolo.thrust) || (this.controlsSolo.thrust === 'ArrowUp' && e.code === 'KeyW');
+          const isSoloFire = (e.code === this.controlsSolo.fire);
+
+          if (this.isOnlineHost) {
+            const hostShip = (this.onlineRole === 'red') ? this.ship1 : this.ship2;
+            const hostKeys = (this.onlineRole === 'red') ? this.keys : this.keysP2;
+            if (isSoloLeft) hostKeys.left = false;
+            if (isSoloRight) hostKeys.right = false;
+            if (isSoloThrust) {
+              hostKeys.up = false;
+              if (this.state === 'PLAYING' && hostShip.alive) hostShip.setThrust(false);
+            }
+            if (isSoloFire) hostKeys.fire = false;
+          } else {
+            let inputChanged = false;
+            if (isSoloLeft && this.guestInputState.left) { this.guestInputState.left = false; inputChanged = true; }
+            if (isSoloRight && this.guestInputState.right) { this.guestInputState.right = false; inputChanged = true; }
+            if (isSoloThrust && this.guestInputState.up) {
+              this.guestInputState.up = false;
+              inputChanged = true;
+              if (this.onlineLocalShip && this.onlineLocalShip.alive) this.onlineLocalShip.setThrust(false);
+            }
+            if (isSoloFire && this.guestInputState.fire) { this.guestInputState.fire = false; inputChanged = true; }
+            if (this.guestInputState.shield) { this.guestInputState.shield = false; inputChanged = true; }
+            if (inputChanged) {
+              this.sendGuestInput();
+            }
+          }
+        } else if (this.gameMode === 'multiplayer') {
           // --- PLAYER 1 ---
           if (e.code === this.controlsP1.rotateLeft) this.keys.left = false;
           if (e.code === this.controlsP1.rotateRight) this.keys.right = false;
@@ -3374,22 +4219,68 @@
 
       bindTouchBtn(
         this.domElements.btnLeft,
-        () => (this.keys.left = true),
-        () => (this.keys.left = false)
+        () => {
+          if (this.isOnline && !this.isOnlineHost) {
+            this.guestInputState.left = true;
+            this.sendGuestInput();
+          } else if (this.isOnline && this.isOnlineHost) {
+            const hostKeys = (this.onlineRole === 'red') ? this.keys : this.keysP2;
+            hostKeys.left = true;
+          } else {
+            this.keys.left = true;
+          }
+        },
+        () => {
+          if (this.isOnline && !this.isOnlineHost) {
+            this.guestInputState.left = false;
+            this.sendGuestInput();
+          } else if (this.isOnline && this.isOnlineHost) {
+            const hostKeys = (this.onlineRole === 'red') ? this.keys : this.keysP2;
+            hostKeys.left = false;
+          } else {
+            this.keys.left = false;
+          }
+        }
       );
 
       bindTouchBtn(
         this.domElements.btnRight,
-        () => (this.keys.right = true),
-        () => (this.keys.right = false)
+        () => {
+          if (this.isOnline && !this.isOnlineHost) {
+            this.guestInputState.right = true;
+            this.sendGuestInput();
+          } else if (this.isOnline && this.isOnlineHost) {
+            const hostKeys = (this.onlineRole === 'red') ? this.keys : this.keysP2;
+            hostKeys.right = true;
+          } else {
+            this.keys.right = true;
+          }
+        },
+        () => {
+          if (this.isOnline && !this.isOnlineHost) {
+            this.guestInputState.right = false;
+            this.sendGuestInput();
+          } else if (this.isOnline && this.isOnlineHost) {
+            const hostKeys = (this.onlineRole === 'red') ? this.keys : this.keysP2;
+            hostKeys.right = false;
+          } else {
+            this.keys.right = false;
+          }
+        }
       );
 
       bindTouchBtn(
         this.domElements.btnEmergencyShield,
         () => {
-          if (this.state === 'PLAYING') {
-            this.ship.triggerEmergencyShield();
-            this.updateEnergyDisplay();
+          if (this.isOnline && !this.isOnlineHost) {
+            this.guestInputState.shield = true;
+            this.sendGuestInput();
+            this.guestInputState.shield = false;
+          } else {
+            if (this.state === 'PLAYING') {
+              this.ship.triggerEmergencyShield();
+              this.updateEnergyDisplay();
+            }
           }
         },
         () => { }
@@ -3398,19 +4289,50 @@
       bindTouchBtn(
         this.domElements.btnThrust,
         () => {
-          this.keys.up = true;
-          if (this.state === 'PLAYING') this.ship.setThrust(true);
+          if (this.isOnline && !this.isOnlineHost) {
+            this.guestInputState.up = true;
+            this.sendGuestInput();
+            if (this.onlineLocalShip && this.onlineLocalShip.alive) this.onlineLocalShip.setThrust(true);
+          } else if (this.isOnline && this.isOnlineHost) {
+            const hostKeys = (this.onlineRole === 'red') ? this.keys : this.keysP2;
+            hostKeys.up = true;
+            if (this.state === 'PLAYING') this.ship.setThrust(true);
+          } else {
+            this.keys.up = true;
+            if (this.state === 'PLAYING') this.ship.setThrust(true);
+          }
         },
         () => {
-          this.keys.up = false;
-          if (this.state === 'PLAYING') this.ship.setThrust(false);
+          if (this.isOnline && !this.isOnlineHost) {
+            this.guestInputState.up = false;
+            this.sendGuestInput();
+            if (this.onlineLocalShip && this.onlineLocalShip.alive) this.onlineLocalShip.setThrust(false);
+          } else if (this.isOnline && this.isOnlineHost) {
+            const hostKeys = (this.onlineRole === 'red') ? this.keys : this.keysP2;
+            hostKeys.up = false;
+            if (this.state === 'PLAYING') this.ship.setThrust(false);
+          } else {
+            this.keys.up = false;
+            if (this.state === 'PLAYING') this.ship.setThrust(false);
+          }
         }
       );
 
       bindTouchBtn(
         this.domElements.btnFire,
         () => {
-          if (this.state === 'PLAYING') this.ship.fire(this.bullets);
+          if (this.isOnline && !this.isOnlineHost) {
+            this.guestInputState.fire = true;
+            this.sendGuestInput();
+            this.guestInputState.fire = false;
+          } else if (this.isOnline && this.isOnlineHost) {
+            if (this.state === 'PLAYING') {
+              this.ship.fire(this.bullets);
+              this.networkEvents.push({ type: 'fire', shooterId: this.ship.playerId });
+            }
+          } else {
+            if (this.state === 'PLAYING') this.ship.fire(this.bullets);
+          }
         },
         () => { }
       );
@@ -3505,6 +4427,15 @@
 
       // Game Over
       this.domElements.retryBtn.addEventListener('click', () => {
+        if (this.isOnline) {
+          if (this.isOnlineHost) {
+            if (this.network) this.network.sendRestartGame();
+            this.startGame('multiplayer');
+          } else {
+            alert('Waiting for room host to restart the flight mission...');
+          }
+          return;
+        }
         if (this.rlMode === 'trained') {
           this.startWatchTrainedAI();
         } else if (this.rlMode === 'training') {
@@ -3713,6 +4644,9 @@
       if (modalName === 'credits') this.domElements.creditsModal.classList.add('active');
       if (modalName === 'pause') this.domElements.pauseModal.classList.add('active');
       if (modalName === 'gameover') this.domElements.gameOverModal.classList.add('active');
+      if (modalName === 'onlineLobby' && this.domElements.onlineLobbyModal) {
+        this.domElements.onlineLobbyModal.classList.add('active');
+      }
     }
 
     hideModals() {
@@ -3722,6 +4656,9 @@
       this.domElements.creditsModal.classList.remove('active');
       this.domElements.pauseModal.classList.remove('active');
       this.domElements.gameOverModal.classList.remove('active');
+      if (this.domElements.onlineLobbyModal) {
+        this.domElements.onlineLobbyModal.classList.remove('active');
+      }
       if (this.state === 'START') {
         this.domElements.startScreen.classList.add('active');
       }
@@ -3791,7 +4728,7 @@
         this.ship2.reset(true, w * 0.38, h * 0.55);
 
         this.ships = [this.ship1, this.ship2];
-        this.ship = this.ship1;
+        this.ship = (this.isOnline && this.onlineLocalShip) ? this.onlineLocalShip : this.ship1;
       } else {
         this.ship1.reset(true);
         this.ship1.powerMode = this.powerMode;
@@ -3805,11 +4742,13 @@
       this.updateLivesDisplay();
       this.updateEnergyDisplay();
 
-      // Initial rocks spawn based on difficulty with staggered distances
-      const initialCount = this.difficulty === 'easy' ? 2 : this.difficulty === 'hard' ? 4 : 3;
-      for (let i = 0; i < initialCount; i++) {
-        const spawnOffset = 15 + i * 90;
-        this.rocks.push(new Rock(this.canvas.width, this.canvas.height, this.rockSpeedMultiplier, spawnOffset));
+      // Initial rocks spawn based on difficulty with staggered distances (only for solo, local mp, or online host)
+      if (!this.isOnline || this.isOnlineHost) {
+        const initialCount = this.difficulty === 'easy' ? 2 : this.difficulty === 'hard' ? 4 : 3;
+        for (let i = 0; i < initialCount; i++) {
+          const spawnOffset = 15 + i * 90;
+          this.rocks.push(new Rock(this.canvas.width, this.canvas.height, this.rockSpeedMultiplier, spawnOffset));
+        }
       }
 
       this.state = 'PLAYING';
@@ -3979,6 +4918,28 @@
         this.domElements.hudMultiplayer.style.display = isMp ? 'flex' : 'none';
         this.domElements.hudMultiplayer.classList.toggle('hidden', !isMp);
       }
+
+      if (this.domElements.onlineStatusBadge) {
+        const showOnline = isMp && this.isOnline;
+        this.domElements.onlineStatusBadge.style.display = showOnline ? 'inline-flex' : 'none';
+        this.domElements.onlineStatusBadge.classList.toggle('hidden', !showOnline);
+      }
+
+      if (this.domElements.p1TagText && this.domElements.p2TagText) {
+        if (isMp && this.isOnline) {
+          const isLocalRed = (this.onlineLocalPlayerId === 1);
+          if (isLocalRed) {
+            this.domElements.p1TagText.innerHTML = 'P1 RED <span style="font-size:9px;color:#f87171;font-weight:900;letter-spacing:1px;margin-left:3px;">(YOU)</span>';
+            this.domElements.p2TagText.innerHTML = 'P2 BLUE <span style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-left:3px;">(CO-PILOT)</span>';
+          } else {
+            this.domElements.p1TagText.innerHTML = 'P1 RED <span style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-left:3px;">(CO-PILOT)</span>';
+            this.domElements.p2TagText.innerHTML = 'P2 BLUE <span style="font-size:9px;color:#38bdf8;font-weight:900;letter-spacing:1px;margin-left:3px;">(YOU)</span>';
+          }
+        } else {
+          this.domElements.p1TagText.textContent = 'P1 RED';
+          this.domElements.p2TagText.textContent = 'P2 BLUE';
+        }
+      }
     }
 
     updateSoundButtons(enabled) {
@@ -4031,6 +4992,11 @@
     }
 
     quitToMainMenu() {
+      if (this.isOnline) {
+        if (this.network) this.network.disconnect();
+        this.isOnline = false;
+        this.isOnlineHost = false;
+      }
       this.rlMode = null;
       if (this.rlAgent) this.rlAgent.mode = 'idle';
       this.lastStepDecision = null;
@@ -4379,6 +5345,9 @@
       this.soundFx.playExplosion(true);
       this.screenShake = 16;
       this.particles.addExplosion(ship.x, ship.y, '#f43f5e', 35);
+      if (this.isOnline && this.isOnlineHost) {
+        this.networkEvents.push({ type: 'ship_hit', shipId: ship.playerId, x: ship.x, y: ship.y });
+      }
 
       if (this.rlMode === 'training') {
         this.finishTrainingEpisode(-15);
@@ -4459,6 +5428,11 @@
       }
 
       if (this.state === 'PLAYING') {
+        if (this.isOnline && !this.isOnlineHost) {
+          this.updateGuestSimulation(dtSeconds);
+          return;
+        }
+
         const prevScore = this.score;
 
         // Autonomous RL Agent Action Selection
@@ -4492,10 +5466,22 @@
           }
         } else if (this.gameMode === 'multiplayer') {
           // Human keyboard rotation for P1 and P2
-          if (this.keys.left && this.ship1.alive) this.ship1.rotateLeft();
-          if (this.keys.right && this.ship1.alive) this.ship1.rotateRight();
-          if (this.keysP2.left && this.ship2.alive) this.ship2.rotateLeft();
-          if (this.keysP2.right && this.ship2.alive) this.ship2.rotateRight();
+          if (this.isOnline && this.isOnlineHost) {
+            const hostShip = (this.onlineRole === 'red') ? this.ship1 : this.ship2;
+            const hostKeys = (this.onlineRole === 'red') ? this.keys : this.keysP2;
+            const guestShip = (this.onlineRole === 'red') ? this.ship2 : this.ship1;
+            const guestKeys = (this.onlineRole === 'red') ? this.keysP2 : this.keys;
+
+            if (hostKeys.left && hostShip.alive) hostShip.rotateLeft();
+            if (hostKeys.right && hostShip.alive) hostShip.rotateRight();
+            if (guestKeys.left && guestShip.alive) guestShip.rotateLeft();
+            if (guestKeys.right && guestShip.alive) guestShip.rotateRight();
+          } else {
+            if (this.keys.left && this.ship1.alive) this.ship1.rotateLeft();
+            if (this.keys.right && this.ship1.alive) this.ship1.rotateRight();
+            if (this.keysP2.left && this.ship2.alive) this.ship2.rotateLeft();
+            if (this.keysP2.right && this.ship2.alive) this.ship2.rotateRight();
+          }
         } else {
           // Continuous human keyboard rotation
           if (this.keys.left && this.ship.alive) this.ship.rotateLeft();
@@ -4577,6 +5563,9 @@
               this.p1Kills++;
             }
             this.bullets.splice(i, 1);
+            if (this.isOnline && this.isOnlineHost) {
+              this.networkEvents.push({ type: 'ufo_hit', x: this.ufo.x, y: this.ufo.y });
+            }
             this.soundFx.playUFOExplosion();
             this.particles.addExplosion(this.ufo.x, this.ufo.y, '#c084fc', 32);
             this.particles.addExplosion(this.ufo.x, this.ufo.y, '#38bdf8', 18);
@@ -4600,6 +5589,9 @@
                 this.p1Kills++;
               }
 
+              if (this.isOnline && this.isOnlineHost) {
+                this.networkEvents.push({ type: 'rock_hit', x: r.x, y: r.y, shooterId });
+              }
               this.soundFx.playExplosion(false);
               const popColor = shooterId === 2 ? '#00f0ff' : '#38bdf8';
               this.particles.addExplosion(r.x, r.y, popColor, 20);
@@ -4798,6 +5790,14 @@
           }
 
           this.rlAgent.recordStep(this.lastStepDecision, stepReward, false);
+        }
+
+        // Broadcast snapshots to guest co-pilot
+        if (this.isOnline && this.isOnlineHost && this.network && this.network.isConnected) {
+          this.snapshotFrameCounter = (this.snapshotFrameCounter || 0) + 1;
+          if (this.snapshotFrameCounter % 2 === 0) {
+            this.sendHostSnapshot();
+          }
         }
       }
 

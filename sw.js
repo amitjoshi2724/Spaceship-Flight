@@ -1,8 +1,9 @@
-const CACHE_NAME = 'spaceship-flight-2.2.1';
+const CACHE_NAME = 'spaceship-flight-2.3.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './style.css',
+  './network.js',
   './rl_agent.js',
   './game.js',
   './manifest.json',

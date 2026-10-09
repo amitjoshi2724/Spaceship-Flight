@@ -21,7 +21,7 @@
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
     rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=2.2.1">
+  <link rel="stylesheet" href="style.css?v=2.3.0">
   <link rel="manifest" href="manifest.json?v=2.0.2">
   <link rel="icon" type="image/png" sizes="64x64" href="images/newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="images/newspaceship.png">
@@ -99,7 +99,7 @@
         <!-- Player 2 (Blue) Cockpit Gauges (Left Side of Screen) -->
         <div class="hud-mp-player hud-mp-p2">
           <div class="hud-stat mp-player-badge p2-badge">
-            <span class="mp-tag blue">P2 BLUE</span>
+            <span id="p2TagText" class="mp-tag blue">P2 BLUE</span>
             <div id="p2LivesIcons" class="lives-icons p2-lives">
               <span class="life-icon active p2-life" title="P2 Hull 1"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" /></svg></span>
               <span class="life-icon active p2-life" title="P2 Hull 2"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#00f0ff" /></svg></span>
@@ -139,6 +139,10 @@
               <span id="highScoreDisplayMp" class="hud-value">0</span>
             </div>
           </div>
+          <div id="onlineStatusBadge" class="online-status-badge hidden" style="display: none;">
+            <span class="online-dot"></span>
+            <span id="onlinePingText" class="online-ping-text">ONLINE &bull; 0ms</span>
+          </div>
         </div>
 
         <!-- Player 1 (Red) Cockpit Gauges & Controls (Right Side of Screen) -->
@@ -167,7 +171,7 @@
               <span class="life-icon active p1-life" title="P1 Hull 2"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#ef4444" /></svg></span>
               <span class="life-icon active p1-life" title="P1 Hull 3"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#ef4444" /></svg></span>
             </div>
-            <span class="mp-tag red">P1 RED</span>
+            <span id="p1TagText" class="mp-tag red">P1 RED</span>
           </div>
           <div class="hud-right mp-hud-right">
             <button id="soundToggleBtnMp" class="hud-btn sound-btn" aria-label="Toggle Sound" title="Toggle Sound">🔇</button>
@@ -297,6 +301,7 @@
         <nav class="menu-nav">
           <button id="playBtn" class="menu-btn primary-btn">PLAY (SOLO)</button>
           <button id="multiplayerBtn" class="menu-btn primary-btn multiplayer-menu-btn">👥 2-PLAYER LOCAL CO-OP</button>
+          <button id="onlineMultiplayerBtn" class="menu-btn primary-btn online-menu-btn">🌐 2-PLAYER ONLINE CO-OP</button>
           <a href="asteroidle/index.html" class="menu-btn secondary-btn" style="text-decoration: none; display: flex; align-items: center; justify-content: center; background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; color: #e0f2fe; text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);">🎯 PLAY ASTEROIDLE (DAILY)</a>
           <button id="watchTrainedBtn" class="menu-btn secondary-btn rl-menu-btn rl-trained-btn">🤖 WATCH TRAINED AI PLAY</button>
           <button id="watchTrainBtn" class="menu-btn secondary-btn rl-menu-btn rl-train-btn">🧬 WATCH AI TRAIN (FROM SEED)</button>
@@ -703,6 +708,94 @@
       </div>
     </div>
 
+    <!-- 2-Player Online Lobby Modal -->
+    <div id="onlineLobbyModal" class="overlay">
+      <div class="modal-card glass-panel online-lobby-card">
+        <h2 class="modal-title">2-PLAYER ONLINE CO-OP</h2>
+
+        <!-- Tabs: Host vs Join -->
+        <div class="online-tabs-nav">
+          <button type="button" class="online-tab-btn active" id="onlineTabCreateBtn" data-tab="create">HOST ROOM</button>
+          <button type="button" class="online-tab-btn" id="onlineTabJoinBtn" data-tab="join">JOIN ROOM</button>
+        </div>
+
+        <!-- Create / Host Tab Pane -->
+        <div id="onlinePaneCreate" class="online-tab-pane active">
+          <label class="setting-label">SHARE ROOM CODE</label>
+          <div class="online-room-code-box">
+            <div class="online-room-code" id="onlineRoomCodeDisplay">INITIALIZING...</div>
+            <div class="online-code-actions">
+              <button type="button" class="online-copy-btn" id="copyRoomCodeBtn">📋 COPY CODE</button>
+              <button type="button" class="online-copy-btn" id="copyRoomLinkBtn">🔗 COPY LINK</button>
+            </div>
+            <div id="copyToastMessage" class="copy-toast" style="display: none;">COPIED TO CLIPBOARD!</div>
+          </div>
+
+          <label class="setting-label" style="margin-top: 14px;">YOUR SHIP ASSIGNMENT (HOST PICKS)</label>
+          <p class="online-subtext">You decide who flies Crimson Red and who flies Cobalt Blue.</p>
+          <div class="online-role-selector">
+            <div class="online-role-card active" id="roleSelectRed" data-role="red">
+              <div class="role-card-header">
+                <span class="role-dot red"></span>
+                <span class="role-title">YOU: RED (P1)</span>
+              </div>
+              <div class="role-sub">CO-PILOT: BLUE (P2)</div>
+            </div>
+            <div class="online-role-card" id="roleSelectBlue" data-role="blue">
+              <div class="role-card-header">
+                <span class="role-dot blue"></span>
+                <span class="role-title">YOU: BLUE (P2)</span>
+              </div>
+              <div class="role-sub">CO-PILOT: RED (P1)</div>
+            </div>
+          </div>
+
+          <div class="online-status-card">
+            <div class="radar-scan-box">
+              <div class="radar-pulse" id="createRadarPulse"></div>
+            </div>
+            <div class="online-status-info">
+              <div class="online-status-title" id="createStatusTitle">WAITING FOR CO-PILOT...</div>
+              <div class="online-status-subtitle" id="createStatusSub">Share your code or link with a friend. Once connected, click Launch!</div>
+            </div>
+          </div>
+
+          <div class="online-modal-nav">
+            <button id="onlineStartGameBtn" class="menu-btn primary-btn disabled" disabled>🚀 LAUNCH CO-OP MISSION</button>
+          </div>
+        </div>
+
+        <!-- Join Room Tab Pane -->
+        <div id="onlinePaneJoin" class="online-tab-pane" style="display: none;">
+          <div class="online-join-box">
+            <label class="setting-label">ENTER ROOM CODE</label>
+            <div class="join-input-wrapper">
+              <input type="text" id="onlineJoinCodeInput" class="join-code-input" placeholder="e.g. NOVA-42" maxlength="12" autocomplete="off" spellcheck="false">
+              <button type="button" id="onlineConnectBtn" class="menu-btn primary-btn join-submit-btn">CONNECT</button>
+            </div>
+          </div>
+
+          <div class="online-status-card" id="joinStatusCard">
+            <div class="radar-scan-box">
+              <div class="radar-pulse" id="joinRadarPulse"></div>
+            </div>
+            <div class="online-status-info">
+              <div class="online-status-title" id="joinStatusTitle">READY TO CONNECT</div>
+              <div class="online-status-subtitle" id="joinStatusSub">Enter your host's room code to join their cockpit simulation.</div>
+            </div>
+          </div>
+
+          <div id="guestRoleNotice" class="online-subtext" style="display: none; margin-top: 10px; text-align: center; color: #38bdf8;">
+            Assigned Ship: <b id="guestRoleShipName">BLUE</b> (Host will launch the game)
+          </div>
+        </div>
+
+        <div class="online-modal-nav" style="margin-top: 14px;">
+          <button id="onlineLobbyCloseBtn" class="menu-btn secondary-btn">CANCEL / BACK</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Pause & Reset Modal -->
     <div id="pauseModal" class="overlay">
       <div class="modal-card glass-panel">
@@ -755,8 +848,10 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="network.js?v=2.3.0"></script>
   <script src="rl_agent.js?v=2.1.0"></script>
-  <script src="game.js?v=2.2.1"></script>
+  <script src="game.js?v=2.3.0"></script>
 </body>
 
 </html>
