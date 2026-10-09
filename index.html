@@ -21,7 +21,7 @@
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
     rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=2.3.0">
+  <link rel="stylesheet" href="style.css?v=2.3.2">
   <link rel="manifest" href="manifest.json?v=2.0.2">
   <link rel="icon" type="image/png" sizes="64x64" href="images/newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="images/newspaceship.png">
@@ -713,10 +713,29 @@
       <div class="modal-card glass-panel online-lobby-card">
         <h2 class="modal-title">2-PLAYER ONLINE CO-OP</h2>
 
-        <!-- Tabs: Host vs Join -->
+        <!-- Callsign / Username Selection (Codenames Style) -->
+        <div class="online-pilot-bar">
+          <div class="pilot-label-row">
+            <label for="onlinePilotNameInput" class="setting-label">YOUR CALLSIGN / PILOT NAME</label>
+            <span class="pilot-hint">VISIBLE TO YOUR CO-PILOT</span>
+          </div>
+          <div class="pilot-input-wrap">
+            <span class="pilot-input-icon">👨‍🚀</span>
+            <input type="text" id="onlinePilotNameInput" class="pilot-name-input" maxlength="15" placeholder="Enter Callsign..." autocomplete="off" spellcheck="false" value="Commander">
+            <button type="button" id="randomizePilotNameBtn" class="pilot-random-btn" title="Generate Random Callsign">🎲 RANDOM</button>
+          </div>
+        </div>
+
+        <!-- Tabs: Host vs Join (Segmented Cyberpunk Pill Control) -->
         <div class="online-tabs-nav">
-          <button type="button" class="online-tab-btn active" id="onlineTabCreateBtn" data-tab="create">HOST ROOM</button>
-          <button type="button" class="online-tab-btn" id="onlineTabJoinBtn" data-tab="join">JOIN ROOM</button>
+          <button type="button" class="online-tab-btn active" id="onlineTabCreateBtn" data-tab="create">
+            <span class="tab-icon">📡</span>
+            <span class="tab-text">HOST ROOM</span>
+          </button>
+          <button type="button" class="online-tab-btn" id="onlineTabJoinBtn" data-tab="join">
+            <span class="tab-icon">🔗</span>
+            <span class="tab-text">JOIN ROOM</span>
+          </button>
         </div>
 
         <!-- Create / Host Tab Pane -->
@@ -731,6 +750,38 @@
             <div id="copyToastMessage" class="copy-toast" style="display: none;">COPIED TO CLIPBOARD!</div>
           </div>
 
+          <!-- Crew Roster / Manifest (Live Pilot Names) -->
+          <div class="crew-manifest-box">
+            <div class="crew-label">
+              <span>MISSION CREW MANIFEST</span>
+              <span id="crewRoomStatusBadge" class="crew-status-dot waiting">1/2 PILOTS</span>
+            </div>
+            <div class="crew-roster">
+              <div class="crew-member host" id="crewHostCard">
+                <div class="crew-avatar">👑</div>
+                <div class="crew-info">
+                  <div class="crew-role-line">
+                    <span class="crew-title">HOST</span>
+                    <span class="crew-ship-badge red" id="crewHostShipBadge">RED (P1)</span>
+                  </div>
+                  <div class="crew-name" id="crewHostNameDisplay">Commander</div>
+                </div>
+                <div class="crew-badge connected">YOU</div>
+              </div>
+              <div class="crew-member guest" id="crewGuestCard">
+                <div class="crew-avatar" id="crewGuestAvatar">⏳</div>
+                <div class="crew-info">
+                  <div class="crew-role-line">
+                    <span class="crew-title">CO-PILOT</span>
+                    <span class="crew-ship-badge blue" id="crewGuestShipBadge">BLUE (P2)</span>
+                  </div>
+                  <div class="crew-name waiting" id="crewGuestNameDisplay">Waiting to join...</div>
+                </div>
+                <div class="crew-badge waiting" id="crewGuestStatusBadge">WAITING</div>
+              </div>
+            </div>
+          </div>
+
           <label class="setting-label" style="margin-top: 14px;">YOUR SHIP ASSIGNMENT (HOST PICKS)</label>
           <p class="online-subtext">You decide who flies Crimson Red and who flies Cobalt Blue.</p>
           <div class="online-role-selector">
@@ -739,14 +790,14 @@
                 <span class="role-dot red"></span>
                 <span class="role-title">YOU: RED (P1)</span>
               </div>
-              <div class="role-sub">CO-PILOT: BLUE (P2)</div>
+              <div class="role-sub" id="roleSelectRedSub">CO-PILOT: BLUE (P2)</div>
             </div>
             <div class="online-role-card" id="roleSelectBlue" data-role="blue">
               <div class="role-card-header">
                 <span class="role-dot blue"></span>
                 <span class="role-title">YOU: BLUE (P2)</span>
               </div>
-              <div class="role-sub">CO-PILOT: RED (P1)</div>
+              <div class="role-sub" id="roleSelectBlueSub">CO-PILOT: RED (P1)</div>
             </div>
           </div>
 
@@ -756,7 +807,7 @@
             </div>
             <div class="online-status-info">
               <div class="online-status-title" id="createStatusTitle">WAITING FOR CO-PILOT...</div>
-              <div class="online-status-subtitle" id="createStatusSub">Share your code or link with a friend. Once connected, click Launch!</div>
+              <div class="online-status-subtitle" id="createStatusSub">Share your room code or link. When your friend joins, their callsign will appear above!</div>
             </div>
           </div>
 
@@ -772,6 +823,38 @@
             <div class="join-input-wrapper">
               <input type="text" id="onlineJoinCodeInput" class="join-code-input" placeholder="e.g. NOVA-42" maxlength="12" autocomplete="off" spellcheck="false">
               <button type="button" id="onlineConnectBtn" class="menu-btn primary-btn join-submit-btn">CONNECT</button>
+            </div>
+          </div>
+
+          <!-- Guest Crew Manifest (Shown when connected) -->
+          <div class="crew-manifest-box" id="joinCrewManifestBox" style="display: none;">
+            <div class="crew-label">
+              <span>CONNECTED SQUADRON</span>
+              <span class="crew-status-dot ready">2/2 PILOTS</span>
+            </div>
+            <div class="crew-roster">
+              <div class="crew-member host" id="joinHostCard">
+                <div class="crew-avatar">👑</div>
+                <div class="crew-info">
+                  <div class="crew-role-line">
+                    <span class="crew-title">ROOM HOST</span>
+                    <span class="crew-ship-badge red" id="joinHostShipBadge">RED (P1)</span>
+                  </div>
+                  <div class="crew-name" id="joinHostNameDisplay">Commander</div>
+                </div>
+                <div class="crew-badge connected">HOST</div>
+              </div>
+              <div class="crew-member guest connected" id="joinGuestCard">
+                <div class="crew-avatar">🚀</div>
+                <div class="crew-info">
+                  <div class="crew-role-line">
+                    <span class="crew-title">CO-PILOT</span>
+                    <span class="crew-ship-badge blue" id="joinGuestShipBadge">BLUE (P2)</span>
+                  </div>
+                  <div class="crew-name" id="joinGuestNameDisplay">Co-Pilot</div>
+                </div>
+                <div class="crew-badge connected">YOU</div>
+              </div>
             </div>
           </div>
 
@@ -849,9 +932,9 @@
   </div>
 
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="network.js?v=2.3.1"></script>
+  <script src="network.js?v=2.3.2"></script>
   <script src="rl_agent.js?v=2.1.0"></script>
-  <script src="game.js?v=2.3.1"></script>
+  <script src="game.js?v=2.3.2"></script>
 </body>
 
 </html>

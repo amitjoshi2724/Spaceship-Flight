@@ -34,6 +34,10 @@
       this._pingTimer = null;
       this._lastPingTimestamp = 0;
 
+      // Pilot Names
+      this.pilotName = 'Commander';
+      this.peerPilotName = '';
+
       // Host settings
       this.hostRole = 'red'; // 'red' or 'blue'
       this.guestRole = 'blue';
@@ -41,9 +45,10 @@
       // Callbacks
       this.onStatusChange = null; // (statusText, isError)
       this.onPeerReady = null;    // (roomCode)
-      this.onConnected = null;    // ({ isHost, hostRole, guestRole })
+      this.onConnected = null;    // ({ isHost, hostRole, guestRole, hostName, guestName })
       this.onDisconnected = null; // ()
-      this.onLobbyUpdate = null;  // ({ hostRole, guestRole, powerMode, difficulty })
+      this.onLobbyUpdate = null;  // ({ hostRole, guestRole, hostName, guestName, roomCode })
+      this.onPilotUpdate = null;  // ({ hostName, guestName })
       this.onGameStart = null;    // (config)
       this.onGameRestart = null;  // ()
       this.onSnapshot = null;     // (snapshot)
@@ -57,7 +62,7 @@
     /**
      * Creates a new multiplayer room as Host
      */
-    createRoom(preferredHostRole = 'red') {
+    createRoom(preferredHostRole = 'red', pilotName = 'Commander') {
       return new Promise((resolve, reject) => {
         if (!this.isPeerAvailable()) {
           const msg = 'WebRTC library loading or unavailable. Check internet connection.';
@@ -69,6 +74,8 @@
         this.isHost = true;
         this.hostRole = preferredHostRole;
         this.guestRole = preferredHostRole === 'red' ? 'blue' : 'red';
+        this.pilotName = (pilotName || '').trim() || 'Commander';
+        this.peerPilotName = '';
         this.roomCode = generateRoomCode();
         const peerId = getPeerIdForRoom(this.roomCode);
 
@@ -126,7 +133,7 @@
     /**
      * Joins an existing room as Guest
      */
-    joinRoom(roomCode) {
+    joinRoom(roomCode, pilotName = 'Co-Pilot') {
       return new Promise((resolve, reject) => {
         if (!this.isPeerAvailable()) {
           const msg = 'WebRTC library loading or unavailable. Check internet connection.';
@@ -143,6 +150,8 @@
 
         this.disconnect();
         this.isHost = false;
+        this.pilotName = (pilotName || '').trim() || 'Co-Pilot';
+        this.peerPilotName = '';
         this.roomCode = cleanCode;
         const hostPeerId = getPeerIdForRoom(this.roomCode);
 
@@ -207,28 +216,47 @@
       this.hostRole = newHostRole;
       this.guestRole = (newHostRole === 'red') ? 'blue' : 'red';
 
+      const payload = {
+        type: 'LOBBY_STATE',
+        hostRole: this.hostRole,
+        guestRole: this.guestRole,
+        hostName: this.pilotName,
+        guestName: this.peerPilotName,
+        roomCode: this.roomCode
+      };
+
       if (this.conn && this.conn.open) {
-        this.send({
-          type: 'LOBBY_STATE',
-          hostRole: this.hostRole,
-          guestRole: this.guestRole,
-          roomCode: this.roomCode
-        });
+        this.send(payload);
       }
 
       if (this.onLobbyState) {
-        this.onLobbyState({
-          hostRole: this.hostRole,
-          guestRole: this.guestRole,
-          roomCode: this.roomCode
-        });
+        this.onLobbyState(payload);
       }
       if (this.onLobbyUpdate) {
-        this.onLobbyUpdate({
-          hostRole: this.hostRole,
-          guestRole: this.guestRole,
-          roomCode: this.roomCode
+        this.onLobbyUpdate(payload);
+      }
+    }
+
+    /**
+     * Updates local player callsign and notifies remote peer
+     */
+    updatePilotName(newName) {
+      this.pilotName = (newName || '').trim() || (this.isHost ? 'Commander' : 'Co-Pilot');
+      if (this.conn && this.conn.open) {
+        this.send({
+          type: 'PILOT_RENAME',
+          pilotName: this.pilotName
         });
+        if (this.isHost) {
+          this.send({
+            type: 'LOBBY_STATE',
+            hostRole: this.hostRole,
+            guestRole: this.guestRole,
+            hostName: this.pilotName,
+            guestName: this.peerPilotName,
+            roomCode: this.roomCode
+          });
+        }
       }
     }
 
@@ -245,14 +273,21 @@
             type: 'LOBBY_STATE',
             hostRole: this.hostRole,
             guestRole: this.guestRole,
+            hostName: this.pilotName,
+            guestName: this.peerPilotName,
             roomCode: this.roomCode
           });
 
-          if (this.onStatusChange) this.onStatusChange('Co-pilot connected! Ready to launch mission.');
-          if (this.onConnected) this.onConnected({ isHost: true, hostRole: this.hostRole, guestRole: this.guestRole });
+          if (this.onStatusChange) this.onStatusChange('Co-pilot connected! Synchronizing callsigns...');
+          if (this.onConnected) this.onConnected({ isHost: true, hostRole: this.hostRole, guestRole: this.guestRole, hostName: this.pilotName, guestName: this.peerPilotName });
         } else {
-          if (this.onStatusChange) this.onStatusChange('Connected to Host! Synchronizing mission...');
-          if (this.onConnected) this.onConnected({ isHost: false, hostRole: this.hostRole, guestRole: this.guestRole });
+          if (this.onStatusChange) this.onStatusChange('Connected to Host! Announcing callsign...');
+          // Announce guest pilot name to host
+          this.send({
+            type: 'PILOT_HELLO',
+            pilotName: this.pilotName
+          });
+          if (this.onConnected) this.onConnected({ isHost: false, hostRole: this.hostRole, guestRole: this.guestRole, hostName: this.peerPilotName, guestName: this.pilotName });
         }
 
         this._startPingInterval();
@@ -289,27 +324,76 @@
           }
           break;
 
+        case 'PILOT_HELLO':
+          if (this.isHost) {
+            this.peerPilotName = (data.pilotName || '').trim() || 'Co-Pilot';
+            console.log('[Network] Co-pilot announced callsign:', this.peerPilotName);
+            const state = {
+              type: 'LOBBY_STATE',
+              hostRole: this.hostRole,
+              guestRole: this.guestRole,
+              hostName: this.pilotName,
+              guestName: this.peerPilotName,
+              roomCode: this.roomCode
+            };
+            this.send(state);
+            if (this.onPilotUpdate) {
+              this.onPilotUpdate({
+                hostName: this.pilotName,
+                guestName: this.peerPilotName
+              });
+            }
+            if (this.onLobbyState) this.onLobbyState(state);
+            if (this.onLobbyUpdate) this.onLobbyUpdate(state);
+          }
+          break;
+
+        case 'PILOT_RENAME':
+          this.peerPilotName = (data.pilotName || '').trim() || (this.isHost ? 'Co-Pilot' : 'Commander');
+          if (this.isHost) {
+            this.send({
+              type: 'LOBBY_STATE',
+              hostRole: this.hostRole,
+              guestRole: this.guestRole,
+              hostName: this.pilotName,
+              guestName: this.peerPilotName,
+              roomCode: this.roomCode
+            });
+          }
+          if (this.onPilotUpdate) {
+            this.onPilotUpdate({
+              hostName: this.isHost ? this.pilotName : this.peerPilotName,
+              guestName: this.isHost ? this.peerPilotName : this.pilotName
+            });
+          }
+          break;
+
         case 'LOBBY_STATE':
           this.hostRole = data.hostRole;
           this.guestRole = data.guestRole;
-          if (this.onLobbyState) {
-            this.onLobbyState({
-              hostRole: data.hostRole,
-              guestRole: data.guestRole,
-              roomCode: data.roomCode
+          if (data.hostName && !this.isHost) {
+            this.peerPilotName = data.hostName;
+          }
+          if (data.guestName && this.isHost) {
+            this.peerPilotName = data.guestName;
+          }
+          if (this.onPilotUpdate) {
+            this.onPilotUpdate({
+              hostName: data.hostName || (this.isHost ? this.pilotName : this.peerPilotName),
+              guestName: data.guestName || (this.isHost ? this.peerPilotName : this.pilotName)
             });
+          }
+          if (this.onLobbyState) {
+            this.onLobbyState(data);
           }
           if (this.onLobbyUpdate) {
-            this.onLobbyUpdate({
-              hostRole: data.hostRole,
-              guestRole: data.guestRole,
-              roomCode: data.roomCode
-            });
+            this.onLobbyUpdate(data);
           }
           if (!this.isHost) {
+            const hostDisplay = data.hostName ? `Host [${data.hostName}]` : 'Host';
             const roleName = this.guestRole === 'red' ? '🔴 RED SHIP' : '🔵 BLUE SHIP';
-            if (this.onStatusChange) this.onStatusChange(`Connected! Assigned: ${roleName}. Waiting for Host to launch...`);
-            if (this.onConnected) this.onConnected({ isHost: false, hostRole: this.hostRole, guestRole: this.guestRole });
+            if (this.onStatusChange) this.onStatusChange(`Connected to ${hostDisplay}! Assigned: ${roleName}. Waiting for Host to launch...`);
+            if (this.onConnected) this.onConnected({ isHost: false, hostRole: this.hostRole, guestRole: this.guestRole, hostName: data.hostName, guestName: this.pilotName });
           }
           break;
 
@@ -386,6 +470,8 @@
         type: 'START_GAME',
         hostRole,
         guestRole,
+        hostName: this.pilotName,
+        guestName: this.peerPilotName || 'Co-Pilot',
         powerMode: config.powerMode || 'dual',
         difficulty: config.difficulty || 'medium',
         timestamp: Date.now()

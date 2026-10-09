@@ -2423,6 +2423,19 @@
       this.onlineLocalPlayerId = 1;
       this.onlineLocalShip = this.ship1;
       this.onlineRemoteShip = this.ship2;
+      this.randomCallsigns = [
+        'Maverick', 'Viper', 'Phoenix', 'Starling', 'Orion',
+        'Ghost', 'Nova', 'Falcon', 'Cosmo', 'Eclipse',
+        'Shadow', 'Blaze', 'Specter', 'Vortex', 'Apex',
+        'Titan', 'Drifter', 'Astro', 'Nebula', 'Echo'
+      ];
+      this.pilotName = localStorage.getItem('spaceship_flight_pilot_name') || '';
+      if (!this.pilotName) {
+        this.pilotName = this.randomCallsigns[Math.floor(Math.random() * this.randomCallsigns.length)];
+        try { localStorage.setItem('spaceship_flight_pilot_name', this.pilotName); } catch (_) {}
+      }
+      this.onlineHostName = '';
+      this.onlineGuestName = '';
       this.network = null;
       this.networkEvents = [];
       this.guestInputState = { left: false, right: false, up: false, fire: false, shield: false };
@@ -2672,7 +2685,27 @@
         onlineStatusBadge: document.getElementById('onlineStatusBadge'),
         onlinePingText: document.getElementById('onlinePingText'),
         p1TagText: document.getElementById('p1TagText'),
-        p2TagText: document.getElementById('p2TagText')
+        p2TagText: document.getElementById('p2TagText'),
+        onlinePilotNameInput: document.getElementById('onlinePilotNameInput'),
+        randomizePilotNameBtn: document.getElementById('randomizePilotNameBtn'),
+        crewRoomStatusBadge: document.getElementById('crewRoomStatusBadge'),
+        crewHostCard: document.getElementById('crewHostCard'),
+        crewHostShipBadge: document.getElementById('crewHostShipBadge'),
+        crewHostNameDisplay: document.getElementById('crewHostNameDisplay'),
+        crewGuestCard: document.getElementById('crewGuestCard'),
+        crewGuestAvatar: document.getElementById('crewGuestAvatar'),
+        crewGuestShipBadge: document.getElementById('crewGuestShipBadge'),
+        crewGuestNameDisplay: document.getElementById('crewGuestNameDisplay'),
+        crewGuestStatusBadge: document.getElementById('crewGuestStatusBadge'),
+        roleSelectRedSub: document.getElementById('roleSelectRedSub'),
+        roleSelectBlueSub: document.getElementById('roleSelectBlueSub'),
+        joinCrewManifestBox: document.getElementById('joinCrewManifestBox'),
+        joinHostCard: document.getElementById('joinHostCard'),
+        joinHostShipBadge: document.getElementById('joinHostShipBadge'),
+        joinHostNameDisplay: document.getElementById('joinHostNameDisplay'),
+        joinGuestCard: document.getElementById('joinGuestCard'),
+        joinGuestShipBadge: document.getElementById('joinGuestShipBadge'),
+        joinGuestNameDisplay: document.getElementById('joinGuestNameDisplay')
       };
 
       // Reinforcement Learning Controller
@@ -3142,17 +3175,27 @@
     setupNetworkHandlers() {
       if (!this.network) return;
 
-      this.network.onConnected = () => {
-        console.log('[Game] Co-pilot peer connected!');
+      this.network.onConnected = (info) => {
+        console.log('[Game] Co-pilot peer connected!', info);
+        if (info && info.hostName) this.onlineHostName = info.hostName;
+        if (info && info.guestName) this.onlineGuestName = info.guestName;
         if (this.isOnlineHost) {
           this.updateLobbyHostUI(true);
         } else {
           this.updateLobbyGuestUI(true);
         }
+        this.updateCrewManifestUI();
       };
 
       this.network.onDisconnected = () => {
         console.log('[Game] Peer disconnected');
+        if (this.isOnlineHost) {
+          this.onlineGuestName = '';
+          this.updateLobbyHostUI(false);
+        } else {
+          this.updateLobbyGuestUI(false);
+        }
+        this.updateCrewManifestUI();
         this.handlePeerDisconnected();
       };
 
@@ -3162,15 +3205,26 @@
         }
       };
 
+      this.network.onPilotUpdate = (data) => {
+        if (data.hostName) this.onlineHostName = data.hostName;
+        if (data.guestName) this.onlineGuestName = data.guestName;
+        this.updateCrewManifestUI();
+      };
+
       this.network.onLobbyState = (data) => {
         const hostRole = data.hostRole || 'red';
         this.onlineRole = hostRole;
         const guestRole = (hostRole === 'red') ? 'blue' : 'red';
+        if (data.hostName) this.onlineHostName = data.hostName;
+        if (data.guestName) this.onlineGuestName = data.guestName;
         this.updateGuestRoleDisplay(guestRole);
+        this.updateCrewManifestUI();
       };
 
       this.network.onStartGame = (data) => {
         console.log('[Game] Received START_GAME from host', data);
+        if (data.hostName) this.onlineHostName = data.hostName;
+        if (data.guestName) this.onlineGuestName = data.guestName;
         this.startOnlineGuestGame(data);
       };
 
@@ -3194,6 +3248,60 @@
       if (typeof SpaceshipNetwork !== 'undefined') {
         this.network = new SpaceshipNetwork();
         this.setupNetworkHandlers();
+      }
+
+      // Callsign Input & Randomize
+      if (this.domElements.onlinePilotNameInput) {
+        this.domElements.onlinePilotNameInput.value = this.pilotName;
+
+        const commitCallsign = () => {
+          let name = (this.domElements.onlinePilotNameInput.value || '').trim();
+          if (!name) {
+            name = this.randomCallsigns[Math.floor(Math.random() * this.randomCallsigns.length)];
+            this.domElements.onlinePilotNameInput.value = name;
+          }
+          this.pilotName = name;
+          try { localStorage.setItem('spaceship_flight_pilot_name', name); } catch (_) {}
+          if (this.isOnlineHost) {
+            this.onlineHostName = name;
+          } else {
+            this.onlineGuestName = name;
+          }
+          if (this.network) {
+            this.network.updatePilotName(name);
+          }
+          this.updateCrewManifestUI();
+        };
+
+        this.domElements.onlinePilotNameInput.addEventListener('input', () => {
+          const raw = this.domElements.onlinePilotNameInput.value;
+          this.pilotName = raw.trim() || 'Commander';
+          if (this.isOnlineHost) this.onlineHostName = this.pilotName;
+          else this.onlineGuestName = this.pilotName;
+          if (this.network) this.network.updatePilotName(this.pilotName);
+          this.updateCrewManifestUI();
+        });
+
+        this.domElements.onlinePilotNameInput.addEventListener('blur', commitCallsign);
+        this.domElements.onlinePilotNameInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') commitCallsign();
+        });
+      }
+
+      if (this.domElements.randomizePilotNameBtn) {
+        this.domElements.randomizePilotNameBtn.addEventListener('click', () => {
+          const others = this.randomCallsigns.filter(n => n !== this.pilotName);
+          const pick = others[Math.floor(Math.random() * others.length)] || 'Phoenix';
+          this.pilotName = pick;
+          if (this.domElements.onlinePilotNameInput) {
+            this.domElements.onlinePilotNameInput.value = pick;
+          }
+          try { localStorage.setItem('spaceship_flight_pilot_name', pick); } catch (_) {}
+          if (this.isOnlineHost) this.onlineHostName = pick;
+          else this.onlineGuestName = pick;
+          if (this.network) this.network.updatePilotName(pick);
+          this.updateCrewManifestUI();
+        });
       }
 
       if (this.domElements.onlineMultiplayerBtn) {
@@ -3301,25 +3409,98 @@
         this.domElements.onlinePaneJoin.style.display = (tab === 'join') ? 'block' : 'none';
         this.domElements.onlinePaneJoin.classList.toggle('active', tab === 'join');
       }
+      this.updateCrewManifestUI();
     }
 
     openOnlineLobby(tab = 'create') {
       this.showModal('onlineLobby');
+      if (this.domElements.onlinePilotNameInput) {
+        this.domElements.onlinePilotNameInput.value = this.pilotName;
+      }
       this.switchOnlineTab(tab);
       if (tab === 'create') {
         this.initHostRoom();
       }
     }
 
+    updateCrewManifestUI() {
+      const isConnected = !!(this.network && this.network.isConnected);
+      const hostName = this.onlineHostName || (this.isOnlineHost ? this.pilotName : (this.network && this.network.peerPilotName)) || 'Host';
+      const guestName = this.onlineGuestName || (!this.isOnlineHost ? this.pilotName : (this.network && this.network.peerPilotName)) || '';
+
+      // 1. Host Pane Manifest
+      if (this.domElements.crewHostNameDisplay) {
+        this.domElements.crewHostNameDisplay.textContent = hostName;
+      }
+      if (this.domElements.crewHostShipBadge) {
+        const isHostRed = (this.onlineRole === 'red');
+        this.domElements.crewHostShipBadge.textContent = isHostRed ? 'RED (P1)' : 'BLUE (P2)';
+        this.domElements.crewHostShipBadge.className = isHostRed ? 'crew-ship-badge red' : 'crew-ship-badge blue';
+      }
+      if (this.domElements.crewGuestShipBadge) {
+        const isGuestBlue = (this.onlineRole === 'red');
+        this.domElements.crewGuestShipBadge.textContent = isGuestBlue ? 'BLUE (P2)' : 'RED (P1)';
+        this.domElements.crewGuestShipBadge.className = isGuestBlue ? 'crew-ship-badge blue' : 'crew-ship-badge red';
+      }
+
+      if (this.domElements.roleSelectRedSub) {
+        this.domElements.roleSelectRedSub.textContent = `CO-PILOT (${guestName || 'P2'}): BLUE (P2)`;
+      }
+      if (this.domElements.roleSelectBlueSub) {
+        this.domElements.roleSelectBlueSub.textContent = `CO-PILOT (${guestName || 'P1'}): RED (P1)`;
+      }
+
+      if (this.domElements.crewRoomStatusBadge) {
+        this.domElements.crewRoomStatusBadge.textContent = isConnected ? '2/2 PILOTS' : '1/2 PILOTS';
+        this.domElements.crewRoomStatusBadge.className = isConnected ? 'crew-status-dot ready' : 'crew-status-dot waiting';
+      }
+
+      if (this.domElements.crewGuestCard) {
+        this.domElements.crewGuestCard.className = isConnected ? 'crew-member guest connected' : 'crew-member guest';
+      }
+      if (this.domElements.crewGuestAvatar) {
+        this.domElements.crewGuestAvatar.textContent = isConnected ? '🚀' : '⏳';
+      }
+      if (this.domElements.crewGuestNameDisplay) {
+        this.domElements.crewGuestNameDisplay.textContent = isConnected ? (guestName || 'Co-Pilot') : 'Waiting to join...';
+        this.domElements.crewGuestNameDisplay.className = isConnected ? 'crew-name' : 'crew-name waiting';
+      }
+      if (this.domElements.crewGuestStatusBadge) {
+        this.domElements.crewGuestStatusBadge.textContent = isConnected ? 'READY' : 'WAITING';
+        this.domElements.crewGuestStatusBadge.className = isConnected ? 'crew-badge connected' : 'crew-badge waiting';
+      }
+
+      // 2. Join Pane Manifest
+      if (this.domElements.joinCrewManifestBox) {
+        this.domElements.joinCrewManifestBox.style.display = isConnected ? 'block' : 'none';
+      }
+      if (this.domElements.joinHostNameDisplay) {
+        this.domElements.joinHostNameDisplay.textContent = hostName;
+      }
+      if (this.domElements.joinGuestNameDisplay) {
+        this.domElements.joinGuestNameDisplay.textContent = this.pilotName || 'You';
+      }
+      if (this.domElements.joinHostShipBadge && this.domElements.joinGuestShipBadge) {
+        const isHostRed = (this.onlineRole === 'red');
+        this.domElements.joinHostShipBadge.textContent = isHostRed ? 'RED (P1)' : 'BLUE (P2)';
+        this.domElements.joinHostShipBadge.className = isHostRed ? 'crew-ship-badge red' : 'crew-ship-badge blue';
+        this.domElements.joinGuestShipBadge.textContent = isHostRed ? 'BLUE (P2)' : 'RED (P1)';
+        this.domElements.joinGuestShipBadge.className = isHostRed ? 'crew-ship-badge blue' : 'crew-ship-badge red';
+      }
+    }
+
     initHostRoom() {
       if (!this.network) return;
       this.isOnlineHost = true;
+      this.onlineHostName = this.pilotName;
+      this.onlineGuestName = '';
       if (this.domElements.onlineRoomCodeDisplay) {
         this.domElements.onlineRoomCodeDisplay.textContent = 'GENERATING...';
       }
       this.updateLobbyHostUI(false);
+      this.updateCrewManifestUI();
 
-      this.network.createRoom(this.onlineRole).then(code => {
+      this.network.createRoom(this.onlineRole, this.pilotName).then(code => {
         if (this.domElements.onlineRoomCodeDisplay) {
           this.domElements.onlineRoomCodeDisplay.textContent = code;
         }
@@ -3342,6 +3523,7 @@
       if (this.domElements.roleSelectBlue) {
         this.domElements.roleSelectBlue.classList.toggle('active', role === 'blue');
       }
+      this.updateCrewManifestUI();
       if (this.network) {
         this.network.setHostRole(role);
       }
@@ -3351,23 +3533,28 @@
       if (this.domElements.createRadarPulse) {
         this.domElements.createRadarPulse.className = connected ? 'radar-pulse connected' : 'radar-pulse';
       }
+      const coPilotName = this.onlineGuestName || (this.network && this.network.peerPilotName) || '';
       if (this.domElements.createStatusTitle) {
-        this.domElements.createStatusTitle.textContent = connected ? 'CO-PILOT CONNECTED!' : 'WAITING FOR CO-PILOT...';
+        this.domElements.createStatusTitle.textContent = connected
+          ? (coPilotName ? `${coPilotName.toUpperCase()} CONNECTED!` : 'CO-PILOT CONNECTED!')
+          : 'WAITING FOR CO-PILOT...';
       }
       if (this.domElements.createStatusSub) {
         this.domElements.createStatusSub.textContent = connected
-          ? 'Both cockpits synchronized! Click Launch when ready to fly.'
-          : 'Share your room code or invite link. Once joined, launch when ready!';
+          ? `Cockpits synchronized with ${coPilotName || 'Co-Pilot'}! Click Launch when ready to fly.`
+          : 'Share your room code or link. When your friend joins, their callsign will appear above!';
       }
       if (this.domElements.onlineStartGameBtn) {
         this.domElements.onlineStartGameBtn.disabled = !connected;
         this.domElements.onlineStartGameBtn.classList.toggle('disabled', !connected);
       }
+      this.updateCrewManifestUI();
     }
 
     joinOnlineRoom(code) {
       if (!this.network || !code) return;
       this.isOnlineHost = false;
+      this.onlineGuestName = this.pilotName;
       const cleanCode = code.trim().toUpperCase();
 
       if (this.domElements.joinRadarPulse) {
@@ -3382,8 +3569,9 @@
       if (this.domElements.onlineConnectBtn) {
         this.domElements.onlineConnectBtn.disabled = true;
       }
+      this.updateCrewManifestUI();
 
-      this.network.joinRoom(cleanCode).then(() => {
+      this.network.joinRoom(cleanCode, this.pilotName).then(() => {
         this.updateLobbyGuestUI(true);
         if (this.domElements.onlineConnectBtn) {
           this.domElements.onlineConnectBtn.disabled = false;
@@ -3409,17 +3597,21 @@
       if (this.domElements.joinRadarPulse) {
         this.domElements.joinRadarPulse.className = connected ? 'radar-pulse connected' : 'radar-pulse';
       }
+      const hostName = this.onlineHostName || (this.network && this.network.peerPilotName) || '';
       if (this.domElements.joinStatusTitle) {
-        this.domElements.joinStatusTitle.textContent = connected ? 'CONNECTED TO HOST!' : 'READY TO CONNECT';
+        this.domElements.joinStatusTitle.textContent = connected
+          ? (hostName ? `CONNECTED TO ${hostName.toUpperCase()}!` : 'CONNECTED TO HOST!')
+          : 'READY TO CONNECT';
       }
       if (this.domElements.joinStatusSub) {
         this.domElements.joinStatusSub.textContent = connected
-          ? 'Cockpit link established! Waiting for the room host to launch mission...'
+          ? `Cockpit link established! Waiting for ${hostName || 'Host'} to launch mission...`
           : 'Enter your host\'s room code to join their cockpit simulation.';
       }
       if (this.domElements.guestRoleNotice) {
         this.domElements.guestRoleNotice.style.display = connected ? 'block' : 'none';
       }
+      this.updateCrewManifestUI();
     }
 
     updateGuestRoleDisplay(role) {
@@ -3430,6 +3622,7 @@
       if (this.domElements.guestRoleNotice) {
         this.domElements.guestRoleNotice.style.display = 'block';
       }
+      this.updateCrewManifestUI();
     }
 
     copyToClipboard(text, message) {
@@ -3500,6 +3693,8 @@
       this.onlineLocalPlayerId = (hostRole === 'red') ? 1 : 2;
       this.onlineLocalShip = (hostRole === 'red') ? this.ship1 : this.ship2;
       this.onlineRemoteShip = (hostRole === 'red') ? this.ship2 : this.ship1;
+      this.onlineHostName = this.pilotName || 'Host';
+      this.onlineGuestName = (this.network && this.network.peerPilotName) ? this.network.peerPilotName : (this.onlineGuestName || 'Co-Pilot');
 
       if (this.network) {
         this.network.sendStartGame(hostRole);
@@ -3517,6 +3712,8 @@
       this.onlineLocalPlayerId = (guestRole === 'red') ? 1 : 2;
       this.onlineLocalShip = (guestRole === 'red') ? this.ship1 : this.ship2;
       this.onlineRemoteShip = (guestRole === 'red') ? this.ship2 : this.ship1;
+      if (data.hostName) this.onlineHostName = data.hostName;
+      if (data.guestName) this.onlineGuestName = data.guestName;
 
       this.hideModals();
       this.startGame('multiplayer');
@@ -4950,12 +5147,14 @@
       if (this.domElements.p1TagText && this.domElements.p2TagText) {
         if (isMp && this.isOnline) {
           const isLocalRed = (this.onlineLocalPlayerId === 1);
+          const p1Pilot = (this.onlineRole === 'red') ? (this.onlineHostName || 'Host') : (this.onlineGuestName || 'Co-Pilot');
+          const p2Pilot = (this.onlineRole === 'red') ? (this.onlineGuestName || 'Co-Pilot') : (this.onlineHostName || 'Host');
           if (isLocalRed) {
-            this.domElements.p1TagText.innerHTML = 'P1 RED <span style="font-size:9px;color:#f87171;font-weight:900;letter-spacing:1px;margin-left:3px;">(YOU)</span>';
-            this.domElements.p2TagText.innerHTML = 'P2 BLUE <span style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-left:3px;">(CO-PILOT)</span>';
+            this.domElements.p1TagText.innerHTML = `${p1Pilot.toUpperCase()} <span style="font-size:9px;color:#f87171;font-weight:900;letter-spacing:1px;margin-left:3px;">(YOU)</span>`;
+            this.domElements.p2TagText.innerHTML = `${p2Pilot.toUpperCase()} <span style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-left:3px;">(CO-PILOT)</span>`;
           } else {
-            this.domElements.p1TagText.innerHTML = 'P1 RED <span style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-left:3px;">(CO-PILOT)</span>';
-            this.domElements.p2TagText.innerHTML = 'P2 BLUE <span style="font-size:9px;color:#38bdf8;font-weight:900;letter-spacing:1px;margin-left:3px;">(YOU)</span>';
+            this.domElements.p1TagText.innerHTML = `${p1Pilot.toUpperCase()} <span style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-left:3px;">(CO-PILOT)</span>`;
+            this.domElements.p2TagText.innerHTML = `${p2Pilot.toUpperCase()} <span style="font-size:9px;color:#38bdf8;font-weight:900;letter-spacing:1px;margin-left:3px;">(YOU)</span>`;
           }
         } else {
           this.domElements.p1TagText.textContent = 'P1 RED';
