@@ -3799,71 +3799,77 @@
     }
 
     sendHostSnapshot() {
+      if (!this.ship1 || !this.ship2) return;
+      const s1Angle = this.ship1.angle != null ? this.ship1.angle : (this.ship1.rotation || 0);
+      const s2Angle = this.ship2.angle != null ? this.ship2.angle : (this.ship2.rotation || 0);
+
       const s1 = {
-        x: +(this.ship1.x.toFixed(1)),
-        y: +(this.ship1.y.toFixed(1)),
-        rot: +(this.ship1.rotation.toFixed(2)),
-        dx: +(this.ship1.dx.toFixed(2)),
-        dy: +(this.ship1.dy.toFixed(2)),
-        t: this.ship1.thrust,
-        sh: this.ship1.shield,
-        she: +(this.ship1.shieldEnergy.toFixed(1)),
-        e: +(this.ship1.energy.toFixed(1)),
-        l: this.ship1.lives,
-        al: this.ship1.alive
+        x: +((this.ship1.x != null ? this.ship1.x : 0).toFixed(1)),
+        y: +((this.ship1.y != null ? this.ship1.y : 0).toFixed(1)),
+        rot: +(s1Angle.toFixed(2)),
+        ang: +(s1Angle.toFixed(2)),
+        dx: +((this.ship1.dx != null ? this.ship1.dx : 0).toFixed(2)),
+        dy: +((this.ship1.dy != null ? this.ship1.dy : 0).toFixed(2)),
+        t: !!(this.ship1.thrusting != null ? this.ship1.thrusting : this.ship1.thrust),
+        sh: !!(this.ship1.invincible != null ? this.ship1.invincible : this.ship1.shield),
+        she: +((this.ship1.shieldEnergy != null ? this.ship1.shieldEnergy : 100).toFixed(1)),
+        e: +((this.ship1.energy != null ? this.ship1.energy : 100).toFixed(1)),
+        l: this.ship1.lives != null ? this.ship1.lives : 3,
+        al: !!this.ship1.alive
       };
       const s2 = {
-        x: +(this.ship2.x.toFixed(1)),
-        y: +(this.ship2.y.toFixed(1)),
-        rot: +(this.ship2.rotation.toFixed(2)),
-        dx: +(this.ship2.dx.toFixed(2)),
-        dy: +(this.ship2.dy.toFixed(2)),
-        t: this.ship2.thrust,
-        sh: this.ship2.shield,
-        she: +(this.ship2.shieldEnergy.toFixed(1)),
-        e: +(this.ship2.energy.toFixed(1)),
-        l: this.ship2.lives,
-        al: this.ship2.alive
+        x: +((this.ship2.x != null ? this.ship2.x : 0).toFixed(1)),
+        y: +((this.ship2.y != null ? this.ship2.y : 0).toFixed(1)),
+        rot: +(s2Angle.toFixed(2)),
+        ang: +(s2Angle.toFixed(2)),
+        dx: +((this.ship2.dx != null ? this.ship2.dx : 0).toFixed(2)),
+        dy: +((this.ship2.dy != null ? this.ship2.dy : 0).toFixed(2)),
+        t: !!(this.ship2.thrusting != null ? this.ship2.thrusting : this.ship2.thrust),
+        sh: !!(this.ship2.invincible != null ? this.ship2.invincible : this.ship2.shield),
+        she: +((this.ship2.shieldEnergy != null ? this.ship2.shieldEnergy : 100).toFixed(1)),
+        e: +((this.ship2.energy != null ? this.ship2.energy : 100).toFixed(1)),
+        l: this.ship2.lives != null ? this.ship2.lives : 3,
+        al: !!this.ship2.alive
       };
 
-      const rocks = this.rocks.filter(r => !r.popped).map(r => ({
+      const rocks = (this.rocks || []).filter(r => r && !r.popped).map(r => ({
         id: r.id || (r.id = ++this.rockIdSeq),
-        x: +(r.x.toFixed(1)),
-        y: +(r.y.toFixed(1)),
-        dx: +(r.dx.toFixed(2)),
-        dy: +(r.dy.toFixed(2)),
-        rot: +(r.rotation.toFixed(2)),
-        rotS: +(r.rotSpeed.toFixed(3)),
-        rad: +(r.radius.toFixed(1)),
-        sc: +(r.scale.toFixed(2)),
+        x: +((r.x != null ? r.x : 0).toFixed(1)),
+        y: +((r.y != null ? r.y : 0).toFixed(1)),
+        dx: +((r.dx != null ? r.dx : 0).toFixed(2)),
+        dy: +((r.dy != null ? r.dy : 0).toFixed(2)),
+        rot: +((r.rotation != null ? r.rotation : 0).toFixed(2)),
+        rotS: +((r.rotSpeed != null ? r.rotSpeed : 0).toFixed(3)),
+        rad: +((r.radius != null ? r.radius : 20).toFixed(1)),
+        sc: +((r.scale != null ? r.scale : 1).toFixed(2)),
         shp: r.shapeIndex || 0
       }));
 
-      const bullets = this.bullets.filter(b => !b.hit).map(b => ({
-        x: +(b.x.toFixed(1)),
-        y: +(b.y.toFixed(1)),
-        sId: b.shooterId,
-        col: b.color
+      const bullets = (this.bullets || []).filter(b => b && !b.hit).map(b => ({
+        x: +((b.x != null ? b.x : 0).toFixed(1)),
+        y: +((b.y != null ? b.y : 0).toFixed(1)),
+        sId: b.shooterId || 1,
+        col: b.color || 'gold'
       }));
 
       let ufoData = null;
       if (this.ufo && this.ufo.alive) {
         ufoData = {
-          x: +(this.ufo.x.toFixed(1)),
-          y: +(this.ufo.y.toFixed(1)),
-          dx: +(this.ufo.dx.toFixed(2)),
-          dy: +(this.ufo.dy.toFixed(2)),
-          w: +(this.ufo.width.toFixed(1)),
-          h: +(this.ufo.height.toFixed(1))
+          x: +((this.ufo.x != null ? this.ufo.x : 0).toFixed(1)),
+          y: +((this.ufo.y != null ? this.ufo.y : 0).toFixed(1)),
+          dx: +((this.ufo.dx != null ? this.ufo.dx : 0).toFixed(2)),
+          dy: +((this.ufo.dy != null ? this.ufo.dy : 0).toFixed(2)),
+          w: +((this.ufo.width != null ? this.ufo.width : 40).toFixed(1)),
+          h: +((this.ufo.height != null ? this.ufo.height : 40).toFixed(1))
         };
       }
 
-      const ufoBullets = this.ufoBullets.filter(ub => !ub.hit).map(ub => ({
-        x: +(ub.x.toFixed(1)),
-        y: +(ub.y.toFixed(1)),
-        aim: ub.aimMode,
-        tgt: ub.targetType,
-        col: ub.defensiveColor
+      const ufoBullets = (this.ufoBullets || []).filter(ub => ub && !ub.hit).map(ub => ({
+        x: +((ub.x != null ? ub.x : 0).toFixed(1)),
+        y: +((ub.y != null ? ub.y : 0).toFixed(1)),
+        aim: ub.aimMode || 'linear',
+        tgt: ub.targetType || 'p1',
+        col: ub.defensiveColor || null
       }));
 
       const packet = {
@@ -3883,7 +3889,9 @@
         ev: this.networkEvents
       };
 
-      this.network.sendSnapshot(packet);
+      if (this.network && this.network.isConnected) {
+        this.network.sendSnapshot(packet);
+      }
       this.networkEvents = [];
     }
 
@@ -3906,28 +3914,36 @@
       if (snap.s1 && this.ship1) {
         this.ship1.x = snap.s1.x;
         this.ship1.y = snap.s1.y;
-        this.ship1.rotation = snap.s1.rot;
-        this.ship1.dx = snap.s1.dx;
-        this.ship1.dy = snap.s1.dy;
-        this.ship1.thrust = snap.s1.t;
-        this.ship1.shield = snap.s1.sh;
-        this.ship1.shieldEnergy = snap.s1.she;
-        this.ship1.energy = snap.s1.e;
-        this.ship1.lives = snap.s1.l;
-        this.ship1.alive = snap.s1.al;
+        const angle1 = (snap.s1.ang !== undefined ? snap.s1.ang : (snap.s1.rot !== undefined ? snap.s1.rot : 0));
+        this.ship1.angle = angle1;
+        this.ship1.rotation = angle1;
+        this.ship1.dx = snap.s1.dx || 0;
+        this.ship1.dy = snap.s1.dy || 0;
+        this.ship1.thrusting = !!snap.s1.t;
+        this.ship1.thrust = !!snap.s1.t;
+        this.ship1.invincible = !!snap.s1.sh;
+        this.ship1.shield = !!snap.s1.sh;
+        this.ship1.shieldEnergy = snap.s1.she !== undefined ? snap.s1.she : 100;
+        this.ship1.energy = snap.s1.e !== undefined ? snap.s1.e : 100;
+        this.ship1.lives = snap.s1.l !== undefined ? snap.s1.l : 3;
+        this.ship1.alive = snap.s1.al !== undefined ? snap.s1.al : true;
       }
       if (snap.s2 && this.ship2) {
         this.ship2.x = snap.s2.x;
         this.ship2.y = snap.s2.y;
-        this.ship2.rotation = snap.s2.rot;
-        this.ship2.dx = snap.s2.dx;
-        this.ship2.dy = snap.s2.dy;
-        this.ship2.thrust = snap.s2.t;
-        this.ship2.shield = snap.s2.sh;
-        this.ship2.shieldEnergy = snap.s2.she;
-        this.ship2.energy = snap.s2.e;
-        this.ship2.lives = snap.s2.l;
-        this.ship2.alive = snap.s2.al;
+        const angle2 = (snap.s2.ang !== undefined ? snap.s2.ang : (snap.s2.rot !== undefined ? snap.s2.rot : 0));
+        this.ship2.angle = angle2;
+        this.ship2.rotation = angle2;
+        this.ship2.dx = snap.s2.dx || 0;
+        this.ship2.dy = snap.s2.dy || 0;
+        this.ship2.thrusting = !!snap.s2.t;
+        this.ship2.thrust = !!snap.s2.t;
+        this.ship2.invincible = !!snap.s2.sh;
+        this.ship2.shield = !!snap.s2.sh;
+        this.ship2.shieldEnergy = snap.s2.she !== undefined ? snap.s2.she : 100;
+        this.ship2.energy = snap.s2.e !== undefined ? snap.s2.e : 100;
+        this.ship2.lives = snap.s2.l !== undefined ? snap.s2.l : 3;
+        this.ship2.alive = snap.s2.al !== undefined ? snap.s2.al : true;
       }
 
       if (Array.isArray(snap.r)) {
@@ -3954,8 +3970,9 @@
       }
 
       if (Array.isArray(snap.b)) {
+        const BulletClass = (typeof Bullet !== 'undefined' ? Bullet : (window.SpaceshipCore && window.SpaceshipCore.Bullet));
         this.bullets = snap.b.map(bData => {
-          const b = new SpaceshipCore.Bullet(bData.x, bData.y, 0, 0, 0, 1.0, bData.sId, bData.col);
+          const b = new BulletClass(bData.x, bData.y, 0, 0, 0, 1.0, bData.sId, bData.col);
           b.x = bData.x;
           b.y = bData.y;
           return b;
