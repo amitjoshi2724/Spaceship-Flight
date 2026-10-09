@@ -2423,17 +2423,16 @@
       this.onlineLocalPlayerId = 1;
       this.onlineLocalShip = this.ship1;
       this.onlineRemoteShip = this.ship2;
-      this.randomCallsigns = [
-        'Maverick', 'Viper', 'Phoenix', 'Starling', 'Orion',
-        'Ghost', 'Nova', 'Falcon', 'Cosmo', 'Eclipse',
-        'Shadow', 'Blaze', 'Specter', 'Vortex', 'Apex',
-        'Titan', 'Drifter', 'Astro', 'Nebula', 'Echo'
-      ];
-      this.pilotName = localStorage.getItem('spaceship_flight_pilot_name') || '';
-      if (!this.pilotName) {
-        this.pilotName = this.randomCallsigns[Math.floor(Math.random() * this.randomCallsigns.length)];
-        try { localStorage.setItem('spaceship_flight_pilot_name', this.pilotName); } catch (_) {}
-      }
+      this.pilotName = '';
+      try {
+        const stored = (localStorage.getItem('spaceship_flight_pilot_name') || '').trim();
+        const oldDefaults = ['Commander', 'Astro', 'Maverick', 'Viper', 'Phoenix', 'Starling', 'Orion', 'Ghost', 'Nova', 'Falcon', 'Cosmo', 'Eclipse', 'Shadow', 'Blaze', 'Specter', 'Vortex', 'Apex', 'Titan', 'Drifter', 'Nebula', 'Echo'];
+        if (stored && !oldDefaults.includes(stored)) {
+          this.pilotName = stored;
+        } else if (stored && oldDefaults.includes(stored)) {
+          localStorage.removeItem('spaceship_flight_pilot_name');
+        }
+      } catch (_) {}
       this.onlineHostName = '';
       this.onlineGuestName = '';
       this.network = null;
@@ -3250,18 +3249,20 @@
         this.setupNetworkHandlers();
       }
 
-      // Callsign Input & Randomize
+      // Pilot Name Input (Optional - players can enter their name if they want)
       if (this.domElements.onlinePilotNameInput) {
-        this.domElements.onlinePilotNameInput.value = this.pilotName;
+        this.domElements.onlinePilotNameInput.value = this.pilotName || '';
 
-        const commitCallsign = () => {
-          let name = (this.domElements.onlinePilotNameInput.value || '').trim();
-          if (!name) {
-            name = this.randomCallsigns[Math.floor(Math.random() * this.randomCallsigns.length)];
-            this.domElements.onlinePilotNameInput.value = name;
-          }
+        const saveAndSyncName = () => {
+          const name = (this.domElements.onlinePilotNameInput.value || '').trim();
           this.pilotName = name;
-          try { localStorage.setItem('spaceship_flight_pilot_name', name); } catch (_) {}
+          try {
+            if (name) {
+              localStorage.setItem('spaceship_flight_pilot_name', name);
+            } else {
+              localStorage.removeItem('spaceship_flight_pilot_name');
+            }
+          } catch (_) {}
           if (this.isOnlineHost) {
             this.onlineHostName = name;
           } else {
@@ -3273,34 +3274,13 @@
           this.updateCrewManifestUI();
         };
 
-        this.domElements.onlinePilotNameInput.addEventListener('input', () => {
-          const raw = this.domElements.onlinePilotNameInput.value;
-          this.pilotName = raw.trim() || 'Commander';
-          if (this.isOnlineHost) this.onlineHostName = this.pilotName;
-          else this.onlineGuestName = this.pilotName;
-          if (this.network) this.network.updatePilotName(this.pilotName);
-          this.updateCrewManifestUI();
-        });
-
-        this.domElements.onlinePilotNameInput.addEventListener('blur', commitCallsign);
+        this.domElements.onlinePilotNameInput.addEventListener('input', saveAndSyncName);
+        this.domElements.onlinePilotNameInput.addEventListener('blur', saveAndSyncName);
         this.domElements.onlinePilotNameInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') commitCallsign();
-        });
-      }
-
-      if (this.domElements.randomizePilotNameBtn) {
-        this.domElements.randomizePilotNameBtn.addEventListener('click', () => {
-          const others = this.randomCallsigns.filter(n => n !== this.pilotName);
-          const pick = others[Math.floor(Math.random() * others.length)] || 'Phoenix';
-          this.pilotName = pick;
-          if (this.domElements.onlinePilotNameInput) {
-            this.domElements.onlinePilotNameInput.value = pick;
+          if (e.key === 'Enter') {
+            saveAndSyncName();
+            this.domElements.onlinePilotNameInput.blur();
           }
-          try { localStorage.setItem('spaceship_flight_pilot_name', pick); } catch (_) {}
-          if (this.isOnlineHost) this.onlineHostName = pick;
-          else this.onlineGuestName = pick;
-          if (this.network) this.network.updatePilotName(pick);
-          this.updateCrewManifestUI();
         });
       }
 
@@ -3425,12 +3405,12 @@
 
     updateCrewManifestUI() {
       const isConnected = !!(this.network && this.network.isConnected);
-      const hostName = this.onlineHostName || (this.isOnlineHost ? this.pilotName : (this.network && this.network.peerPilotName)) || 'Host';
+      const hostName = this.onlineHostName || (this.isOnlineHost ? this.pilotName : (this.network && this.network.peerPilotName)) || '';
       const guestName = this.onlineGuestName || (!this.isOnlineHost ? this.pilotName : (this.network && this.network.peerPilotName)) || '';
 
       // 1. Host Pane Manifest
       if (this.domElements.crewHostNameDisplay) {
-        this.domElements.crewHostNameDisplay.textContent = hostName;
+        this.domElements.crewHostNameDisplay.textContent = hostName || 'Host';
       }
       if (this.domElements.crewHostShipBadge) {
         const isHostRed = (this.onlineRole === 'red');
@@ -3443,11 +3423,12 @@
         this.domElements.crewGuestShipBadge.className = isGuestBlue ? 'crew-ship-badge blue' : 'crew-ship-badge red';
       }
 
+      const guestLabel = guestName ? `CO-PILOT (${guestName})` : 'CO-PILOT';
       if (this.domElements.roleSelectRedSub) {
-        this.domElements.roleSelectRedSub.textContent = `CO-PILOT (${guestName || 'P2'}): BLUE (P2)`;
+        this.domElements.roleSelectRedSub.textContent = `${guestLabel}: BLUE (P2)`;
       }
       if (this.domElements.roleSelectBlueSub) {
-        this.domElements.roleSelectBlueSub.textContent = `CO-PILOT (${guestName || 'P1'}): RED (P1)`;
+        this.domElements.roleSelectBlueSub.textContent = `${guestLabel}: RED (P1)`;
       }
 
       if (this.domElements.crewRoomStatusBadge) {
@@ -3475,10 +3456,10 @@
         this.domElements.joinCrewManifestBox.style.display = isConnected ? 'block' : 'none';
       }
       if (this.domElements.joinHostNameDisplay) {
-        this.domElements.joinHostNameDisplay.textContent = hostName;
+        this.domElements.joinHostNameDisplay.textContent = hostName || 'Host';
       }
       if (this.domElements.joinGuestNameDisplay) {
-        this.domElements.joinGuestNameDisplay.textContent = this.pilotName || 'You';
+        this.domElements.joinGuestNameDisplay.textContent = this.pilotName || 'Co-Pilot';
       }
       if (this.domElements.joinHostShipBadge && this.domElements.joinGuestShipBadge) {
         const isHostRed = (this.onlineRole === 'red');
@@ -3693,8 +3674,8 @@
       this.onlineLocalPlayerId = (hostRole === 'red') ? 1 : 2;
       this.onlineLocalShip = (hostRole === 'red') ? this.ship1 : this.ship2;
       this.onlineRemoteShip = (hostRole === 'red') ? this.ship2 : this.ship1;
-      this.onlineHostName = this.pilotName || 'Host';
-      this.onlineGuestName = (this.network && this.network.peerPilotName) ? this.network.peerPilotName : (this.onlineGuestName || 'Co-Pilot');
+      this.onlineHostName = this.pilotName || '';
+      this.onlineGuestName = (this.network && this.network.peerPilotName) ? this.network.peerPilotName : (this.onlineGuestName || '');
 
       if (this.network) {
         this.network.sendStartGame(hostRole);
@@ -5147,14 +5128,18 @@
       if (this.domElements.p1TagText && this.domElements.p2TagText) {
         if (isMp && this.isOnline) {
           const isLocalRed = (this.onlineLocalPlayerId === 1);
-          const p1Pilot = (this.onlineRole === 'red') ? (this.onlineHostName || 'Host') : (this.onlineGuestName || 'Co-Pilot');
-          const p2Pilot = (this.onlineRole === 'red') ? (this.onlineGuestName || 'Co-Pilot') : (this.onlineHostName || 'Host');
+          const p1Pilot = (this.onlineRole === 'red')
+            ? (this.onlineHostName ? this.onlineHostName.toUpperCase() : 'P1 RED')
+            : (this.onlineGuestName ? this.onlineGuestName.toUpperCase() : 'P1 RED');
+          const p2Pilot = (this.onlineRole === 'red')
+            ? (this.onlineGuestName ? this.onlineGuestName.toUpperCase() : 'P2 BLUE')
+            : (this.onlineHostName ? this.onlineHostName.toUpperCase() : 'P2 BLUE');
           if (isLocalRed) {
-            this.domElements.p1TagText.innerHTML = `${p1Pilot.toUpperCase()} <span style="font-size:9px;color:#f87171;font-weight:900;letter-spacing:1px;margin-left:3px;">(YOU)</span>`;
-            this.domElements.p2TagText.innerHTML = `${p2Pilot.toUpperCase()} <span style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-left:3px;">(CO-PILOT)</span>`;
+            this.domElements.p1TagText.innerHTML = `${p1Pilot} <span style="font-size:9px;color:#f87171;font-weight:900;letter-spacing:1px;margin-left:3px;">(YOU)</span>`;
+            this.domElements.p2TagText.innerHTML = `${p2Pilot} <span style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-left:3px;">(CO-PILOT)</span>`;
           } else {
-            this.domElements.p1TagText.innerHTML = `${p1Pilot.toUpperCase()} <span style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-left:3px;">(CO-PILOT)</span>`;
-            this.domElements.p2TagText.innerHTML = `${p2Pilot.toUpperCase()} <span style="font-size:9px;color:#38bdf8;font-weight:900;letter-spacing:1px;margin-left:3px;">(YOU)</span>`;
+            this.domElements.p1TagText.innerHTML = `${p1Pilot} <span style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-left:3px;">(CO-PILOT)</span>`;
+            this.domElements.p2TagText.innerHTML = `${p2Pilot} <span style="font-size:9px;color:#38bdf8;font-weight:900;letter-spacing:1px;margin-left:3px;">(YOU)</span>`;
           }
         } else {
           this.domElements.p1TagText.textContent = 'P1 RED';

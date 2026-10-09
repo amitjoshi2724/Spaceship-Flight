@@ -35,7 +35,7 @@
       this._lastPingTimestamp = 0;
 
       // Pilot Names
-      this.pilotName = 'Commander';
+      this.pilotName = '';
       this.peerPilotName = '';
 
       // Host settings
@@ -62,7 +62,7 @@
     /**
      * Creates a new multiplayer room as Host
      */
-    createRoom(preferredHostRole = 'red', pilotName = 'Commander') {
+    createRoom(preferredHostRole = 'red', pilotName = '') {
       return new Promise((resolve, reject) => {
         if (!this.isPeerAvailable()) {
           const msg = 'WebRTC library loading or unavailable. Check internet connection.';
@@ -74,7 +74,7 @@
         this.isHost = true;
         this.hostRole = preferredHostRole;
         this.guestRole = preferredHostRole === 'red' ? 'blue' : 'red';
-        this.pilotName = (pilotName || '').trim() || 'Commander';
+        this.pilotName = (pilotName || '').trim();
         this.peerPilotName = '';
         this.roomCode = generateRoomCode();
         const peerId = getPeerIdForRoom(this.roomCode);
@@ -133,7 +133,7 @@
     /**
      * Joins an existing room as Guest
      */
-    joinRoom(roomCode, pilotName = 'Co-Pilot') {
+    joinRoom(roomCode, pilotName = '') {
       return new Promise((resolve, reject) => {
         if (!this.isPeerAvailable()) {
           const msg = 'WebRTC library loading or unavailable. Check internet connection.';
@@ -150,7 +150,7 @@
 
         this.disconnect();
         this.isHost = false;
-        this.pilotName = (pilotName || '').trim() || 'Co-Pilot';
+        this.pilotName = (pilotName || '').trim();
         this.peerPilotName = '';
         this.roomCode = cleanCode;
         const hostPeerId = getPeerIdForRoom(this.roomCode);
@@ -241,7 +241,7 @@
      * Updates local player callsign and notifies remote peer
      */
     updatePilotName(newName) {
-      this.pilotName = (newName || '').trim() || (this.isHost ? 'Commander' : 'Co-Pilot');
+      this.pilotName = (newName || '').trim();
       if (this.conn && this.conn.open) {
         this.send({
           type: 'PILOT_RENAME',
@@ -326,8 +326,8 @@
 
         case 'PILOT_HELLO':
           if (this.isHost) {
-            this.peerPilotName = (data.pilotName || '').trim() || 'Co-Pilot';
-            console.log('[Network] Co-pilot announced callsign:', this.peerPilotName);
+            this.peerPilotName = (data.pilotName || '').trim();
+            console.log('[Network] Co-pilot announced name:', this.peerPilotName);
             const state = {
               type: 'LOBBY_STATE',
               hostRole: this.hostRole,
@@ -349,7 +349,7 @@
           break;
 
         case 'PILOT_RENAME':
-          this.peerPilotName = (data.pilotName || '').trim() || (this.isHost ? 'Co-Pilot' : 'Commander');
+          this.peerPilotName = (data.pilotName || '').trim();
           if (this.isHost) {
             this.send({
               type: 'LOBBY_STATE',
@@ -471,7 +471,7 @@
         hostRole,
         guestRole,
         hostName: this.pilotName,
-        guestName: this.peerPilotName || 'Co-Pilot',
+        guestName: this.peerPilotName,
         powerMode: config.powerMode || 'dual',
         difficulty: config.difficulty || 'medium',
         timestamp: Date.now()

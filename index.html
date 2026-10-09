@@ -21,7 +21,7 @@
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
     rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=2.3.2">
+  <link rel="stylesheet" href="style.css?v=2.3.3">
   <link rel="manifest" href="manifest.json?v=2.0.2">
   <link rel="icon" type="image/png" sizes="64x64" href="images/newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="images/newspaceship.png">
@@ -713,16 +713,15 @@
       <div class="modal-card glass-panel online-lobby-card">
         <h2 class="modal-title">2-PLAYER ONLINE CO-OP</h2>
 
-        <!-- Callsign / Username Selection (Codenames Style) -->
+        <!-- Pilot Name / Username Input (Optional) -->
         <div class="online-pilot-bar">
           <div class="pilot-label-row">
-            <label for="onlinePilotNameInput" class="setting-label">YOUR CALLSIGN / PILOT NAME</label>
-            <span class="pilot-hint">VISIBLE TO YOUR CO-PILOT</span>
+            <label for="onlinePilotNameInput" class="setting-label">YOUR NAME</label>
+            <span class="pilot-hint">OPTIONAL</span>
           </div>
           <div class="pilot-input-wrap">
-            <span class="pilot-input-icon">👨‍🚀</span>
-            <input type="text" id="onlinePilotNameInput" class="pilot-name-input" maxlength="15" placeholder="Enter Callsign..." autocomplete="off" spellcheck="false" value="Commander">
-            <button type="button" id="randomizePilotNameBtn" class="pilot-random-btn" title="Generate Random Callsign">🎲 RANDOM</button>
+            <span class="pilot-input-icon">👤</span>
+            <input type="text" id="onlinePilotNameInput" class="pilot-name-input" maxlength="15" placeholder="Enter your name (optional)..." autocomplete="off" spellcheck="false" value="">
           </div>
         </div>
 
@@ -764,7 +763,7 @@
                     <span class="crew-title">HOST</span>
                     <span class="crew-ship-badge red" id="crewHostShipBadge">RED (P1)</span>
                   </div>
-                  <div class="crew-name" id="crewHostNameDisplay">Commander</div>
+                  <div class="crew-name" id="crewHostNameDisplay">Host</div>
                 </div>
                 <div class="crew-badge connected">YOU</div>
               </div>
@@ -840,7 +839,7 @@
                     <span class="crew-title">ROOM HOST</span>
                     <span class="crew-ship-badge red" id="joinHostShipBadge">RED (P1)</span>
                   </div>
-                  <div class="crew-name" id="joinHostNameDisplay">Commander</div>
+                  <div class="crew-name" id="joinHostNameDisplay">Host</div>
                 </div>
                 <div class="crew-badge connected">HOST</div>
               </div>
@@ -932,9 +931,9 @@
   </div>
 
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="network.js?v=2.3.2"></script>
+  <script src="network.js?v=2.3.3"></script>
   <script src="rl_agent.js?v=2.1.0"></script>
-  <script src="game.js?v=2.3.2"></script>
+  <script src="game.js?v=2.3.3"></script>
 </body>
 
 </html>
