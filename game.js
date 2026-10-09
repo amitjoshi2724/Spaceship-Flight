@@ -923,14 +923,15 @@
       this.sprites.blueMoving.src = imgPrefix + 'images/bluenewspaceshipmoving2.png';
     }
 
-    recalculateSize() {
+    recalculateSize(customCanvasHeight) {
       // Adaptive Ship Sizing:
-      // Uses the actual playable game arena height (canvas.height) so neither desktop
-      // nor tall vertical phones with letterbox padding distort the proportion.
+      // Uses the actual playable game arena height (canvas.height or host reference height)
+      // so neither desktop nor tall vertical phones with letterbox padding distort the proportion.
       // Scaled up by 1.3x so the standard (100%) default matches the former 130% size.
-      const isPortrait = this.canvas.height < 320;
-      const baseRatio = isPortrait ? 0.15 : Math.max(0.08, Math.min(0.106, 44 / Math.max(400, this.canvas.height)));
-      const basePx = this.canvas.height * baseRatio;
+      const arenaH = customCanvasHeight || this.canvas.height;
+      const isPortrait = arenaH < 320;
+      const baseRatio = isPortrait ? 0.15 : Math.max(0.08, Math.min(0.106, 44 / Math.max(400, arenaH)));
+      const basePx = arenaH * baseRatio;
 
       const userScale = (this.scalePercent || 100) / 100;
       this.width = Math.round(basePx * userScale);
@@ -1664,8 +1665,10 @@
       return boostTable[this.difficulty] ?? 1.40;
     }
 
-    recalculateSize() {
-      const dScreen = Math.min(this.canvas.width, this.canvas.height);
+    recalculateSize(customCanvasWidth, customCanvasHeight) {
+      const cw = customCanvasWidth || this.canvas.width;
+      const ch = customCanvasHeight || this.canvas.height;
+      const dScreen = Math.min(cw, ch);
       const shipScale = (this.ship && this.ship.scalePercent)
         ? this.ship.scalePercent
         : parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
@@ -2414,6 +2417,8 @@
       // Online Multiplayer State
       this.isOnline = false;
       this.isOnlineHost = false;
+      this.hostCanvasWidth = null;
+      this.hostCanvasHeight = null;
       this.onlineRole = 'red'; // Host ship selection: 'red' (P1) or 'blue' (P2)
       this.onlineLocalPlayerId = 1;
       this.onlineLocalShip = this.ship1;
@@ -3627,6 +3632,8 @@
       }));
 
       const packet = {
+        cw: this.canvas.width,
+        ch: this.canvas.height,
         s1,
         s2,
         r: rocks,
@@ -3647,6 +3654,19 @@
 
     applySnapshot(snap) {
       if (!snap) return;
+
+      if (snap.cw && snap.ch) {
+        if (this.hostCanvasWidth !== snap.cw || this.hostCanvasHeight !== snap.ch) {
+          this.hostCanvasWidth = snap.cw;
+          this.hostCanvasHeight = snap.ch;
+          for (const s of [this.ship1, this.ship2]) {
+            if (s && typeof s.recalculateSize === 'function') s.recalculateSize(snap.ch);
+          }
+          if (this.ufo && typeof this.ufo.recalculateSize === 'function') {
+            this.ufo.recalculateSize(snap.cw, snap.ch);
+          }
+        }
+      }
 
       if (snap.s1 && this.ship1) {
         this.ship1.x = snap.s1.x;
@@ -3805,14 +3825,16 @@
     }
 
     updateGuestSimulation(dtSeconds) {
+      const refW = this.hostCanvasWidth || this.canvas.width;
+      const refH = this.hostCanvasHeight || this.canvas.height;
       for (const s of this.ships) {
         if (s && s.alive) {
           s.x += s.dx;
           s.y += s.dy;
-          if (s.x < -s.width) s.x = this.canvas.width + s.width;
-          else if (s.x > this.canvas.width + s.width) s.x = -s.width;
-          if (s.y < -s.height) s.y = this.canvas.height + s.height;
-          else if (s.y > this.canvas.height + s.height) s.y = -s.height;
+          if (s.x < -s.width) s.x = refW + s.width;
+          else if (s.x > refW + s.width) s.x = -s.width;
+          if (s.y < -s.height) s.y = refH + s.height;
+          else if (s.y > refH + s.height) s.y = -s.height;
         }
       }
 
@@ -4996,6 +5018,8 @@
         if (this.network) this.network.disconnect();
         this.isOnline = false;
         this.isOnlineHost = false;
+        this.hostCanvasWidth = null;
+        this.hostCanvasHeight = null;
       }
       this.rlMode = null;
       if (this.rlAgent) this.rlAgent.mode = 'idle';
@@ -5865,6 +5889,34 @@
       // Clear & draw background
       this.starfield.draw(this.ctx, this.showStars);
 
+      // If guest in online multiplayer, apply uniform aspect-fit arena transformation
+      let appliedGuestViewport = false;
+      if (this.isOnline && !this.isOnlineHost && this.hostCanvasWidth && this.hostCanvasHeight) {
+        const guestW = this.canvas.width;
+        const guestH = this.canvas.height;
+        const hostW = this.hostCanvasWidth;
+        const hostH = this.hostCanvasHeight;
+
+        const scale = Math.min(guestW / hostW, guestH / hostH);
+        const offsetX = (guestW - hostW * scale) / 2;
+        const offsetY = (guestH - hostH * scale) / 2;
+
+        this.ctx.save();
+        this.ctx.translate(offsetX, offsetY);
+        this.ctx.scale(scale, scale);
+        appliedGuestViewport = true;
+
+        // If aspect ratios differ (causing letterbox/pillarbox padding), draw subtle cyber arena boundary
+        if (offsetX > 2 || offsetY > 2) {
+          this.ctx.save();
+          this.ctx.strokeStyle = 'rgba(56, 189, 248, 0.28)';
+          this.ctx.lineWidth = 1.5 / scale;
+          this.ctx.setLineDash([8 / scale, 6 / scale]);
+          this.ctx.strokeRect(0, 0, hostW, hostH);
+          this.ctx.restore();
+        }
+      }
+
       // Draw game items
       this.particles.draw(this.ctx);
 
@@ -5888,6 +5940,10 @@
         for (const s of this.ships) {
           if (s && s.alive) s.draw(this.ctx);
         }
+      }
+
+      if (appliedGuestViewport) {
+        this.ctx.restore();
       }
 
       this.ctx.restore();
