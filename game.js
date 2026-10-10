@@ -89,6 +89,39 @@
       } catch (e) { }
     }
 
+    playPauseAlert(isRemote = false) {
+      if (!this.enabled) return;
+      this.init();
+      this.resume();
+      if (!this.ctx) return;
+
+      try {
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        if (isRemote) {
+          // Subtle two-tone beacon chime for remote pause: 520Hz -> 440Hz
+          osc.frequency.setValueAtTime(520, now);
+          osc.frequency.setValueAtTime(440, now + 0.1);
+        } else {
+          // Cheerful ascending unpause tone: 440Hz -> 587Hz
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.setValueAtTime(587, now + 0.1);
+        }
+
+        gain.gain.setValueAtTime(0.16, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.24);
+      } catch (e) { }
+    }
+
     playShieldSound() {
       if (!this.enabled) return;
       this.init();
@@ -2435,6 +2468,8 @@
       } catch (_) {}
       this.onlineHostName = '';
       this.onlineGuestName = '';
+      this.onlinePausedBy = null; // 'local' or 'remote'
+      this.onlinePausedByName = '';
       this.network = null;
       this.networkEvents = [];
       this.guestInputState = { left: false, right: false, up: false, fire: false, shield: false };
@@ -2570,6 +2605,15 @@
         // Modals
         startScreen: document.getElementById('startScreen'),
         pauseModal: document.getElementById('pauseModal'),
+        pauseModalTitle: document.getElementById('pauseModalTitle'),
+        pauseOnlineBanner: document.getElementById('pauseOnlineBanner'),
+        pauseOnlineDot: document.getElementById('pauseOnlineDot'),
+        pauseOnlineBadge: document.getElementById('pauseOnlineBadge'),
+        pauseOnlineRoleBadge: document.getElementById('pauseOnlineRoleBadge'),
+        pauseOnlineStatusTitle: document.getElementById('pauseOnlineStatusTitle'),
+        pauseOnlineStatusSub: document.getElementById('pauseOnlineStatusSub'),
+        pauseOnlinePulseStatus: document.getElementById('pauseOnlinePulseStatus'),
+        pauseOnlineActionHint: document.getElementById('pauseOnlineActionHint'),
         gameOverModal: document.getElementById('gameOverModal'),
         instructionsModal: document.getElementById('instructionsModal'),
         creditsModal: document.getElementById('creditsModal'),
@@ -3231,6 +3275,37 @@
         console.log('[Game] Received RESTART_GAME from host');
         if (!this.isOnlineHost) {
           this.restartOnlineGuestGame();
+        }
+      };
+
+      this.network.onPause = (data) => {
+        console.log('[Game] Received PAUSE from peer', data);
+        this.handleRemotePause(data);
+      };
+
+      this.network.onResume = (data) => {
+        console.log('[Game] Received RESUME from peer', data);
+        this.handleRemoteResume(data);
+      };
+
+      this.network.onGameOver = (data) => {
+        console.log('[Game] Received GAME_OVER from host', data);
+        if (data) {
+          if (typeof data.score === 'number') this.score = data.score;
+          if (typeof data.highScore === 'number') this.highScore = data.highScore;
+          if (typeof data.p1Kills === 'number') this.p1Kills = data.p1Kills;
+          if (typeof data.p2Kills === 'number') this.p2Kills = data.p2Kills;
+        }
+        if (this.state !== 'GAMEOVER') {
+          this.gameOver();
+        }
+      };
+
+      this.network.onRequestRestart = (data) => {
+        console.log('[Game] Guest requested restart', data);
+        if (this.isOnlineHost) {
+          if (this.network) this.network.sendRestartGame();
+          this.startGame('multiplayer');
         }
       };
 
@@ -4015,6 +4090,10 @@
 
       if (snap.st === 'GAMEOVER' && this.state !== 'GAMEOVER') {
         this.gameOver();
+      } else if (snap.st === 'PAUSED' && this.state === 'PLAYING') {
+        this.handleRemotePause({ pausedBy: this.onlineHostName || 'Host' });
+      } else if (snap.st === 'PLAYING' && this.state === 'PAUSED' && this.onlinePausedBy === 'remote') {
+        this.handleRemoteResume();
       }
     }
 
@@ -4687,7 +4766,13 @@
       // Modals Close
       this.domElements.closeInstructionsBtn.addEventListener('click', () => this.hideModals());
       this.domElements.closeCreditsBtn.addEventListener('click', () => this.hideModals());
-      this.domElements.closeSettingsBtn.addEventListener('click', () => this.hideModals());
+      this.domElements.closeSettingsBtn.addEventListener('click', () => {
+        if (this.state === 'PAUSED') {
+          this.showModal('pause');
+        } else {
+          this.hideModals();
+        }
+      });
 
       // Pause Menu
       this.domElements.pauseBtn.addEventListener('click', () => this.togglePause());
@@ -4706,7 +4791,17 @@
             if (this.network) this.network.sendRestartGame();
             this.startGame('multiplayer');
           } else {
-            alert('Waiting for room host to restart the flight mission...');
+            if (this.network && this.network.isConnected) {
+              this.network.sendRestartRequest(this.pilotName || 'Co-pilot');
+              if (this.domElements.retryBtn) {
+                this.domElements.retryBtn.textContent = 'REQUEST SENT...';
+                setTimeout(() => {
+                  if (this.domElements.retryBtn) this.domElements.retryBtn.textContent = 'PLAY AGAIN';
+                }, 2000);
+              }
+            } else {
+              alert('Waiting for room host to restart the flight mission...');
+            }
           }
           return;
         }
@@ -5274,25 +5369,181 @@
       }
     }
 
-    togglePause() {
-      if (this.state === 'PLAYING') {
-        this.state = 'PAUSED';
-        this.ship.setThrust(false);
-        this.updatePauseButtons(true);
-        this.showModal('pause');
-      } else if (this.state === 'PAUSED') {
-        this.resumeGame();
+    updateOnlinePauseUI(isPaused, pausedBySide = 'local', pilotName = '', peerRole = null) {
+      if (!this.domElements.pauseOnlineBanner) return;
+      if (!isPaused || !this.isOnline) {
+        this.domElements.pauseOnlineBanner.style.display = 'none';
+        this.domElements.pauseOnlineBanner.classList.add('hidden');
+        if (this.domElements.pauseModalTitle) {
+          this.domElements.pauseModalTitle.textContent = 'PAUSED';
+        }
+        if (this.domElements.onlineStatusBadge) {
+          this.domElements.onlineStatusBadge.classList.remove('is-paused');
+        }
+        if (this.domElements.onlinePingText && this.network && this.network.ping) {
+          this.domElements.onlinePingText.innerHTML = `ONLINE &bull; ${this.network.ping}ms`;
+        }
+        return;
+      }
+
+      this.domElements.pauseOnlineBanner.style.display = 'block';
+      this.domElements.pauseOnlineBanner.classList.remove('hidden');
+
+      const isRemote = (pausedBySide === 'remote');
+      this.domElements.pauseOnlineBanner.classList.toggle('by-peer', isRemote);
+      this.domElements.pauseOnlineBanner.classList.toggle('by-you', !isRemote);
+
+      // Determine role and ship color
+      let roleLabel = '';
+      let roleClass = '';
+      if (isRemote) {
+        const remoteRole = peerRole || (this.isOnlineHost ? ((this.onlineRole === 'red') ? 'blue' : 'red') : this.onlineRole);
+        roleLabel = (remoteRole === 'red') ? 'RED SHIP' : 'BLUE SHIP';
+        roleClass = (remoteRole === 'red') ? 'red' : 'blue';
+      } else {
+        const myRole = this.isOnlineHost ? this.onlineRole : ((this.onlineRole === 'red') ? 'blue' : 'red');
+        roleLabel = (myRole === 'red') ? 'RED SHIP (YOU)' : 'BLUE SHIP (YOU)';
+        roleClass = (myRole === 'red') ? 'red' : 'blue';
+      }
+
+      if (this.domElements.pauseOnlineRoleBadge) {
+        this.domElements.pauseOnlineRoleBadge.textContent = roleLabel;
+        this.domElements.pauseOnlineRoleBadge.className = `pause-online-role-badge ${roleClass}`;
+      }
+
+      if (this.domElements.pauseOnlineBadge) {
+        this.domElements.pauseOnlineBadge.textContent = isRemote ? 'CO-PILOT ON HOLD' : 'MISSION ON HOLD';
+      }
+
+      const displayName = pilotName || (isRemote ? (this.isOnlineHost ? (this.onlineGuestName || 'Co-pilot') : (this.onlineHostName || 'Host')) : (this.pilotName || 'You'));
+
+      if (isRemote) {
+        if (this.domElements.pauseModalTitle) {
+          this.domElements.pauseModalTitle.textContent = `PAUSED BY ${displayName.toUpperCase()}`;
+        }
+        if (this.domElements.pauseOnlineStatusTitle) {
+          this.domElements.pauseOnlineStatusTitle.textContent = `PAUSED BY ${displayName.toUpperCase()}`;
+        }
+        if (this.domElements.pauseOnlineStatusSub) {
+          this.domElements.pauseOnlineStatusSub.textContent = `${displayName} paused the flight mission. All flight controls, thrusters, and space hazard physics are temporarily frozen.`;
+        }
+        if (this.domElements.pauseOnlineActionHint) {
+          this.domElements.pauseOnlineActionHint.textContent = `Waiting for ${displayName} to resume, or press RESUME to continue`;
+        }
+      } else {
+        if (this.domElements.pauseModalTitle) {
+          this.domElements.pauseModalTitle.textContent = 'MISSION PAUSED';
+        }
+        if (this.domElements.pauseOnlineStatusTitle) {
+          this.domElements.pauseOnlineStatusTitle.textContent = 'PAUSED BY YOU';
+        }
+        if (this.domElements.pauseOnlineStatusSub) {
+          this.domElements.pauseOnlineStatusSub.textContent = 'Your co-pilot sees the flight mission is on hold. Space hazards and thrusters are temporarily frozen for both pilots.';
+        }
+        if (this.domElements.pauseOnlineActionHint) {
+          this.domElements.pauseOnlineActionHint.textContent = 'Press RESUME or hit [P] when ready to continue flight';
+        }
+      }
+
+      if (this.domElements.onlineStatusBadge) {
+        this.domElements.onlineStatusBadge.classList.add('is-paused');
+      }
+      if (this.domElements.onlinePingText) {
+        this.domElements.onlinePingText.innerHTML = `⏸️ PAUSED BY ${displayName.toUpperCase()}`;
       }
     }
 
-    resumeGame() {
+    handleRemotePause(data) {
+      const pausedByName = (data && data.pausedBy) ? data.pausedBy : (this.isOnlineHost ? (this.onlineGuestName || 'Co-pilot') : (this.onlineHostName || 'Host'));
+      this.onlinePausedBy = 'remote';
+      this.onlinePausedByName = pausedByName;
+      this.state = 'PAUSED';
+      for (const s of this.ships) {
+        if (s) s.setThrust(false);
+      }
+      if (this.soundFx) {
+        this.soundFx.stopThrust(true);
+        this.soundFx.playPauseAlert(true);
+      }
+      this.updatePauseButtons(true);
+      this.updateOnlinePauseUI(true, 'remote', this.onlinePausedByName, data && data.role);
+      this.showModal('pause');
+    }
+
+    handleRemoteResume(data) {
+      this.onlinePausedBy = null;
+      this.onlinePausedByName = '';
       this.hideModals();
       this.state = 'PLAYING';
       this.updatePauseButtons(false);
+      this.updateOnlinePauseUI(false);
+      if (this.soundFx) {
+        this.soundFx.playPauseAlert(false);
+      }
+    }
+
+    togglePause(triggeredLocally = true) {
+      if (this.state === 'PLAYING') {
+        this.state = 'PAUSED';
+        for (const s of this.ships) {
+          if (s) s.setThrust(false);
+        }
+        if (this.soundFx) {
+          this.soundFx.stopThrust(true);
+        }
+        this.updatePauseButtons(true);
+
+        if (this.isOnline) {
+          if (triggeredLocally) {
+            this.onlinePausedBy = 'local';
+            this.onlinePausedByName = this.pilotName || (this.isOnlineHost ? 'Host' : 'Co-pilot');
+            if (this.network && this.network.isConnected) {
+              this.network.sendPause(this.onlinePausedByName);
+            }
+          }
+          this.updateOnlinePauseUI(true, this.onlinePausedBy || 'local', this.onlinePausedByName);
+        } else {
+          this.updateOnlinePauseUI(false);
+        }
+
+        this.showModal('pause');
+      } else if (this.state === 'PAUSED') {
+        this.resumeGame(triggeredLocally);
+      }
+    }
+
+    resumeGame(triggeredLocally = true) {
+      this.hideModals();
+      this.state = 'PLAYING';
+      this.updatePauseButtons(false);
+
+      if (this.isOnline) {
+        if (triggeredLocally && this.network && this.network.isConnected) {
+          const resumedByName = this.pilotName || (this.isOnlineHost ? 'Host' : 'Co-pilot');
+          this.network.sendResume(resumedByName);
+        }
+        if (this.isOnlineHost && this.network && this.network.isConnected) {
+          this.sendHostSnapshot();
+        }
+        this.onlinePausedBy = null;
+        this.onlinePausedByName = '';
+        this.updateOnlinePauseUI(false);
+      }
     }
 
     restartGame() {
       this.updatePauseButtons(false);
+      if (this.isOnline) {
+        if (this.isOnlineHost) {
+          if (this.network) this.network.sendRestartGame();
+          this.startGame('multiplayer');
+        } else {
+          if (this.network && this.network.isConnected) {
+            this.network.sendRestartRequest(this.pilotName || 'Co-pilot');
+          }
+        }
+        return;
+      }
       if (this.rlMode === 'trained') {
         this.startWatchTrainedAI();
       } else if (this.rlMode === 'training') {
@@ -5729,6 +5980,17 @@
         this.domElements.newHighScoreBanner.classList.remove('hidden');
       } else {
         this.domElements.newHighScoreBanner.classList.add('hidden');
+      }
+
+      // Synchronize GAME OVER to co-pilot in online multiplayer
+      if (this.isOnline && this.isOnlineHost && this.network && this.network.isConnected) {
+        this.sendHostSnapshot();
+        this.network.sendGameOver({
+          score: this.score,
+          highScore: this.highScore,
+          p1Kills: this.p1Kills,
+          p2Kills: this.p2Kills
+        });
       }
 
       this.showModal('gameover');
@@ -6229,6 +6491,69 @@
         for (const s of this.ships) {
           if (s && s.alive) s.draw(this.ctx);
         }
+      }
+
+      // High-visibility Canvas HUD Banner for Online Co-op Pause
+      if (this.isOnline && this.state === 'PAUSED') {
+        const isRemote = (this.onlinePausedBy === 'remote');
+        const pausedByDisplay = this.onlinePausedByName || (isRemote ? (this.isOnlineHost ? (this.onlineGuestName || 'CO-PILOT') : (this.onlineHostName || 'HOST')) : 'YOU');
+        const bannerText = isRemote ? `⏸️ MISSION PAUSED BY ${pausedByDisplay.toUpperCase()}` : '⏸️ MISSION PAUSED BY YOU';
+
+        this.ctx.save();
+        this.ctx.font = '700 13px "Share Tech Mono", monospace';
+        const textWidth = this.ctx.measureText(bannerText).width;
+        const barWidth = Math.max(340, textWidth + 50);
+        const barHeight = 36;
+        const barX = (this.canvas.width - barWidth) / 2;
+        const barY = 16;
+
+        this.ctx.fillStyle = isRemote ? 'rgba(245, 158, 11, 0.25)' : 'rgba(6, 182, 212, 0.25)';
+        this.ctx.strokeStyle = isRemote ? '#f59e0b' : '#06b6d4';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        if (typeof this.ctx.roundRect === 'function') {
+          this.ctx.roundRect(barX, barY, barWidth, barHeight, 8);
+        } else {
+          this.ctx.rect(barX, barY, barWidth, barHeight);
+        }
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        this.ctx.fillStyle = isRemote ? '#fbbf24' : '#38bdf8';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(bannerText, this.canvas.width / 2, barY + barHeight / 2);
+        this.ctx.restore();
+      }
+
+      // Spectator Notice for destroyed co-pilot while partner is still flying
+      if (this.isOnline && !this.isOnlineHost && this.onlineLocalShip && !this.onlineLocalShip.alive && this.state === 'PLAYING') {
+        this.ctx.save();
+        this.ctx.font = '700 12px "Share Tech Mono", monospace';
+        const specText = '⚠️ HULL DESTROYED — SPECTATING CO-PILOT';
+        const textWidth = this.ctx.measureText(specText).width;
+        const barWidth = textWidth + 40;
+        const barHeight = 32;
+        const barX = (this.canvas.width - barWidth) / 2;
+        const barY = this.canvas.height - 50;
+
+        this.ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
+        this.ctx.strokeStyle = '#ef4444';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        if (typeof this.ctx.roundRect === 'function') {
+          this.ctx.roundRect(barX, barY, barWidth, barHeight, 6);
+        } else {
+          this.ctx.rect(barX, barY, barWidth, barHeight);
+        }
+        this.ctx.fill();
+        this.ctx.stroke();
+
+        this.ctx.fillStyle = '#fca5a5';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(specText, this.canvas.width / 2, barY + barHeight / 2);
+        this.ctx.restore();
       }
 
       if (appliedGuestViewport) {

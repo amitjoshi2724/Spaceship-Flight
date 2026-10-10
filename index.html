@@ -21,7 +21,7 @@
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
     rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=2.3.5">
+  <link rel="stylesheet" href="style.css?v=2.3.7">
   <link rel="manifest" href="manifest.json?v=2.0.2">
   <link rel="icon" type="image/png" sizes="64x64" href="images/newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="images/newspaceship.png">
@@ -880,8 +880,26 @@
 
     <!-- Pause & Reset Modal -->
     <div id="pauseModal" class="overlay">
-      <div class="modal-card glass-panel">
-        <h2 class="modal-title">PAUSED</h2>
+      <div class="modal-card glass-panel pause-modal-card">
+        <h2 id="pauseModalTitle" class="modal-title">PAUSED</h2>
+
+        <!-- Online Co-op Visibility Banner (shows dynamically in online co-op) -->
+        <div id="pauseOnlineBanner" class="pause-online-banner hidden" style="display: none;">
+          <div class="pause-online-top">
+            <span id="pauseOnlineDot" class="pause-online-dot"></span>
+            <span id="pauseOnlineBadge" class="pause-online-badge">ONLINE CO-OP</span>
+            <span id="pauseOnlineRoleBadge" class="pause-online-role-badge">BLUE SHIP</span>
+          </div>
+          <div id="pauseOnlineStatusTitle" class="pause-online-title">PAUSED BY CO-PILOT</div>
+          <p id="pauseOnlineStatusSub" class="pause-online-sub">
+            Your co-pilot paused the flight mission. All flight controls, thrusters, and space hazard physics are temporarily frozen.
+          </p>
+          <div class="pause-online-footer">
+            <span id="pauseOnlinePulseStatus" class="pause-online-pulse-text">● STANDBY</span>
+            <span id="pauseOnlineActionHint" class="pause-online-action-hint">Either pilot can press RESUME to continue flight</span>
+          </div>
+        </div>
+
         <nav class="menu-nav">
           <button id="resumeBtn" class="menu-btn primary-btn">RESUME</button>
           <button id="restartBtn" class="menu-btn secondary-btn">RESTART MISSION</button>
@@ -931,9 +949,9 @@
   </div>
 
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="network.js?v=2.3.5"></script>
+  <script src="network.js?v=2.3.7"></script>
   <script src="rl_agent.js?v=2.1.0"></script>
-  <script src="game.js?v=2.3.5"></script>
+  <script src="game.js?v=2.3.7"></script>
 </body>
 
 </html>

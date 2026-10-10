@@ -53,6 +53,10 @@
       this.onGameRestart = null;  // ()
       this.onSnapshot = null;     // (snapshot)
       this.onInput = null;        // (input)
+      this.onPause = null;        // ({ pausedBy, isHost, role })
+      this.onResume = null;       // ({ resumedBy, isHost })
+      this.onGameOver = null;     // ({ score, highScore, p1Kills, p2Kills })
+      this.onRequestRestart = null; // ({ name })
     }
 
     isPeerAvailable() {
@@ -421,6 +425,22 @@
           }
           break;
 
+        case 'PAUSE':
+          if (this.onPause) this.onPause(data);
+          break;
+
+        case 'RESUME':
+          if (this.onResume) this.onResume(data);
+          break;
+
+        case 'GAME_OVER':
+          if (!this.isHost && this.onGameOver) this.onGameOver(data);
+          break;
+
+        case 'REQUEST_RESTART':
+          if (this.isHost && this.onRequestRestart) this.onRequestRestart(data);
+          break;
+
         default:
           break;
       }
@@ -517,6 +537,60 @@
       this.send({
         type: 'SNAPSHOT',
         ...snapshot
+      });
+      return true;
+    }
+
+    /**
+     * Either player broadcasts pause event
+     */
+    sendPause(pausedByName = '') {
+      if (!this.conn || !this.conn.open) return false;
+      this.send({
+        type: 'PAUSE',
+        pausedBy: (pausedByName || this.pilotName || (this.isHost ? 'Host' : 'Co-pilot')).trim().slice(0, 30),
+        isHost: this.isHost,
+        role: this.isHost ? this.hostRole : this.guestRole
+      });
+      return true;
+    }
+
+    /**
+     * Either player broadcasts resume event
+     */
+    sendResume(resumedByName = '') {
+      if (!this.conn || !this.conn.open) return false;
+      this.send({
+        type: 'RESUME',
+        resumedBy: (resumedByName || this.pilotName || (this.isHost ? 'Host' : 'Co-pilot')).trim().slice(0, 30),
+        isHost: this.isHost
+      });
+      return true;
+    }
+
+    /**
+     * Host broadcasts authoritative game over packet
+     */
+    sendGameOver(data = {}) {
+      if (!this.conn || !this.conn.open) return false;
+      this.send({
+        type: 'GAME_OVER',
+        score: data.score || 0,
+        highScore: data.highScore || 0,
+        p1Kills: data.p1Kills || 0,
+        p2Kills: data.p2Kills || 0
+      });
+      return true;
+    }
+
+    /**
+     * Guest requests Host to restart mission
+     */
+    sendRestartRequest(name = '') {
+      if (!this.conn || !this.conn.open) return false;
+      this.send({
+        type: 'REQUEST_RESTART',
+        name: (name || this.pilotName || 'Co-pilot').trim().slice(0, 30)
       });
       return true;
     }
