@@ -444,42 +444,62 @@
 
   // ============================================================================
   // PARTICLE SYSTEM (Thruster fire & explosions)
+  // Scaled dynamically by screen metrics so mobile explosions and thrusters
+  // stay proportional and tight rather than sprawling across the entire display
   // ============================================================================
   class ParticleSystem {
-    constructor() {
+    constructor(canvas = null) {
+      this.canvas = canvas;
       this.particles = [];
+      this.customReferenceDimension = null;
     }
 
-    addExhaust(x, y, angle, shipDx, shipDy) {
+    getScreenScale() {
+      if (this.customReferenceDimension) {
+        const { width, height } = this.customReferenceDimension;
+        return Math.max(0.35, Math.min(1.2, Math.min((width || 1200) / 1200, (height || 650) / 650)));
+      }
+      if (!this.canvas) return 1.0;
+      const arenaH = this.canvas.height || 720;
+      const arenaW = this.canvas.width || 1280;
+      return Math.max(0.35, Math.min(1.2, Math.min(arenaW / 1200, arenaH / 650)));
+    }
+
+    addExhaust(x, y, angle, shipDx = 0, shipDy = 0) {
+      const scale = this.getScreenScale();
       const rad = ((angle + 90) * Math.PI) / 180;
       const spread = (Math.random() - 0.5) * 0.5;
-      const speed = 2.5 + Math.random() * 2.5;
+      const speed = (2.2 + Math.random() * 2.2) * scale;
 
       this.particles.push({
-        x: x + (Math.random() - 0.5) * 6,
-        y: y + (Math.random() - 0.5) * 6,
-        dx: Math.cos(rad + spread) * speed + shipDx * 0.4,
-        dy: Math.sin(rad + spread) * speed + shipDy * 0.4,
-        size: 3.5 + Math.random() * 3,
+        x: x + (Math.random() - 0.5) * (6 * scale),
+        y: y + (Math.random() - 0.5) * (6 * scale),
+        dx: Math.cos(rad + spread) * speed + shipDx * 0.35,
+        dy: Math.sin(rad + spread) * speed + shipDy * 0.35,
+        size: Math.max(1.2, (3.2 + Math.random() * 2.8) * scale),
         color: Math.random() > 0.4 ? '#f97316' : '#facc15',
         life: 1.0,
         decay: 0.05 + Math.random() * 0.04
       });
     }
 
-    addExplosion(x, y, color = '#facc15', count = 22) {
-      for (let i = 0; i < count; i++) {
+    addExplosion(x, y, color = '#facc15', count = 22, blastRadius = null) {
+      const scale = this.getScreenScale();
+      const speedScale = blastRadius ? Math.min(scale, Math.max(0.3, blastRadius / 25)) : scale;
+      const baseCount = Math.max(10, Math.round(count * Math.min(1.0, scale + 0.35)));
+
+      for (let i = 0; i < baseCount; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const speed = 1.5 + Math.random() * 5.5;
+        const speed = (1.5 + Math.random() * 5.0) * speedScale;
         this.particles.push({
           x,
           y,
           dx: Math.cos(angle) * speed,
           dy: Math.sin(angle) * speed,
-          size: 2 + Math.random() * 4,
+          size: Math.max(1.2, (2 + Math.random() * 3.5) * scale),
           color: i % 2 === 0 ? color : '#f87171',
           life: 1.0,
-          decay: 0.02 + Math.random() * 0.03
+          decay: 0.025 + Math.random() * 0.03
         });
       }
     }
@@ -565,9 +585,14 @@
       }
     }
 
-    draw(ctx) {
+    draw(ctx, visualScale = 1.0) {
       if (this.hit) return;
       ctx.save();
+      if (visualScale !== 1.0) {
+        ctx.translate(this.x, this.y);
+        ctx.scale(visualScale, visualScale);
+        ctx.translate(-this.x, -this.y);
+      }
 
       const isCyan = (this.shooterId === 2 || this.color === 'cyan');
 
@@ -723,11 +748,16 @@
       return true;
     }
 
-    draw(ctx) {
+    draw(ctx, visualScale = 1.0, strokeScale = 1.0) {
       if (this.popped) return;
+      ctx.save();
+      if (visualScale !== 1.0) {
+        ctx.translate(this.x, this.y);
+        ctx.scale(visualScale, visualScale);
+        ctx.translate(-this.x, -this.y);
+      }
       const pts = this.getTransformedPoints();
 
-      ctx.save();
       ctx.beginPath();
       ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i++) {
@@ -738,14 +768,14 @@
       // Space rock styling - classic light gray (matching Color.LTGRAY / Color.GRAY from 2016)
       ctx.fillStyle = '#94a3b8';
       ctx.strokeStyle = '#e2e8f0';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = Math.max(1.5, 2 * strokeScale);
       ctx.fill();
       ctx.stroke();
 
       // Facet detail line
       if (pts.length >= 4) {
         ctx.strokeStyle = '#64748b';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = Math.max(1.0, 1.5 * strokeScale);
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y);
         ctx.lineTo(pts[2].x, pts[2].y);
@@ -956,15 +986,35 @@
       this.sprites.blueMoving.src = imgPrefix + 'images/bluenewspaceshipmoving2.png';
     }
 
-    recalculateSize(customCanvasHeight) {
+    recalculateSize(customCanvasWidth, customCanvasHeight) {
       // Adaptive Ship Sizing:
-      // Uses the actual playable game arena height (canvas.height or host reference height)
-      // so neither desktop nor tall vertical phones with letterbox padding distort the proportion.
-      // Scaled up by 1.3x so the standard (100%) default matches the former 130% size.
-      const arenaH = customCanvasHeight || this.canvas.height;
-      const isPortrait = arenaH < 320;
-      const baseRatio = isPortrait ? 0.15 : Math.max(0.08, Math.min(0.106, 44 / Math.max(400, arenaH)));
-      const basePx = arenaH * baseRatio;
+      // Accepts optional width & height. Handles single-argument legacy calls where height was passed.
+      let cw = customCanvasWidth;
+      let ch = customCanvasHeight;
+      if (ch === undefined && typeof cw === 'number') {
+        ch = cw;
+        cw = null;
+      }
+      cw = cw || (this.canvas ? this.canvas.width : 1000);
+      ch = ch || (this.canvas ? this.canvas.height : 600);
+
+      const isPortrait = (ch > cw) || (ch <= 260 && cw <= 480);
+      const minDim = Math.min(cw, ch);
+
+      let basePx;
+      if (isPortrait) {
+        // Mobile vertical has a compact letterboxed playable area (e.g. 390x219).
+        // Scale ship to ~24-26px so the player has ample space to dodge rocks.
+        basePx = Math.max(22, Math.min(26, minDim * 0.115));
+      } else if (minDim < 500) {
+        // Mobile landscape (e.g. 844x390).
+        // Scale ship to ~36-38px for a comfortable, spacious widescreen cockpit.
+        basePx = Math.max(34, Math.min(42, minDim * 0.095));
+      } else {
+        // Desktop / Large tablet (e.g. 1470x744, 1920x1080).
+        // Scale ship to ~48-52px.
+        basePx = Math.max(44, Math.min(52, minDim * 0.065));
+      }
 
       const userScale = (this.scalePercent || 100) / 100;
       this.width = Math.round(basePx * userScale);
@@ -1337,10 +1387,13 @@
       }
     }
 
-    draw(ctx) {
+    draw(ctx, visualScale = 1.0) {
       if (!this.alive) return;
       ctx.save();
       ctx.translate(this.x, this.y);
+      if (visualScale !== 1.0) {
+        ctx.scale(visualScale, visualScale);
+      }
 
       // 1. Invincibility forcefield bubble (Encompasses spaceship AND vertical status bars INSIDE)
       if (this.invincible) {
@@ -1479,9 +1532,14 @@
       }
     }
 
-    draw(ctx) {
+    draw(ctx, visualScale = 1.0) {
       if (this.hit) return;
       ctx.save();
+      if (visualScale !== 1.0) {
+        ctx.translate(this.x, this.y);
+        ctx.scale(visualScale, visualScale);
+        ctx.translate(-this.x, -this.y);
+      }
 
       let glowColor, outerColor, trailColor, coreColor;
 
@@ -1702,16 +1760,23 @@
       const cw = customCanvasWidth || this.canvas.width;
       const ch = customCanvasHeight || this.canvas.height;
       const dScreen = Math.min(cw, ch);
+      const isPortrait = (ch > cw) || (ch <= 260 && cw <= 480);
       const shipScale = (this.ship && this.ship.scalePercent)
         ? this.ship.scalePercent
         : parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
 
       // UFO scales proportionally with player ship scale (70% - 130%):
-      // The maximum large size (dScreen * 0.17, 72px - 144px) serves as the 130% setting.
-      // Scaling down proportionally at 100% and 70% ensures neither a smaller nor larger ship
-      // has an unfair advantage against enemy targets.
+      // Scaling down proportionally on mobile avoids an oversized enemy dominating small screens.
       const scaleFactor = Math.max(70, Math.min(130, shipScale)) / 130;
-      const baseMaxW = Math.max(72, Math.min(144, dScreen * 0.17));
+      let baseMaxW;
+      if (isPortrait) {
+        baseMaxW = Math.max(34, Math.min(45, dScreen * 0.18));
+      } else if (dScreen < 500) {
+        baseMaxW = Math.max(54, Math.min(72, dScreen * 0.16));
+      } else {
+        baseMaxW = Math.max(72, Math.min(144, dScreen * 0.17));
+      }
+
       this.width = Math.round(baseMaxW * scaleFactor);
       this.height = this.width;
       this.radius = this.width * 0.463;
@@ -2267,10 +2332,13 @@
       return true;
     }
 
-    draw(ctx) {
+    draw(ctx, visualScale = 1.0) {
       if (!this.alive) return;
       ctx.save();
       ctx.translate(this.x, this.y);
+      if (visualScale !== 1.0) {
+        ctx.scale(visualScale, visualScale);
+      }
       ctx.rotate((this.drawAngle * Math.PI) / 180);
 
       // Draw sprite (enemyship.png)
@@ -2429,7 +2497,7 @@
       try {
         localStorage.setItem('spaceship_flight_sound', 'false');
       } catch (_) { }
-      this.particles = new ParticleSystem();
+      this.particles = new ParticleSystem(this.canvas);
       this.starfield = new Starfield(this.canvas);
 
       // Dual ship instances for Solo and Multiplayer Co-op
@@ -3980,8 +4048,11 @@
         if (this.hostCanvasWidth !== snap.cw || this.hostCanvasHeight !== snap.ch) {
           this.hostCanvasWidth = snap.cw;
           this.hostCanvasHeight = snap.ch;
+          if (this.particles) {
+            this.particles.customReferenceDimension = { width: snap.cw, height: snap.ch };
+          }
           for (const s of [this.ship1, this.ship2]) {
-            if (s && typeof s.recalculateSize === 'function') s.recalculateSize(snap.ch);
+            if (s && typeof s.recalculateSize === 'function') s.recalculateSize(snap.cw, snap.ch);
           }
           if (this.ufo && typeof this.ufo.recalculateSize === 'function') {
             this.ufo.recalculateSize(snap.cw, snap.ch);
@@ -4287,11 +4358,13 @@
         this.canvas.height = Math.floor(screenH);
       }
 
+      if (this.particles) this.particles.canvas = this.canvas;
+
       for (const s of [this.ship1, this.ship2]) {
-        if (s) s.recalculateSize();
+        if (s) s.recalculateSize(this.canvas.width, this.canvas.height);
       }
       if (this.ufo) {
-        this.ufo.recalculateSize();
+        this.ufo.recalculateSize(this.canvas.width, this.canvas.height);
       }
 
       if (this.starfield) this.starfield.resize();
@@ -5574,6 +5647,7 @@
         this.isOnlineHost = false;
         this.hostCanvasWidth = null;
         this.hostCanvasHeight = null;
+        if (this.particles) this.particles.customReferenceDimension = null;
       }
       this.rlMode = null;
       if (this.rlAgent) this.rlAgent.mode = 'idle';
@@ -6201,7 +6275,7 @@
               }
               this.soundFx.playExplosion(false);
               const popColor = shooterId === 2 ? '#00f0ff' : '#38bdf8';
-              this.particles.addExplosion(r.x, r.y, popColor, 20);
+              this.particles.addExplosion(r.x, r.y, popColor, 20, r.radius);
               this.updateScore(this.score + 1);
               this.applyCombatSiphon(shooterId);
 
@@ -6264,7 +6338,7 @@
               } else {
                 popColor = ub.aimMode === 'predictive' ? '#c084fc' : '#00ff8e';
               }
-              this.particles.addExplosion(r.x, r.y, popColor, 24);
+              this.particles.addExplosion(r.x, r.y, popColor, 24, r.radius);
               this.rocks.splice(j, 1);
               break;
             }
@@ -6294,8 +6368,8 @@
               // Spawn deflector shield absorbs and vaporizes the asteroid!
               r.popped = true;
               this.soundFx.playExplosion(false);
-              this.particles.addExplosion(r.x, r.y, '#c084fc', 26);
-              this.particles.addExplosion(r.x, r.y, '#38bdf8', 18);
+              this.particles.addExplosion(r.x, r.y, '#c084fc', 26, r.radius);
+              this.particles.addExplosion(r.x, r.y, '#38bdf8', 18, r.radius);
               this.rocks.splice(j, 1);
               continue;
             }
@@ -6303,7 +6377,7 @@
             r.popped = true;
             this.soundFx.playUFOExplosion();
             this.particles.addExplosion(this.ufo.x, this.ufo.y, '#c084fc', 30);
-            this.particles.addExplosion(r.x, r.y, '#38bdf8', 20);
+            this.particles.addExplosion(r.x, r.y, '#38bdf8', 20, r.radius);
             this.rocks.splice(j, 1);
             this.ufo = null;
             continue;
@@ -6474,6 +6548,7 @@
 
       // If guest in online multiplayer, apply uniform aspect-fit arena transformation
       let appliedGuestViewport = false;
+      let guestViewportScale = 1.0;
       if (this.isOnline && !this.isOnlineHost && this.hostCanvasWidth && this.hostCanvasHeight) {
         const guestW = this.canvas.width;
         const guestH = this.canvas.height;
@@ -6488,6 +6563,7 @@
         this.ctx.translate(offsetX, offsetY);
         this.ctx.scale(scale, scale);
         appliedGuestViewport = true;
+        guestViewportScale = scale;
 
         // If aspect ratios differ (causing letterbox/pillarbox padding), draw subtle cyber arena boundary
         if (offsetX > 2 || offsetY > 2) {
@@ -6500,28 +6576,66 @@
         }
       }
 
+      // Responsive cross-device scale compensation:
+      // When a mobile phone joins a large laptop/desktop host, the arena scale factor
+      // (scale < 0.95) would otherwise shrink ships, rocks, and bullets into sub-pixel specks.
+      let shipVisualScale = 1.0;
+      let rockVisualScale = 1.0;
+      let rockStrokeScale = 1.0;
+      let bulletVisualScale = 1.0;
+      let ufoVisualScale = 1.0;
+
+      if (appliedGuestViewport && guestViewportScale < 0.95) {
+        const isGuestPortrait = (this.canvas.height <= 260 || this.canvas.height > this.canvas.width);
+
+        // Keep player ship easily visible: ~27px in portrait, ~35px in landscape
+        const targetShipPx = isGuestPortrait ? 27 : 35;
+        const baseShipWidth = (this.ship1 ? this.ship1.width : 48);
+        const currentShipScreenPx = baseShipWidth * guestViewportScale;
+        if (currentShipScreenPx > 0 && currentShipScreenPx < targetShipPx) {
+          shipVisualScale = Math.min(2.5, targetShipPx / currentShipScreenPx);
+        }
+
+        // Keep space rocks clearly recognizable and outlines sharp
+        const targetRockMinPx = isGuestPortrait ? 9 : 11;
+        rockVisualScale = Math.min(1.8, Math.max(1.0, targetRockMinPx / (15 * guestViewportScale)));
+        rockStrokeScale = 1.0 / guestViewportScale;
+
+        // Keep laser plasma bolts bright and distinct
+        const targetBulletPx = isGuestPortrait ? 3.2 : 4.0;
+        bulletVisualScale = Math.min(2.5, Math.max(1.0, targetBulletPx / (3.0 * guestViewportScale)));
+
+        // Keep UFO clearly visible and intimidating
+        const targetUfoPx = isGuestPortrait ? 30 : 44;
+        const baseUfoWidth = (this.ufo ? this.ufo.width : 50);
+        const currentUfoScreenPx = baseUfoWidth * guestViewportScale;
+        if (currentUfoScreenPx > 0 && currentUfoScreenPx < targetUfoPx) {
+          ufoVisualScale = Math.min(2.2, targetUfoPx / currentUfoScreenPx);
+        }
+      }
+
       // Draw game items
       this.particles.draw(this.ctx);
 
       for (const rock of this.rocks) {
-        if (rock && typeof rock.draw === 'function') rock.draw(this.ctx);
+        if (rock && typeof rock.draw === 'function') rock.draw(this.ctx, rockVisualScale, rockStrokeScale);
       }
 
       for (const bullet of this.bullets) {
-        if (bullet && typeof bullet.draw === 'function') bullet.draw(this.ctx);
+        if (bullet && typeof bullet.draw === 'function') bullet.draw(this.ctx, bulletVisualScale);
       }
 
       for (const uBullet of this.ufoBullets) {
-        if (uBullet && typeof uBullet.draw === 'function') uBullet.draw(this.ctx);
+        if (uBullet && typeof uBullet.draw === 'function') uBullet.draw(this.ctx, bulletVisualScale);
       }
 
       if (this.ufo && this.ufo.alive) {
-        this.ufo.draw(this.ctx);
+        this.ufo.draw(this.ctx, ufoVisualScale);
       }
 
       if (this.state === 'PLAYING' || this.state === 'PAUSED') {
         for (const s of this.ships) {
-          if (s && s.alive) s.draw(this.ctx);
+          if (s && s.alive) s.draw(this.ctx, shipVisualScale);
         }
       }
 
@@ -6589,6 +6703,16 @@
       }
 
       if (appliedGuestViewport) {
+        this.ctx.restore();
+      }
+
+      // Hint for guest if playing in portrait against a widescreen host
+      if (this.isOnline && !this.isOnlineHost && (this.canvas.height <= 260 || this.canvas.height > this.canvas.width) && this.state === 'PLAYING') {
+        this.ctx.save();
+        this.ctx.font = '600 10px "Share Tech Mono", monospace';
+        this.ctx.fillStyle = 'rgba(56, 189, 248, 0.65)';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('💡 ROTATE PHONE TO LANDSCAPE FOR FULL WIDESCREEN VIEW', this.canvas.width / 2, this.canvas.height - 6);
         this.ctx.restore();
       }
 
