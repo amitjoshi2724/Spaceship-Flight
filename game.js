@@ -456,13 +456,12 @@
 
     getScreenScale() {
       if (this.customReferenceDimension) {
-        const { width, height } = this.customReferenceDimension;
-        return Math.max(0.35, Math.min(1.2, Math.min((width || 1200) / 1200, (height || 650) / 650)));
+        const { height } = this.customReferenceDimension;
+        return Math.max(0.25, Math.min(1.2, (height || 720) / 720));
       }
       if (!this.canvas) return 1.0;
       const arenaH = this.canvas.height || 720;
-      const arenaW = this.canvas.width || 1280;
-      return Math.max(0.35, Math.min(1.2, Math.min(arenaW / 1200, arenaH / 650)));
+      return Math.max(0.25, Math.min(1.2, arenaH / 720));
     }
 
     addExhaust(x, y, angle, shipDx = 0, shipDy = 0) {
@@ -476,7 +475,7 @@
         y: y + (Math.random() - 0.5) * (6 * scale),
         dx: Math.cos(rad + spread) * speed + shipDx * 0.35,
         dy: Math.sin(rad + spread) * speed + shipDy * 0.35,
-        size: Math.max(1.2, (3.2 + Math.random() * 2.8) * scale),
+        size: Math.max(1.0, (2.8 + Math.random() * 2.4) * scale),
         color: Math.random() > 0.4 ? '#f97316' : '#facc15',
         life: 1.0,
         decay: 0.05 + Math.random() * 0.04
@@ -485,21 +484,21 @@
 
     addExplosion(x, y, color = '#facc15', count = 22, blastRadius = null) {
       const scale = this.getScreenScale();
-      const speedScale = blastRadius ? Math.min(scale, Math.max(0.3, blastRadius / 25)) : scale;
-      const baseCount = Math.max(10, Math.round(count * Math.min(1.0, scale + 0.35)));
+      const speedScale = blastRadius ? Math.min(scale, Math.max(0.2, (blastRadius / 25) * scale)) : scale;
+      const baseCount = Math.max(8, Math.round(count * Math.min(1.0, scale + 0.25)));
 
       for (let i = 0; i < baseCount; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const speed = (1.5 + Math.random() * 5.0) * speedScale;
+        const speed = (1.0 + Math.random() * 3.8) * speedScale;
         this.particles.push({
           x,
           y,
           dx: Math.cos(angle) * speed,
           dy: Math.sin(angle) * speed,
-          size: Math.max(1.2, (2 + Math.random() * 3.5) * scale),
+          size: Math.max(0.8, (1.8 + Math.random() * 2.8) * scale),
           color: i % 2 === 0 ? color : '#f87171',
           life: 1.0,
-          decay: 0.025 + Math.random() * 0.03
+          decay: 0.03 + Math.random() * 0.035
         });
       }
     }
@@ -1004,16 +1003,16 @@
       let basePx;
       if (isPortrait) {
         // Mobile vertical has a compact letterboxed playable area (e.g. 390x219).
-        // Scale ship to ~24-26px so the player has ample space to dodge rocks.
-        basePx = Math.max(22, Math.min(26, minDim * 0.115));
+        // Scale ship to ~20-22px so the player has ample space to maneuver and dodge rocks.
+        basePx = Math.max(19, Math.min(23, ch * 0.095));
       } else if (minDim < 500) {
         // Mobile landscape (e.g. 844x390).
-        // Scale ship to ~36-38px for a comfortable, spacious widescreen cockpit.
-        basePx = Math.max(34, Math.min(42, minDim * 0.095));
+        // Scale ship to ~30-34px for comfortable, proportional widescreen flight.
+        basePx = Math.max(28, Math.min(34, ch * 0.082));
       } else {
-        // Desktop / Large tablet (e.g. 1470x744, 1920x1080).
-        // Scale ship to ~48-52px.
-        basePx = Math.max(44, Math.min(52, minDim * 0.065));
+        // Desktop / Large laptop (e.g. 1470x810, 1920x1080).
+        // Scale ship to ~46-52px.
+        basePx = Math.max(44, Math.min(52, ch * 0.062));
       }
 
       const userScale = (this.scalePercent || 100) / 100;
@@ -4313,18 +4312,24 @@
         }
       }
 
-      for (const b of this.bullets) {
-        if (b && !b.hit) {
-          b.x += b.dx;
-          b.y += b.dy;
+      for (let i = this.bullets.length - 1; i >= 0; i--) {
+        const b = this.bullets[i];
+        if (!b || b.hit || b.x < -80 || b.x > refW + 80 || b.y < -80 || b.y > refH + 80) {
+          this.bullets.splice(i, 1);
+          continue;
         }
+        b.x += b.dx;
+        b.y += b.dy;
       }
 
-      for (const ub of this.ufoBullets) {
-        if (ub && !ub.hit) {
-          ub.x += ub.dx;
-          ub.y += ub.dy;
+      for (let i = this.ufoBullets.length - 1; i >= 0; i--) {
+        const ub = this.ufoBullets[i];
+        if (!ub || ub.hit || ub.x < -80 || ub.x > refW + 80 || ub.y < -80 || ub.y > refH + 80) {
+          this.ufoBullets.splice(i, 1);
+          continue;
         }
+        ub.x += ub.dx;
+        ub.y += ub.dy;
       }
 
       this.sendGuestInput();
@@ -6764,29 +6769,29 @@
       if (appliedGuestViewport && guestViewportScale < 0.95) {
         const isGuestPortrait = (this.canvas.height <= 260 || this.canvas.height > this.canvas.width);
 
-        // Keep player ship easily visible: ~27px in portrait, ~35px in landscape
-        const targetShipPx = isGuestPortrait ? 27 : 35;
+        // Keep player ship easily visible and proportional: ~21px in portrait, ~32px in landscape
+        const targetShipPx = isGuestPortrait ? 21 : 32;
         const baseShipWidth = (this.ship1 ? this.ship1.width : 48);
         const currentShipScreenPx = baseShipWidth * guestViewportScale;
         if (currentShipScreenPx > 0 && currentShipScreenPx < targetShipPx) {
-          shipVisualScale = Math.min(2.5, targetShipPx / currentShipScreenPx);
+          shipVisualScale = Math.min(2.2, targetShipPx / currentShipScreenPx);
         }
 
         // Keep space rocks clearly recognizable and outlines sharp
-        const targetRockMinPx = isGuestPortrait ? 9 : 11;
-        rockVisualScale = Math.min(1.8, Math.max(1.0, targetRockMinPx / (15 * guestViewportScale)));
+        const targetRockMinPx = isGuestPortrait ? 8 : 11;
+        rockVisualScale = Math.min(1.6, Math.max(1.0, targetRockMinPx / (15 * guestViewportScale)));
         rockStrokeScale = 1.0 / guestViewportScale;
 
         // Keep laser plasma bolts bright and distinct
-        const targetBulletPx = isGuestPortrait ? 3.2 : 4.0;
-        bulletVisualScale = Math.min(2.5, Math.max(1.0, targetBulletPx / (3.0 * guestViewportScale)));
+        const targetBulletPx = isGuestPortrait ? 2.5 : 3.5;
+        bulletVisualScale = Math.min(2.2, Math.max(1.0, targetBulletPx / (3.0 * guestViewportScale)));
 
         // Keep UFO clearly visible and intimidating
-        const targetUfoPx = isGuestPortrait ? 30 : 44;
+        const targetUfoPx = isGuestPortrait ? 26 : 38;
         const baseUfoWidth = (this.ufo ? this.ufo.width : 50);
         const currentUfoScreenPx = baseUfoWidth * guestViewportScale;
         if (currentUfoScreenPx > 0 && currentUfoScreenPx < targetUfoPx) {
-          ufoVisualScale = Math.min(2.2, targetUfoPx / currentUfoScreenPx);
+          ufoVisualScale = Math.min(2.0, targetUfoPx / currentUfoScreenPx);
         }
       }
 
