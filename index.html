@@ -21,7 +21,7 @@
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
     rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=2.3.10">
+  <link rel="stylesheet" href="style.css?v=2.3.11">
   <link rel="manifest" href="manifest.json?v=2.0.2">
   <link rel="icon" type="image/png" sizes="64x64" href="images/newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="images/newspaceship.png">
@@ -920,22 +920,22 @@
 
         <div class="results-stats">
           <div class="result-box">
-            <span class="result-label">FINAL SCORE</span>
+            <span id="finalScoreLabel" class="result-label">FINAL SCORE</span>
             <span id="finalScoreVal" class="result-number">0</span>
           </div>
           <div class="result-box">
-            <span class="result-label">BEST RECORD</span>
+            <span id="bestScoreLabel" class="result-label">BEST RECORD</span>
             <span id="bestScoreVal" class="result-number">0</span>
           </div>
         </div>
 
         <div id="multiplayerResultsStats" class="results-stats mp-results-stats hidden" style="display: none;">
           <div class="result-box p2-result-box">
-            <span class="result-label" style="color: #38bdf8;">🔵 P2 (BLUE) ROCKS</span>
+            <span id="p2ResultLabel" class="result-label" style="color: #38bdf8;">🔵 P2 (BLUE) ROCKS</span>
             <span id="p2ScoreVal" class="result-number" style="color: #38bdf8;">0</span>
           </div>
           <div class="result-box p1-result-box">
-            <span class="result-label" style="color: #f87171;">🔴 P1 (RED) ROCKS</span>
+            <span id="p1ResultLabel" class="result-label" style="color: #f87171;">🔴 P1 (RED) ROCKS</span>
             <span id="p1ScoreVal" class="result-number" style="color: #f87171;">0</span>
           </div>
         </div>
@@ -949,9 +949,9 @@
   </div>
 
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="network.js?v=2.3.10"></script>
+  <script src="network.js?v=2.3.11"></script>
   <script src="rl_agent.js?v=2.1.0"></script>
-  <script src="game.js?v=2.3.10"></script>
+  <script src="game.js?v=2.3.11"></script>
 </body>
 
 </html>

@@ -2799,6 +2799,10 @@
         onlinePingText: document.getElementById('onlinePingText'),
         p1TagText: document.getElementById('p1TagText'),
         p2TagText: document.getElementById('p2TagText'),
+        finalScoreLabel: document.getElementById('finalScoreLabel'),
+        bestScoreLabel: document.getElementById('bestScoreLabel'),
+        p1ResultLabel: document.getElementById('p1ResultLabel'),
+        p2ResultLabel: document.getElementById('p2ResultLabel'),
         onlinePilotNameInput: document.getElementById('onlinePilotNameInput'),
         randomizePilotNameBtn: document.getElementById('randomizePilotNameBtn'),
         crewRoomStatusBadge: document.getElementById('crewRoomStatusBadge'),
@@ -3322,6 +3326,9 @@
         if (data.hostName) this.onlineHostName = data.hostName;
         if (data.guestName) this.onlineGuestName = data.guestName;
         this.updateCrewManifestUI();
+        if (this.isOnline && this.gameMode === 'multiplayer') {
+          this.updateOnlineHudTags();
+        }
       };
 
       this.network.onLobbyState = (data) => {
@@ -3419,6 +3426,9 @@
             this.network.updatePilotName(name);
           }
           this.updateCrewManifestUI();
+          if (this.isOnline && this.gameMode === 'multiplayer') {
+            this.updateOnlineHudTags();
+          }
         };
 
         this.domElements.onlinePilotNameInput.addEventListener('input', () => {
@@ -3884,6 +3894,7 @@
       }
       this.hideModals();
       this.startGame('multiplayer');
+      this.updateOnlineHudTags();
     }
 
     startOnlineGuestGame(data = {}) {
@@ -3895,14 +3906,16 @@
       this.onlineLocalPlayerId = (guestRole === 'red') ? 1 : 2;
       this.onlineLocalShip = (guestRole === 'red') ? this.ship1 : this.ship2;
       this.onlineRemoteShip = (guestRole === 'red') ? this.ship2 : this.ship1;
+      this.onlineGuestName = this.pilotName || (data.guestName || (this.network && this.network.peerPilotName) || this.onlineGuestName || '');
       if (data.hostName) this.onlineHostName = data.hostName;
-      if (data.guestName) this.onlineGuestName = data.guestName;
+      else if (this.network && this.network.peerPilotName) this.onlineHostName = this.network.peerPilotName;
       if (typeof data.highScore === 'number' && !isNaN(data.highScore)) {
         this.updateHighScoreDisplay(data.highScore);
       }
 
       this.hideModals();
       this.startGame('multiplayer');
+      this.updateOnlineHudTags();
     }
 
     restartOnlineGuestGame() {
@@ -4212,8 +4225,11 @@
         this.gameOver();
       } else if (snap.st === 'PAUSED' && this.state === 'PLAYING') {
         this.handleRemotePause({ pausedBy: this.onlineHostName || 'Host' });
-      } else if (snap.st === 'PLAYING' && this.state === 'PAUSED' && this.onlinePausedBy === 'remote') {
-        this.handleRemoteResume();
+      } else if (snap.st === 'PLAYING' && this.state === 'PAUSED') {
+        const justPausedLocally = (this.onlinePausedBy === 'local') && (Date.now() - (this.localPauseTime || 0) < 300);
+        if (!justPausedLocally) {
+          this.handleRemoteResume();
+        }
       }
     }
 
@@ -4406,6 +4422,10 @@
       }
 
       if (this.starfield) this.starfield.resize();
+
+      if (this.isOnline && this.gameMode === 'multiplayer') {
+        this.updateOnlineHudTags();
+      }
     }
 
     bindInputs() {
@@ -5461,59 +5481,83 @@
         this.domElements.onlineStatusBadge.classList.toggle('hidden', !showOnline);
       }
 
-      if (this.domElements.p1TagText && this.domElements.p2TagText) {
-        if (isMp && this.isOnline) {
-          const isLocalRed = (this.onlineLocalPlayerId === 1);
-          const p1Pilot = (this.onlineRole === 'red')
-            ? (this.onlineHostName ? this.onlineHostName.toUpperCase() : 'P1 RED')
-            : (this.onlineGuestName ? this.onlineGuestName.toUpperCase() : 'P1 RED');
-          const p2Pilot = (this.onlineRole === 'red')
-            ? (this.onlineGuestName ? this.onlineGuestName.toUpperCase() : 'P2 BLUE')
-            : (this.onlineHostName ? this.onlineHostName.toUpperCase() : 'P2 BLUE');
-
-          const renderPilotTag = (el, name, isYou, shipColor) => {
-            if (!el) return;
-            const len = name.length;
-            let tagSize = '11px';
-            let letterSpacing = '0.8px';
-            let badgeSize = '9px';
-            if (len > 22) {
-              tagSize = '7.5px';
-              letterSpacing = '0.1px';
-              badgeSize = '7px';
-            } else if (len > 16) {
-              tagSize = '8.5px';
-              letterSpacing = '0.3px';
-              badgeSize = '7.5px';
-            } else if (len > 11) {
-              tagSize = '9.5px';
-              letterSpacing = '0.5px';
-              badgeSize = '8px';
-            }
-            el.style.fontSize = tagSize;
-            el.style.letterSpacing = letterSpacing;
-            const badgeColor = isYou ? (shipColor === 'red' ? '#f87171' : '#38bdf8') : '#94a3b8';
-            const badgeWeight = isYou ? '900' : '700';
-            const badgeText = isYou ? '(YOU)' : '(CO-PILOT)';
-            el.innerHTML = `${name} <span style="font-size:${badgeSize};color:${badgeColor};font-weight:${badgeWeight};letter-spacing:1px;margin-left:3px;">${badgeText}</span>`;
-          };
-
-          renderPilotTag(this.domElements.p1TagText, p1Pilot, isLocalRed, 'red');
-          renderPilotTag(this.domElements.p2TagText, p2Pilot, !isLocalRed, 'blue');
-        } else {
-          if (this.domElements.p1TagText) {
-            this.domElements.p1TagText.textContent = 'P1 RED';
-            this.domElements.p1TagText.style.fontSize = '';
-            this.domElements.p1TagText.style.letterSpacing = '';
-          }
-          if (this.domElements.p2TagText) {
-            this.domElements.p2TagText.textContent = 'P2 BLUE';
-            this.domElements.p2TagText.style.fontSize = '';
-            this.domElements.p2TagText.style.letterSpacing = '';
-          }
-        }
-      }
+      this.updateOnlineHudTags();
       this.updateHighScoreDisplay(this.highScore);
+    }
+
+    updateOnlineHudTags() {
+      if (!this.domElements.p1TagText || !this.domElements.p2TagText) return;
+      const isMp = (this.gameMode === 'multiplayer' && !this.rlMode);
+      if (!isMp || !this.isOnline) {
+        if (this.domElements.p1TagText) {
+          this.domElements.p1TagText.textContent = 'P1 RED';
+          this.domElements.p1TagText.style.fontSize = '';
+          this.domElements.p1TagText.style.letterSpacing = '';
+        }
+        if (this.domElements.p2TagText) {
+          this.domElements.p2TagText.textContent = 'P2 BLUE';
+          this.domElements.p2TagText.style.fontSize = '';
+          this.domElements.p2TagText.style.letterSpacing = '';
+        }
+        return;
+      }
+
+      const isLocalRed = (this.onlineLocalPlayerId === 1);
+      const localCallsign = (this.pilotName || '').trim();
+      const remoteCallsign = (
+        (this.network && this.network.peerPilotName) ||
+        (this.isOnlineHost ? this.onlineGuestName : this.onlineHostName) ||
+        ''
+      ).trim();
+
+      const p1Raw = isLocalRed ? (localCallsign || 'P1 Red') : (remoteCallsign || 'P1 Red');
+      const p2Raw = !isLocalRed ? (localCallsign || 'P2 Blue') : (remoteCallsign || 'P2 Blue');
+
+      const renderPilotTag = (el, rawName, isYou, shipColor) => {
+        if (!el) return;
+        const name = rawName.toUpperCase();
+        const len = name.length;
+        const width = window.innerWidth;
+        const isNarrow = width <= 640;
+        const isVeryNarrow = width <= 390;
+
+        let tagSize = '11px';
+        let letterSpacing = '0.6px';
+        let badgeSize = '8.5px';
+
+        if (isVeryNarrow) {
+          if (len > 20) { tagSize = '6.2px'; letterSpacing = '0px'; badgeSize = '5.5px'; }
+          else if (len > 14) { tagSize = '7.0px'; letterSpacing = '0.1px'; badgeSize = '6px'; }
+          else if (len > 8) { tagSize = '7.8px'; letterSpacing = '0.2px'; badgeSize = '6.5px'; }
+          else { tagSize = '8.5px'; letterSpacing = '0.3px'; badgeSize = '7px'; }
+        } else if (isNarrow) {
+          if (len > 22) { tagSize = '7.0px'; letterSpacing = '0.1px'; badgeSize = '6.5px'; }
+          else if (len > 16) { tagSize = '8.0px'; letterSpacing = '0.2px'; badgeSize = '7px'; }
+          else if (len > 10) { tagSize = '9.0px'; letterSpacing = '0.4px'; badgeSize = '7.5px'; }
+          else { tagSize = '10px'; letterSpacing = '0.6px'; badgeSize = '8px'; }
+        } else {
+          if (len > 22) { tagSize = '8.5px'; letterSpacing = '0.2px'; badgeSize = '7.5px'; }
+          else if (len > 16) { tagSize = '9.5px'; letterSpacing = '0.4px'; badgeSize = '8px'; }
+          else if (len > 10) { tagSize = '10.5px'; letterSpacing = '0.6px'; badgeSize = '8.5px'; }
+          else { tagSize = '11.5px'; letterSpacing = '0.8px'; badgeSize = '9px'; }
+        }
+
+        el.style.fontSize = tagSize;
+        el.style.letterSpacing = letterSpacing;
+
+        const badgeColor = isYou ? (shipColor === 'red' ? '#f87171' : '#38bdf8') : '#94a3b8';
+        const badgeText = isYou ? 'YOU' : (isVeryNarrow ? 'CO' : 'CO-PILOT');
+        el.innerHTML = `${name} <span class="mp-tag-pill ${isYou ? 'you' : 'partner'}" style="font-size:${badgeSize};color:${badgeColor};margin-left:3px;">${badgeText}</span>`;
+
+        let currentSize = parseFloat(tagSize);
+        while (el.scrollWidth > el.clientWidth && currentSize > 5.5) {
+          currentSize -= 0.4;
+          el.style.fontSize = `${currentSize.toFixed(1)}px`;
+        }
+      };
+
+      renderPilotTag(this.domElements.p1TagText, p1Raw, isLocalRed, 'red');
+      renderPilotTag(this.domElements.p2TagText, p2Raw, !isLocalRed, 'blue');
     }
 
     updateSoundButtons(enabled) {
@@ -5583,7 +5627,8 @@
         this.domElements.pauseOnlineBadge.textContent = isRemote ? 'CO-PILOT ON HOLD' : 'MISSION ON HOLD';
       }
 
-      const displayName = pilotName || (isRemote ? (this.isOnlineHost ? (this.onlineGuestName || 'Co-pilot') : (this.onlineHostName || 'Host')) : (this.pilotName || 'You'));
+      const peerName = (this.network && this.network.peerPilotName) || (this.isOnlineHost ? this.onlineGuestName : this.onlineHostName) || 'Co-pilot';
+      const displayName = pilotName || (isRemote ? peerName : (this.pilotName || 'You'));
 
       if (isRemote) {
         if (this.domElements.pauseModalTitle) {
@@ -5622,7 +5667,8 @@
     }
 
     handleRemotePause(data) {
-      const pausedByName = (data && data.pausedBy) ? data.pausedBy : (this.isOnlineHost ? (this.onlineGuestName || 'Co-pilot') : (this.onlineHostName || 'Host'));
+      const defaultPeer = (this.network && this.network.peerPilotName) || (this.isOnlineHost ? this.onlineGuestName : this.onlineHostName) || 'Co-pilot';
+      const pausedByName = (data && data.pausedBy) ? data.pausedBy : defaultPeer;
       this.onlinePausedBy = 'remote';
       this.onlinePausedByName = pausedByName;
       this.state = 'PAUSED';
@@ -5663,6 +5709,7 @@
 
         if (this.isOnline) {
           if (triggeredLocally) {
+            this.localPauseTime = Date.now();
             this.onlinePausedBy = 'local';
             this.onlinePausedByName = this.pilotName || (this.isOnlineHost ? 'Host' : 'Co-pilot');
             if (this.network && this.network.isConnected) {
@@ -6146,15 +6193,54 @@
       if (this.keysP2) this.keysP2.up = false;
       this.soundFx.playGameOver();
 
+      if (this.score > this.highScore) {
+        this.highScore = this.score;
+        try {
+          localStorage.setItem('spaceship_flight_high_score', this.highScore.toString());
+        } catch (_) {}
+      }
+
       this.domElements.finalScoreVal.textContent = this.score;
       this.domElements.bestScoreVal.textContent = this.highScore;
 
       const isMultiplayerGame = this.gameMode === 'multiplayer' && !this.rlMode;
+      const finalScoreLabel = this.domElements.finalScoreLabel || document.getElementById('finalScoreLabel');
+      if (finalScoreLabel) {
+        finalScoreLabel.textContent = isMultiplayerGame ? 'TEAM CO-OP SCORE' : 'FINAL SCORE';
+      }
+
       if (this.domElements.multiplayerResultsStats) {
         this.domElements.multiplayerResultsStats.style.display = isMultiplayerGame ? 'grid' : 'none';
         this.domElements.multiplayerResultsStats.classList.toggle('hidden', !isMultiplayerGame);
       }
       if (isMultiplayerGame) {
+        const isLocalRed = (this.isOnline ? (this.onlineLocalPlayerId === 1) : true);
+        const localCallsign = (this.pilotName || '').trim().toUpperCase();
+        const remoteCallsign = (
+          (this.network && this.network.peerPilotName) ||
+          (this.isOnlineHost ? this.onlineGuestName : this.onlineHostName) ||
+          ''
+        ).trim().toUpperCase();
+
+        const p1Name = this.isOnline
+          ? (isLocalRed ? (localCallsign || 'P1 RED') : (remoteCallsign || 'P1 RED'))
+          : 'P1 RED';
+        const p2Name = this.isOnline
+          ? (!isLocalRed ? (localCallsign || 'P2 BLUE') : (remoteCallsign || 'P2 BLUE'))
+          : 'P2 BLUE';
+
+        const p1Label = this.domElements.p1ResultLabel || document.getElementById('p1ResultLabel');
+        const p2Label = this.domElements.p2ResultLabel || document.getElementById('p2ResultLabel');
+
+        if (p1Label) {
+          const youTag = (this.isOnline && isLocalRed) ? ' (YOU)' : '';
+          p1Label.textContent = `🔴 ${p1Name}${youTag} ROCKS`;
+        }
+        if (p2Label) {
+          const youTag = (this.isOnline && !isLocalRed) ? ' (YOU)' : '';
+          p2Label.textContent = `🔵 ${p2Name}${youTag} ROCKS`;
+        }
+
         if (this.domElements.p1ScoreVal) {
           this.domElements.p1ScoreVal.textContent = this.p1Kills;
         }
@@ -6167,6 +6253,15 @@
         this.domElements.newHighScoreBanner.classList.remove('hidden');
       } else {
         this.domElements.newHighScoreBanner.classList.add('hidden');
+      }
+
+      if (this.domElements.retryBtn) {
+        this.domElements.retryBtn.disabled = false;
+        if (this.isOnline && !this.isOnlineHost) {
+          this.domElements.retryBtn.textContent = 'PLAY AGAIN (REQUEST)';
+        } else {
+          this.domElements.retryBtn.textContent = 'PLAY AGAIN';
+        }
       }
 
       // Synchronize GAME OVER to co-pilot in online multiplayer

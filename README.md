@@ -33,6 +33,9 @@ The game includes seamless dual-input support for both desktop keyboards/mice an
 | **Fire Lasers** | `Spacebar`, `Enter`, or `Numpad0` *(Golden Plasma)* | `Left Shift` or `Q` *(Electric Cyan Plasma)* |
 | **Deploy Shield** | `↓` (Down Arrow) or `Right Shift` | `S` or `E` |
 
+> [!NOTE]
+> **Online Co-op Controls:** When flying online across separate devices, each pilot uses their own native solo desktop controls or mobile touch layout on their respective screen.
+
 ### 📱 Mobile & Touch Controls
 - **Steering:** Tap the on-screen counter-clockwise **[ ↺ < ]** and clockwise **[ ↻ > ]** looped arrow buttons in the lower-left corner.
 - **Thrust:** Tap & hold the on-screen **[THRUST]** button, or touch & hold anywhere on the canvas.
@@ -140,12 +143,22 @@ Built using the Web Audio API with zero external audio assets:
 ### 10. 👥 2-Player Local Co-op Mode
 Team up with a friend on a single shared keyboard:
 - **Collaborative Co-op Dynamics:** Both players share the deep-space arena collaboratively. The two ships pass freely through each other with zero friendly-fire or hull collisions.
-- **Dual Cockpit Cockpit HUD:** Displays real-time dedicated cockpit gauges for Player 1 (Classic Crimson) on the left and Player 2 (Cobalt Blue) on the right, tracking independent hull lives, ammo batteries, and shield capacitors.
+- **Dual Cockpit HUD:** Displays real-time dedicated cockpit gauges for Player 1 (Classic Crimson) on the left and Player 2 (Cobalt Blue) on the right, tracking independent hull lives, ammo batteries, and shield capacitors.
 - **Dynamic UFO Alternating Target System:** When the hostile alien saucer arrives, it picks its first target randomly, then dynamically alternates focus and predictive attacks between the two living players every 5 seconds (or immediately if the targeted ship is destroyed).
 - **Independent Respawn & Lone Survivor Mode:** If one ship is eliminated, it respawns with protective invulnerability shielding as long as it has lives remaining. If one player runs out of lives, their partner continues fighting alone. Game Over only triggers when both ships are wiped out.
 - **Shared Victory & Individual Trophies:** Every destroyed asteroid or UFO triggers combat energy siphons for the shooter plus awards a 50% assist energy boost to the partner ship. The Game Over screen displays individual rock kill tallies alongside the shared team final score.
 
-### 11. Customization & Persistence
+### 11. 🌐 2-Player Online Peer-to-Peer Co-op Mode (Cross-Device WebRTC)
+Play co-op remotely with a friend across separate computers, laptops, iPads, or smartphones:
+- **Instant WebRTC P2P Connection:** Powered by WebRTC DataChannels (`network.js` via PeerJS), allowing direct low-latency browser-to-browser communication with zero server game hosting costs.
+- **One-Click Room Codes & Link Sharing:** Create a lobby to generate an arcade room code (e.g. `SPACE-8492`) or tap **Copy Link** to share an instant invite URL that auto-joins co-pilots directly into the cockpit.
+- **Cross-Device Hardware Freedom:** Mix and match devices seamlessly—host on desktop and fly with a co-pilot on mobile, or dual laptop, or dual phone.
+- **Dynamic Cockpit HUD & Personalized Callsigns:** Enter your custom pilot callsign (e.g. `amitjoshi2724`). The multiplayer HUD dynamically renders each pilot's name and color-coded role badge (`(YOU)` vs `(CO-PILOT)`), using adaptive typography that scales font sizes dynamically to fit names up to 30 characters without truncation.
+- **Authoritative Physics & Dead-Reckoning:** The host simulates master space physics at 60 Hz, streaming delta state snapshots to the guest with dead reckoning and client-side projectile prediction for buttery-smooth flight.
+- **Synchronized Mission Pause:** When either pilot hits pause (via keyboard or touch button), both screens instantly enter the pause modal with real-time status banners indicating who placed the mission on hold. Unpausing is synchronized seamlessly.
+- **Unified Game Over & Co-op Statistics:** Upon mission completion, both pilots receive identical final team scores, team record badges, individual asteroid kill tallies labeled with their actual usernames, and co-pilot restart requests (`PLAY AGAIN (REQUEST)`).
+
+### 12. Customization & Persistence
 - **Ship Skin Selection:** Choose between Classic Crimson (`images/newspaceship.png`) and Cobalt Blue (`images/bluenewspaceship.png`).
 - **On-Ship Status Bars Toggle:** Toggle real-time vertical ammo and shield status bars flanking your ship on or off.
 - **High Score Tracking:** Automatically persists your personal best record in browser `localStorage`.
@@ -175,6 +188,8 @@ Spaceship-Flight/
 ├── index.html                   # Modern HTML5 game canvas and glassmorphic UI
 ├── style.css                    # Retro sci-fi theme stylesheet and responsive HUD
 ├── game.js                      # Core game loop, physics engine, audio synth, & controls
+├── network.js                   # WebRTC peer-to-peer multiplayer networking engine
+├── rl_agent.js                  # Reinforcement learning neural agent & heuristics
 ├── sw.js                        # Offline-first Service Worker cache engine
 ├── manifest.json                # PWA web app manifest for home screen install
 ├── README.md                    # Project overview & documentation

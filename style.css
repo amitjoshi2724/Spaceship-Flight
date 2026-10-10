@@ -235,11 +235,32 @@ html, body {
   font-weight: 900;
   letter-spacing: 0.8px;
   white-space: nowrap;
-  max-width: 170px;
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
   transition: font-size 0.2s ease, letter-spacing 0.2s ease;
+}
+
+.mp-tag-pill {
+  display: inline-block;
+  padding: 1px 3.5px;
+  border-radius: 3px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.mp-tag-pill.you {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid currentColor;
+}
+
+.mp-tag-pill.partner {
+  background: rgba(148, 163, 184, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #94a3b8;
 }
 
 .mp-tag.red {
@@ -456,7 +477,7 @@ html, body {
 
   .mp-tag {
     font-size: 8.5px;
-    max-width: 58px;
+    max-width: 100%;
     letter-spacing: 0.3px;
   }
 
@@ -472,7 +493,7 @@ html, body {
 
 @media (max-width: 380px) {
   .mp-tag {
-    max-width: 42px;
+    max-width: 100%;
     font-size: 8px;
   }
   .hud-mp-player.hud-mp-p2,
