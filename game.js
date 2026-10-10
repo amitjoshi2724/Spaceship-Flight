@@ -2542,6 +2542,8 @@
       this.networkEvents = [];
       this.guestInputState = { left: false, right: false, up: false, fire: false, shield: false };
       this.rockIdSeq = 0;
+      this.bulletIdSeq = 0;
+      this.ufoBulletIdSeq = 0;
 
       this.bullets = [];
       this.rocks = [];
@@ -3932,8 +3934,10 @@
       if (this.state === 'PLAYING' && guestShip.alive) {
         guestShip.setThrust(!!keys.up);
         if (keys.fire && !guestKeys.fire) {
-          guestShip.fire(this.bullets);
-          this.networkEvents.push({ type: 'fire', shooterId: guestShip.playerId });
+          const fired = guestShip.fire(this.bullets);
+          if (fired) {
+            this.networkEvents.push({ type: 'fire', shooterId: guestShip.playerId });
+          }
         }
         if (keys.shield && !guestKeys.shield) {
           guestShip.triggerEmergencyShield();
@@ -3992,8 +3996,11 @@
       }));
 
       const bullets = (this.bullets || []).filter(b => b && !b.hit).map(b => ({
+        id: b.id || (b.id = ++this.bulletIdSeq),
         x: +((b.x != null ? b.x : 0).toFixed(1)),
         y: +((b.y != null ? b.y : 0).toFixed(1)),
+        dx: +((b.dx != null ? b.dx : 0).toFixed(2)),
+        dy: +((b.dy != null ? b.dy : 0).toFixed(2)),
         sId: b.shooterId || 1,
         col: b.color || 'gold'
       }));
@@ -4011,8 +4018,11 @@
       }
 
       const ufoBullets = (this.ufoBullets || []).filter(ub => ub && !ub.hit).map(ub => ({
+        id: ub.id || (ub.id = ++this.ufoBulletIdSeq),
         x: +((ub.x != null ? ub.x : 0).toFixed(1)),
         y: +((ub.y != null ? ub.y : 0).toFixed(1)),
+        dx: +((ub.dx != null ? ub.dx : 0).toFixed(2)),
+        dy: +((ub.dy != null ? ub.dy : 0).toFixed(2)),
         aim: ub.aimMode || 'linear',
         tgt: ub.targetType || 'p1',
         col: ub.defensiveColor || null
@@ -4120,12 +4130,26 @@
 
       if (Array.isArray(snap.b)) {
         const BulletClass = (typeof Bullet !== 'undefined' ? Bullet : (window.SpaceshipCore && window.SpaceshipCore.Bullet));
-        this.bullets = snap.b.map(bData => {
-          const b = new BulletClass(bData.x, bData.y, 0, 0, 0, 1.0, bData.sId, bData.col);
+        const existingBullets = new Map();
+        for (const b of this.bullets) {
+          if (b && b.id) existingBullets.set(b.id, b);
+        }
+        const newBullets = [];
+        for (const bData of snap.b) {
+          let b = existingBullets.get(bData.id);
+          if (!b) {
+            b = new BulletClass(bData.x, bData.y, 0, 0, 0, 1.0, bData.sId, bData.col);
+            b.id = bData.id;
+          }
           b.x = bData.x;
           b.y = bData.y;
-          return b;
-        });
+          b.dx = (typeof bData.dx === 'number') ? bData.dx : 0;
+          b.dy = (typeof bData.dy === 'number') ? bData.dy : -14;
+          b.shooterId = bData.sId || 1;
+          b.color = bData.col || (b.shooterId === 2 ? 'cyan' : 'gold');
+          newBullets.push(b);
+        }
+        this.bullets = newBullets;
       }
 
       if (snap.u) {
@@ -4142,10 +4166,24 @@
       }
 
       if (Array.isArray(snap.ub)) {
-        this.ufoBullets = snap.ub.map(ubData => {
-          const ub = new UFOBullet(ubData.x, ubData.y, 0, 0, ubData.tgt, ubData.aim, ubData.col);
-          return ub;
-        });
+        const existingUfoBullets = new Map();
+        for (const ub of this.ufoBullets) {
+          if (ub && ub.id) existingUfoBullets.set(ub.id, ub);
+        }
+        const newUfoBullets = [];
+        for (const ubData of snap.ub) {
+          let ub = existingUfoBullets.get(ubData.id);
+          if (!ub) {
+            ub = new UFOBullet(ubData.x, ubData.y, ubData.dx || 0, ubData.dy || 0, ubData.tgt, ubData.aim, ubData.col);
+            ub.id = ubData.id;
+          }
+          ub.x = ubData.x;
+          ub.y = ubData.y;
+          ub.dx = (typeof ubData.dx === 'number') ? ubData.dx : 0;
+          ub.dy = (typeof ubData.dy === 'number') ? ubData.dy : 0;
+          newUfoBullets.push(ub);
+        }
+        this.ufoBullets = newUfoBullets;
       }
 
       if (typeof snap.sc === 'number') this.score = snap.sc;
@@ -4409,6 +4447,9 @@
           e.code === 'ShiftLeft' ||
           e.code === 'ShiftRight'
         );
+        if (this.state === 'PLAYING' && (isActionFireOrShield || e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'KeyW' || e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD')) {
+          e.preventDefault();
+        }
         if (e.repeat && isActionFireOrShield) return;
 
         if (this.isOnline) {
@@ -4432,8 +4473,8 @@
             if (isSoloFire) {
               hostKeys.fire = true;
               if (this.state === 'PLAYING' && hostShip.alive) {
-                hostShip.fire(this.bullets);
-                this.networkEvents.push({ type: 'fire', shooterId: hostShip.playerId });
+                const fired = hostShip.fire(this.bullets);
+                if (fired) this.networkEvents.push({ type: 'fire', shooterId: hostShip.playerId });
               }
             }
             if (isSoloShield) {
@@ -4453,12 +4494,16 @@
               if (this.onlineLocalShip && this.onlineLocalShip.alive) this.onlineLocalShip.setThrust(true);
             }
             if (isSoloFire) {
-              this.guestInputState.fire = true;
-              inputChanged = true;
+              if (!this.guestInputState.fire) {
+                this.guestInputState.fire = true;
+                inputChanged = true;
+              }
             }
             if (isSoloShield) {
-              this.guestInputState.shield = true;
-              inputChanged = true;
+              if (!this.guestInputState.shield) {
+                this.guestInputState.shield = true;
+                inputChanged = true;
+              }
             }
             if (inputChanged) {
               this.sendGuestInput();
@@ -4762,17 +4807,22 @@
           if (this.isOnline && !this.isOnlineHost) {
             this.guestInputState.fire = true;
             this.sendGuestInput();
-            this.guestInputState.fire = false;
           } else if (this.isOnline && this.isOnlineHost) {
-            if (this.state === 'PLAYING') {
-              this.ship.fire(this.bullets);
-              this.networkEvents.push({ type: 'fire', shooterId: this.ship.playerId });
+            const hostShip = (this.onlineRole === 'red') ? this.ship1 : this.ship2;
+            if (this.state === 'PLAYING' && hostShip.alive) {
+              const fired = hostShip.fire(this.bullets);
+              if (fired) this.networkEvents.push({ type: 'fire', shooterId: hostShip.playerId });
             }
           } else {
             if (this.state === 'PLAYING') this.ship.fire(this.bullets);
           }
         },
-        () => { }
+        () => {
+          if (this.isOnline && !this.isOnlineHost) {
+            this.guestInputState.fire = false;
+            this.sendGuestInput();
+          }
+        }
       );
 
       // Direct canvas interactions (Tap = fire, Hold = thrust)
@@ -4786,12 +4836,35 @@
         this.soundFx.resume();
 
         canvasTouchHold = setTimeout(() => {
-          this.ship.setThrust(true);
+          if (this.isOnline && !this.isOnlineHost) {
+            this.guestInputState.up = true;
+            this.sendGuestInput();
+            if (this.onlineLocalShip && this.onlineLocalShip.alive) this.onlineLocalShip.setThrust(true);
+          } else {
+            this.ship.setThrust(true);
+          }
         }, 180);
       });
 
       this.canvas.addEventListener('pointerup', (e) => {
         if (this.state !== 'PLAYING') return;
+        if (this.isOnline && !this.isOnlineHost) {
+          if (canvasTouchHold) {
+            clearTimeout(canvasTouchHold);
+            canvasTouchHold = null;
+            // Tap to fire streamed to authoritative host (never spawn rogue local bullet)
+            this.guestInputState.fire = true;
+            this.sendGuestInput();
+            setTimeout(() => {
+              this.guestInputState.fire = false;
+              this.sendGuestInput();
+            }, 50);
+          }
+          this.guestInputState.up = false;
+          this.sendGuestInput();
+          if (this.onlineLocalShip && this.onlineLocalShip.alive) this.onlineLocalShip.setThrust(false);
+          return;
+        }
         if (canvasTouchHold) {
           clearTimeout(canvasTouchHold);
           canvasTouchHold = null;
@@ -4803,7 +4876,13 @@
 
       this.canvas.addEventListener('pointercancel', () => {
         if (canvasTouchHold) clearTimeout(canvasTouchHold);
-        this.ship.setThrust(false);
+        if (this.isOnline && !this.isOnlineHost) {
+          this.guestInputState.up = false;
+          this.sendGuestInput();
+          if (this.onlineLocalShip && this.onlineLocalShip.alive) this.onlineLocalShip.setThrust(false);
+        } else {
+          this.ship.setThrust(false);
+        }
       });
     }
 
@@ -5152,6 +5231,8 @@
       this.updateScore(0);
       this.updateHighScoreDisplay(this.highScore);
       this.bullets = [];
+      this.bulletIdSeq = 0;
+      this.ufoBulletIdSeq = 0;
       this.rocks = [];
       this.rockSpawnTimer = -150; // Grace period: ~2.5s before continuous spawning kicks in
       this.ufo = null;
