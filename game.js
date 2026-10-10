@@ -3810,7 +3810,7 @@
       this.onlineGuestName = (this.network && this.network.peerPilotName) ? this.network.peerPilotName : (this.onlineGuestName || '');
 
       if (this.network) {
-        this.network.sendStartGame(hostRole);
+        this.network.sendStartGame(hostRole, this.highScore);
       }
       this.hideModals();
       this.startGame('multiplayer');
@@ -3827,6 +3827,9 @@
       this.onlineRemoteShip = (guestRole === 'red') ? this.ship2 : this.ship1;
       if (data.hostName) this.onlineHostName = data.hostName;
       if (data.guestName) this.onlineGuestName = data.guestName;
+      if (typeof data.highScore === 'number' && !isNaN(data.highScore)) {
+        this.updateHighScoreDisplay(data.highScore);
+      }
 
       this.hideModals();
       this.startGame('multiplayer');
@@ -3957,7 +3960,7 @@
         u: ufoData,
         ub: ufoBullets,
         sc: this.score,
-        hs: this.highScore,
+        hs: Math.max(this.highScore, this.score),
         p1k: this.p1Kills,
         p2k: this.p2Kills,
         st: this.state,
@@ -4075,10 +4078,18 @@
       }
 
       if (typeof snap.sc === 'number') this.score = snap.sc;
-      if (typeof snap.hs === 'number') this.highScore = snap.hs;
+      if (typeof snap.hs === 'number' && !isNaN(snap.hs)) {
+        if (snap.hs > this.highScore) {
+          this.highScore = snap.hs;
+          try {
+            localStorage.setItem('spaceship_flight_high_score', this.highScore.toString());
+          } catch (_) {}
+        }
+      }
       if (typeof snap.p1k === 'number') this.p1Kills = snap.p1k;
       if (typeof snap.p2k === 'number') this.p2Kills = snap.p2k;
       this.updateScore(this.score);
+      this.updateHighScoreDisplay(this.highScore);
       this.updateLivesDisplay();
       this.updateEnergyDisplay();
 
@@ -4211,7 +4222,8 @@
         window.visualViewport.addEventListener('resize', () => this.resizeCanvas());
       }
 
-      this.domElements.highScoreDisplay.textContent = this.highScore;
+      this.highScore = parseInt(localStorage.getItem('spaceship_flight_high_score') || '0', 10);
+      this.updateHighScoreDisplay(this.highScore);
       this.updateSoundButtons(this.soundFx.enabled);
       this.setHudMode('solo');
       if (this.domElements.settingSound) {
@@ -5065,6 +5077,7 @@
 
       this.score = 0;
       this.updateScore(0);
+      this.updateHighScoreDisplay(this.highScore);
       this.bullets = [];
       this.rocks = [];
       this.rockSpawnTimer = -150; // Grace period: ~2.5s before continuous spawning kicks in
@@ -5346,6 +5359,7 @@
           }
         }
       }
+      this.updateHighScoreDisplay(this.highScore);
     }
 
     updateSoundButtons(enabled) {
@@ -5582,21 +5596,39 @@
       this.domElements.startScreen.classList.add('active');
     }
 
+    updateHighScoreDisplay(val) {
+      if (typeof val === 'number' && !isNaN(val)) {
+        if (val > this.highScore) {
+          this.highScore = val;
+          try {
+            localStorage.setItem('spaceship_flight_high_score', this.highScore.toString());
+          } catch (_) {}
+        }
+      }
+      if (this.domElements.highScoreDisplay) {
+        this.domElements.highScoreDisplay.textContent = this.highScore;
+      }
+      if (this.domElements.highScoreDisplayMp) {
+        this.domElements.highScoreDisplayMp.textContent = this.highScore;
+      }
+    }
+
     updateScore(val) {
       this.score = val;
-      this.domElements.scoreDisplay.textContent = this.score;
+      if (this.domElements.scoreDisplay) {
+        this.domElements.scoreDisplay.textContent = this.score;
+      }
       if (this.domElements.scoreDisplayMp) {
         this.domElements.scoreDisplayMp.textContent = this.score;
       }
 
       if (this.score > this.highScore) {
         this.highScore = this.score;
-        this.domElements.highScoreDisplay.textContent = this.highScore;
-        if (this.domElements.highScoreDisplayMp) {
-          this.domElements.highScoreDisplayMp.textContent = this.highScore;
-        }
-        localStorage.setItem('spaceship_flight_high_score', this.highScore.toString());
+        try {
+          localStorage.setItem('spaceship_flight_high_score', this.highScore.toString());
+        } catch (_) {}
       }
+      this.updateHighScoreDisplay(this.highScore);
     }
 
     updateLivesDisplay() {

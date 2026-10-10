@@ -492,6 +492,7 @@
         guestRole,
         hostName: this.pilotName,
         guestName: this.peerPilotName,
+        highScore: (typeof config.highScore === 'number') ? config.highScore : 0,
         powerMode: config.powerMode || 'dual',
         difficulty: config.difficulty || 'medium',
         timestamp: Date.now()
@@ -500,8 +501,8 @@
       return true;
     }
 
-    sendStartGame(hostRole = 'red') {
-      return this.launchGame({ hostRole });
+    sendStartGame(hostRole = 'red', highScore = 0) {
+      return this.launchGame({ hostRole, highScore });
     }
 
     /**
