@@ -172,29 +172,38 @@ html, body {
 }
 
 #hud.multiplayer-active #hudMultiplayer {
-  display: flex !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   width: 100%;
-  gap: clamp(4px, 1vw, 10px);
+  gap: clamp(8px, 1.5vw, 16px);
   min-width: 0;
+  box-sizing: border-box;
+  padding-right: 68px; /* Room for anchored utility buttons */
 }
 
+/* Multiplayer Corner Controls (Mute / Pause) */
 .mp-hud-right {
+  position: absolute;
+  right: max(10px, env(safe-area-inset-right, 10px));
+  top: max(8px, env(safe-area-inset-top, 8px));
   display: flex;
   align-items: center;
   gap: clamp(4px, 0.8vw, 8px);
-  margin-left: 6px;
-  flex-shrink: 0;
+  z-index: 25;
+  pointer-events: auto;
+}
+
+.mp-hud-right .hud-btn {
+  pointer-events: auto;
 }
 
 /* Multiplayer Cockpit Layout */
 .hud-mp-player {
   display: flex;
   align-items: center;
-  gap: clamp(4px, 0.8vw, 8px);
+  gap: clamp(5px, 0.9vw, 8px);
   min-width: 0;
-  flex: 1 1 auto;
 }
 
 .hud-mp-p2 {
@@ -205,18 +214,35 @@ html, body {
   justify-content: flex-end;
 }
 
+/* On desktop, order P1 so gauges sit on the left (towards center) and badge sits on the right */
+.hud-mp-p1 .mp-player-badge {
+  order: 3;
+}
+.hud-mp-p1 #p1EnergyHud {
+  order: 2;
+}
+.hud-mp-p1 #p1ShieldHud {
+  order: 1;
+}
+
 .hud-mp-center {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   flex-shrink: 0;
+  justify-self: center;
 }
 
 .mp-player-badge {
+  display: flex !important;
   flex-direction: row !important;
   align-items: center;
   gap: 6px;
-  padding: 4px clamp(5px, 0.8vw, 8px);
+  padding: 4px clamp(6px, 0.8vw, 10px);
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .mp-player-badge.p1-badge {
@@ -231,25 +257,27 @@ html, body {
 
 .mp-tag {
   font-family: var(--font-display);
-  font-size: clamp(9px, 1.5vw, 11px);
+  font-size: clamp(9px, 1.4vw, 11px);
   font-weight: 900;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.6px;
   white-space: nowrap;
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* NEVER TRUNCATE TEXT */
+  overflow: visible !important;
+  text-overflow: clip !important;
+  max-width: none !important;
   vertical-align: middle;
   transition: font-size 0.2s ease, letter-spacing 0.2s ease;
 }
 
 .mp-tag-pill {
   display: inline-block;
-  padding: 1px 3.5px;
+  padding: 1.5px 4px;
   border-radius: 3px;
   font-weight: 800;
   letter-spacing: 0.5px;
   line-height: 1;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .mp-tag-pill.you {
@@ -284,11 +312,12 @@ html, body {
 }
 
 .mp-gauge {
-  min-width: 0;
+  min-width: 72px;
   max-width: 110px;
   flex: 1 1 auto;
-  padding: 3px clamp(4px, 0.8vw, 8px);
+  padding: 3px clamp(5px, 0.8vw, 8px);
   gap: 2px;
+  box-sizing: border-box;
 }
 
 .mp-gauge .energy-percent {
@@ -300,66 +329,89 @@ html, body {
 }
 
 /* ==========================================================================
-   RESPONSIVE MULTIPLAYER COCKPIT HUD (MOBILE & TABLET)
-   Prevents overcrowding, overlaps, and collisions on narrow viewports
-   Organizes left & right pilot pods into compact dual-row grid cockpits
+   RESPONSIVE MULTIPLAYER COCKPIT HUD (MOBILE LANDSCAPE, TABLET & COMPACT SCREENS)
+   Triggers whenever viewport is constrained horizontally (<= 1100px) OR
+   vertically (<= 560px), which captures ALL mobile phones in landscape & portrait.
+   Organizes left & right pilot pods into dual-tier cockpits:
+   - Row 1: Pilot badge (Name + YOU/CO-PILOT + Lives)
+   - Row 2: Equal-width mini gauges (Ammo + Shield)
    ========================================================================== */
-@media (max-width: 820px) {
+@media (max-width: 1100px), (max-height: 560px) {
   #hud.multiplayer-active {
     padding: max(4px, env(safe-area-inset-top, 4px)) max(6px, env(safe-area-inset-right, 6px)) 2px max(6px, env(safe-area-inset-left, 6px));
-    gap: 4px;
   }
 
   #hud.multiplayer-active #hudMultiplayer {
-    display: flex !important;
-    flex-direction: row;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 4px;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: start;
     width: 100%;
     min-width: 0;
+    gap: clamp(4px, 1.2vw, 12px);
+    padding-right: max(56px, calc(env(safe-area-inset-right, 6px) + 52px));
+    padding-left: clamp(2px, 1vw, 8px);
+    box-sizing: border-box;
   }
 
-  /* P2 Left Wing: Grid with Badge on top, dual mini gauges on bottom */
+  /* Anchored Utility Controls */
+  .mp-hud-right {
+    position: absolute;
+    right: max(6px, env(safe-area-inset-right, 6px));
+    top: max(4px, env(safe-area-inset-top, 4px));
+    gap: 3px;
+    z-index: 25;
+  }
+
+  .mp-hud-right .hud-btn {
+    padding: 2px 4px;
+    font-size: 10px;
+    min-width: 23px;
+    height: 23px;
+  }
+
+  /* P2 Left Wing: Modular Console (Badge on Top, Dual Mini Gauges Below) */
   .hud-mp-player.hud-mp-p2 {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-rows: auto auto;
-    gap: 2px 3px;
-    flex: 1 1 0;
+    gap: 2px 4px;
     min-width: 0;
-    max-width: 37%;
+    max-width: 100%;
+    justify-items: start;
     align-items: center;
   }
 
   .hud-mp-p2 .mp-player-badge {
     grid-column: 1 / -1;
     grid-row: 1;
-    width: 100%;
+    width: auto;
+    max-width: 100%;
     box-sizing: border-box;
     justify-content: flex-start;
-    padding: 2px 4px;
-    gap: 3px;
+    padding: 2px clamp(4px, 0.8vw, 7px);
+    gap: 4px;
   }
 
   .hud-mp-p2 #p2EnergyHud {
     grid-column: 1 / 2;
     grid-row: 2;
     width: 100%;
-    max-width: none;
+    max-width: 120px;
     box-sizing: border-box;
-    padding: 2px 3px;
+    padding: 2px 4px;
     gap: 1px;
+    min-width: 0;
   }
 
   .hud-mp-p2 #p2ShieldHud {
     grid-column: 2 / 3;
     grid-row: 2;
     width: 100%;
-    max-width: none;
+    max-width: 120px;
     box-sizing: border-box;
-    padding: 2px 3px;
+    padding: 2px 4px;
     gap: 1px;
+    min-width: 0;
   }
 
   /* Center Cockpit: Shared Team Score & High Score */
@@ -368,15 +420,15 @@ html, body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
-    flex: 0 0 auto;
+    gap: 1px;
     min-width: 0;
-    padding: 0 1px;
+    padding: 0;
+    justify-self: center;
   }
 
   .hud-mp-center .score-container {
-    padding: 2px 5px;
-    gap: 4px;
+    padding: 2px clamp(5px, 1vw, 8px);
+    gap: clamp(4px, 0.8vw, 8px);
   }
 
   .hud-mp-center .score-divider {
@@ -384,12 +436,12 @@ html, body {
   }
 
   .hud-mp-center .hud-label {
-    font-size: 6.5px;
-    letter-spacing: 0.2px;
+    font-size: clamp(6.5px, 1.1vw, 8px);
+    letter-spacing: 0.3px;
   }
 
   .hud-mp-center .hud-value {
-    font-size: 13px;
+    font-size: clamp(12.5px, 2vw, 16px);
   }
 
   .online-status-badge {
@@ -398,87 +450,81 @@ html, body {
     margin-top: 1px;
   }
 
-  /* P1 Right Wing: Grid with Badge & Controls on top, dual mini gauges on bottom */
+  /* P1 Right Wing: Modular Console (Badge on Top, Dual Mini Gauges Below) */
   .hud-mp-player.hud-mp-p1 {
     display: grid !important;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-rows: auto auto;
-    gap: 2px 3px;
-    flex: 1 1 0;
+    gap: 2px 4px;
     min-width: 0;
-    max-width: 37%;
+    max-width: 100%;
     justify-items: end;
     align-items: center;
   }
 
+  /* Reset order for grid layout on mobile */
   .hud-mp-p1 .mp-player-badge {
-    grid-column: 1 / 2;
+    order: unset;
+    grid-column: 1 / -1;
     grid-row: 1;
-    width: 100%;
+    width: auto;
+    max-width: 100%;
     box-sizing: border-box;
     justify-content: flex-end;
-    padding: 2px 4px;
-    gap: 3px;
-  }
-
-  .hud-mp-p1 .mp-hud-right {
-    grid-column: 2 / 3;
-    grid-row: 1;
-    margin-left: 0;
-    gap: 2px;
-    flex-shrink: 0;
+    padding: 2px clamp(4px, 0.8vw, 7px);
+    gap: 4px;
   }
 
   .hud-mp-p1 #p1ShieldHud {
+    order: unset;
     grid-column: 1 / 2;
     grid-row: 2;
     width: 100%;
-    max-width: none;
+    max-width: 120px;
     box-sizing: border-box;
-    padding: 2px 3px;
+    padding: 2px 4px;
     gap: 1px;
+    min-width: 0;
   }
 
   .hud-mp-p1 #p1EnergyHud {
+    order: unset;
     grid-column: 2 / 3;
     grid-row: 2;
     width: 100%;
-    max-width: none;
+    max-width: 120px;
     box-sizing: border-box;
-    padding: 2px 3px;
+    padding: 2px 4px;
     gap: 1px;
+    min-width: 0;
   }
 
-  /* Compact Gauge Typography & Bar Heights */
+  /* Mini Gauges Layout */
   .mp-gauge {
     min-width: 0;
-    padding: 2px 3px;
+    padding: 2px 4px;
+    box-sizing: border-box;
   }
 
   .mp-gauge .hud-label {
-    font-size: 6.5px;
+    font-size: clamp(6.5px, 1vw, 8px);
     letter-spacing: 0.2px;
   }
 
   .mp-gauge .energy-percent {
-    font-size: 8.5px;
+    font-size: clamp(7.5px, 1.2vw, 9.5px);
   }
 
   .mp-gauge .energy-bar-track {
-    height: 4px;
-  }
-
-  .mp-hud-right .hud-btn {
-    padding: 2px 4px;
-    font-size: 10px;
-    min-width: 22px;
-    height: 22px;
+    height: 3.5px;
   }
 
   .mp-tag {
-    font-size: 8.5px;
-    max-width: 100%;
-    letter-spacing: 0.3px;
+    font-size: clamp(8px, 1.4vw, 10.5px);
+    letter-spacing: 0.4px;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    max-width: none !important;
   }
 
   .p1-lives svg, .p2-lives svg {
@@ -491,24 +537,36 @@ html, body {
   }
 }
 
-@media (max-width: 380px) {
-  .mp-tag {
-    max-width: 100%;
-    font-size: 8px;
+/* Specific optimizations for portrait mode on narrow phones */
+@media (max-width: 540px) and (orientation: portrait) {
+  #hud.multiplayer-active #hudMultiplayer {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    grid-template-rows: auto auto !important;
+    gap: 4px 6px !important;
+    padding-right: clamp(4px, 1vw, 8px) !important;
+    padding-left: clamp(4px, 1vw, 8px) !important;
   }
-  .hud-mp-player.hud-mp-p2,
+
+  .hud-mp-center {
+    grid-column: 1 / -1 !important;
+    grid-row: 1 !important;
+    justify-self: center !important;
+  }
+
+  .hud-mp-player.hud-mp-p2 {
+    grid-column: 1 / 2 !important;
+    grid-row: 2 !important;
+  }
+
   .hud-mp-player.hud-mp-p1 {
-    max-width: 38%;
+    grid-column: 2 / 3 !important;
+    grid-row: 2 !important;
   }
-  .hud-mp-center .score-container {
-    padding: 1px 3px;
-    gap: 2px;
-  }
-  .hud-mp-center .hud-value {
-    font-size: 11.5px;
-  }
-  .mp-gauge .hud-label {
-    display: none;
+
+  .mp-hud-right {
+    position: absolute !important;
+    right: max(6px, env(safe-area-inset-right, 6px)) !important;
+    top: max(4px, env(safe-area-inset-top, 4px)) !important;
   }
 }
 

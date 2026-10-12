@@ -5527,38 +5527,35 @@
         const isVeryNarrow = width <= 390;
 
         let tagSize = '11px';
-        let letterSpacing = '0.6px';
+        let letterSpacing = '0.5px';
         let badgeSize = '8.5px';
 
         if (isVeryNarrow) {
-          if (len > 20) { tagSize = '6.2px'; letterSpacing = '0px'; badgeSize = '5.5px'; }
-          else if (len > 14) { tagSize = '7.0px'; letterSpacing = '0.1px'; badgeSize = '6px'; }
-          else if (len > 8) { tagSize = '7.8px'; letterSpacing = '0.2px'; badgeSize = '6.5px'; }
-          else { tagSize = '8.5px'; letterSpacing = '0.3px'; badgeSize = '7px'; }
+          if (len > 20) { tagSize = '7.5px'; letterSpacing = '0.1px'; badgeSize = '6.5px'; }
+          else if (len > 14) { tagSize = '8.0px'; letterSpacing = '0.2px'; badgeSize = '7px'; }
+          else if (len > 8) { tagSize = '8.5px'; letterSpacing = '0.3px'; badgeSize = '7.5px'; }
+          else { tagSize = '9px'; letterSpacing = '0.4px'; badgeSize = '8px'; }
         } else if (isNarrow) {
-          if (len > 22) { tagSize = '7.0px'; letterSpacing = '0.1px'; badgeSize = '6.5px'; }
-          else if (len > 16) { tagSize = '8.0px'; letterSpacing = '0.2px'; badgeSize = '7px'; }
-          else if (len > 10) { tagSize = '9.0px'; letterSpacing = '0.4px'; badgeSize = '7.5px'; }
-          else { tagSize = '10px'; letterSpacing = '0.6px'; badgeSize = '8px'; }
+          if (len > 22) { tagSize = '8.0px'; letterSpacing = '0.2px'; badgeSize = '7px'; }
+          else if (len > 16) { tagSize = '8.8px'; letterSpacing = '0.3px'; badgeSize = '7.5px'; }
+          else if (len > 10) { tagSize = '9.5px'; letterSpacing = '0.4px'; badgeSize = '8px'; }
+          else { tagSize = '10.5px'; letterSpacing = '0.5px'; badgeSize = '8.5px'; }
         } else {
-          if (len > 22) { tagSize = '8.5px'; letterSpacing = '0.2px'; badgeSize = '7.5px'; }
-          else if (len > 16) { tagSize = '9.5px'; letterSpacing = '0.4px'; badgeSize = '8px'; }
-          else if (len > 10) { tagSize = '10.5px'; letterSpacing = '0.6px'; badgeSize = '8.5px'; }
-          else { tagSize = '11.5px'; letterSpacing = '0.8px'; badgeSize = '9px'; }
+          if (len > 22) { tagSize = '9px'; letterSpacing = '0.3px'; badgeSize = '7.5px'; }
+          else if (len > 16) { tagSize = '10px'; letterSpacing = '0.4px'; badgeSize = '8px'; }
+          else if (len > 10) { tagSize = '10.5px'; letterSpacing = '0.5px'; badgeSize = '8.5px'; }
+          else { tagSize = '11.5px'; letterSpacing = '0.6px'; badgeSize = '9px'; }
         }
 
         el.style.fontSize = tagSize;
         el.style.letterSpacing = letterSpacing;
+        el.style.overflow = 'visible';
+        el.style.textOverflow = 'clip';
+        el.style.whiteSpace = 'nowrap';
 
         const badgeColor = isYou ? (shipColor === 'red' ? '#f87171' : '#38bdf8') : '#94a3b8';
-        const badgeText = isYou ? 'YOU' : (isVeryNarrow ? 'CO' : 'CO-PILOT');
+        const badgeText = isYou ? 'YOU' : 'CO-PILOT';
         el.innerHTML = `${name} <span class="mp-tag-pill ${isYou ? 'you' : 'partner'}" style="font-size:${badgeSize};color:${badgeColor};margin-left:3px;">${badgeText}</span>`;
-
-        let currentSize = parseFloat(tagSize);
-        while (el.scrollWidth > el.clientWidth && currentSize > 5.5) {
-          currentSize -= 0.4;
-          el.style.fontSize = `${currentSize.toFixed(1)}px`;
-        }
       };
 
       renderPilotTag(this.domElements.p1TagText, p1Raw, isLocalRed, 'red');
@@ -6924,6 +6921,7 @@
   function initGame() {
     if (document.getElementById('gameCanvas') && document.getElementById('startScreen') && !window.ASTEROIDLE_MODE) {
       window.gameInstance = new Game();
+      window.game = window.gameInstance;
 
       // Register Service Worker for bulletproof offline play (only on http/https, as file:// protocol does not support SW)
       if ('serviceWorker' in navigator && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
