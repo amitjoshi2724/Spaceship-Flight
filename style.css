@@ -237,10 +237,12 @@ html, body {
 
 .mp-player-badge {
   display: flex !important;
-  flex-direction: row !important;
-  align-items: center;
-  gap: 6px;
-  padding: 4px clamp(6px, 0.8vw, 10px);
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center;
+  gap: 2px;
+  padding: 4px clamp(8px, 1vw, 12px) 5px;
   flex-shrink: 0;
   box-sizing: border-box;
 }
@@ -301,14 +303,39 @@ html, body {
   text-shadow: 0 0 8px rgba(56, 189, 248, 0.7);
 }
 
+.mp-player-badge .lives-icons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+}
+
+.mp-player-badge .life-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 9px;
+  height: 11px;
+  filter: none;
+  vertical-align: middle;
+}
+
+.mp-player-badge .life-icon svg {
+  width: 9px;
+  height: 11px;
+  display: block;
+}
+
 .p1-life.active polygon {
   fill: #ef4444 !important;
-  filter: drop-shadow(0 0 6px #ef4444);
+  filter: drop-shadow(0 0 3px #ef4444);
 }
 
 .p2-life.active polygon {
   fill: #00f0ff !important;
-  filter: drop-shadow(0 0 6px #00f0ff);
+  filter: drop-shadow(0 0 3px #00f0ff);
 }
 
 .mp-gauge {
@@ -384,12 +411,14 @@ html, body {
   .hud-mp-p2 .mp-player-badge {
     grid-column: 1 / -1;
     grid-row: 1;
-    width: auto;
+    width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    justify-content: flex-start;
-    padding: 2px clamp(4px, 0.8vw, 7px);
-    gap: 4px;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center;
+    padding: 3px clamp(4px, 0.8vw, 8px) 5px;
+    gap: 2px;
   }
 
   .hud-mp-p2 #p2EnergyHud {
@@ -467,12 +496,14 @@ html, body {
     order: unset;
     grid-column: 1 / -1;
     grid-row: 1;
-    width: auto;
+    width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    justify-content: flex-end;
-    padding: 2px clamp(4px, 0.8vw, 7px);
-    gap: 4px;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center;
+    padding: 3px clamp(4px, 0.8vw, 8px) 5px;
+    gap: 2px;
   }
 
   .hud-mp-p1 #p1ShieldHud {
@@ -529,11 +560,16 @@ html, body {
 
   .p1-lives svg, .p2-lives svg {
     width: 8px;
-    height: 11px;
+    height: 10px;
+  }
+
+  .mp-player-badge .life-icon {
+    width: 8px;
+    height: 10px;
   }
 
   .lives-icons {
-    gap: 2px;
+    gap: 4px;
   }
 }
 

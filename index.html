@@ -21,7 +21,7 @@
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
     rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=2.3.13">
+  <link rel="stylesheet" href="style.css?v=2.3.14">
   <link rel="manifest" href="manifest.json?v=2.0.2">
   <link rel="icon" type="image/png" sizes="64x64" href="images/newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="images/newspaceship.png">
@@ -148,12 +148,12 @@
         <!-- Player 1 (Red) Cockpit Gauges (Right Side of Screen) -->
         <div class="hud-mp-player hud-mp-p1">
           <div class="hud-stat mp-player-badge p1-badge">
+            <span id="p1TagText" class="mp-tag red">P1 RED</span>
             <div id="p1LivesIcons" class="lives-icons p1-lives">
               <span class="life-icon active p1-life" title="P1 Hull 1"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#ef4444" /></svg></span>
               <span class="life-icon active p1-life" title="P1 Hull 2"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#ef4444" /></svg></span>
               <span class="life-icon active p1-life" title="P1 Hull 3"><svg viewBox="0 0 16 20"><polygon points="8,0 0,20 8,15 16,20" fill="#ef4444" /></svg></span>
             </div>
-            <span id="p1TagText" class="mp-tag red">P1 RED</span>
           </div>
           <div id="p1ShieldHud" class="hud-stat mp-gauge p1-shield">
             <div class="energy-header">
@@ -951,9 +951,9 @@
   </div>
 
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="network.js?v=2.3.13"></script>
+  <script src="network.js?v=2.3.14"></script>
   <script src="rl_agent.js?v=2.1.0"></script>
-  <script src="game.js?v=2.3.13"></script>
+  <script src="game.js?v=2.3.14"></script>
 </body>
 
 </html>
