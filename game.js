@@ -593,18 +593,34 @@
         ctx.translate(-this.x, -this.y);
       }
 
-      const isCyan = (this.shooterId === 2 || this.color === 'cyan');
+      const col = this.color || (this.shooterId === 2 ? 'cyan' : 'gold');
+      let glowColor, outerColor, coreColor;
 
-      // Outer glow & radiant aura (yellow or cyan)
-      ctx.shadowColor = isCyan ? '#00f0ff' : '#facc15';
+      if (col === 'cyan') {
+        glowColor = '#00f0ff';
+        outerColor = '#a5f3fc';
+        coreColor = '#00f0ff';
+      } else if (col === 'gold') {
+        glowColor = '#facc15';
+        outerColor = '#fef08a';
+        coreColor = '#facc15';
+      } else {
+        // Custom hex color (e.g. #ef4444, #10b981, #0211d0, etc.)
+        glowColor = col;
+        outerColor = col;
+        coreColor = '#ffffff';
+      }
+
+      // Outer glow & radiant plasma aura
+      ctx.shadowColor = glowColor;
       ctx.shadowBlur = 10;
-      ctx.fillStyle = isCyan ? '#a5f3fc' : '#fef08a';
+      ctx.fillStyle = outerColor;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.visualRadius, 0, Math.PI * 2);
       ctx.fill();
 
-      // Solid vibrant core (yellow or cyan)
-      ctx.fillStyle = isCyan ? '#00f0ff' : '#facc15';
+      // Solid vibrant core
+      ctx.fillStyle = coreColor;
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.coreRadius, 0, Math.PI * 2);
       ctx.fill();
@@ -963,6 +979,7 @@
       this.scalePercent = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
       this.recalculateSize();
       this.selectedSkin = 'red'; // 'red' or 'blue'
+      this.customColor = '#ef4444';
       this.playerId = 1;
       this.alive = true;
 
@@ -983,6 +1000,124 @@
       this.sprites.redMoving2.src = imgPrefix + 'images/newspaceshipmoving2.png';
       this.sprites.blueNormal.src = imgPrefix + 'images/bluenewspaceship.png';
       this.sprites.blueMoving.src = imgPrefix + 'images/bluenewspaceshipmoving2.png';
+    }
+
+    static hexToRgb(hex) {
+      if (!hex) return { r: 239, g: 68, b: 68 };
+      let h = String(hex).trim().toLowerCase();
+      if (h === 'red') return { r: 239, g: 68, b: 68 };
+      if (h === 'blue') return { r: 2, g: 17, b: 208 };
+      if (h === 'cyan') return { r: 0, g: 240, b: 255 };
+      if (h.startsWith('#')) h = h.slice(1);
+      if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+      const num = parseInt(h, 16);
+      if (isNaN(num)) return { r: 239, g: 68, b: 68 };
+      return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+    }
+
+    static normalizeHexColor(col) {
+      if (!col) return '#ef4444';
+      const c = String(col).trim().toLowerCase();
+      if (c === 'red') return '#ef4444';
+      if (c === 'blue') return '#0211d0';
+      if (c === 'cyan') return '#00f0ff';
+      let h = c;
+      if (!h.startsWith('#')) h = '#' + h;
+      if (h.length === 4) h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+      return h;
+    }
+
+    static tintSprite(img, targetHex) {
+      if (!img || !img.complete || img.naturalWidth === 0) return img;
+      const hex = Spaceship.normalizeHexColor(targetHex);
+      if (hex === '#ef4444' || hex === '#850101') return img; // Original red asset
+
+      if (!Spaceship._recolorCache) Spaceship._recolorCache = {};
+      const cacheKey = (img.src || 'img') + '_' + hex;
+      if (Spaceship._recolorCache[cacheKey]) {
+        return Spaceship._recolorCache[cacheKey];
+      }
+
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      const offscreen = document.createElement('canvas');
+      offscreen.width = w;
+      offscreen.height = h;
+      const octx = offscreen.getContext('2d');
+      octx.drawImage(img, 0, 0);
+
+      try {
+        const imgData = octx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+        const rgb = Spaceship.hexToRgb(hex);
+
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i + 3] === 0) continue;
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+
+          // Target only red body pixels: r > 100 && g < 40 && b < 40
+          // (In newspaceship.png, body pixels are strictly r=133, g=1, b=1)
+          if (r > 100 && g < 40 && b < 40) {
+            data[i] = rgb.r;
+            data[i + 1] = rgb.g;
+            data[i + 2] = rgb.b;
+          }
+        }
+        octx.putImageData(imgData, 0, 0);
+        Spaceship._recolorCache[cacheKey] = offscreen;
+        return offscreen;
+      } catch (err) {
+        return img;
+      }
+    }
+
+    static getRecoloredDataUrl(baseImg, targetHex) {
+      const hex = Spaceship.normalizeHexColor(targetHex);
+      if (!Spaceship._dataUrlCache) Spaceship._dataUrlCache = {};
+      if (Spaceship._dataUrlCache[hex]) {
+        return Spaceship._dataUrlCache[hex];
+      }
+
+      if (hex === '#ef4444') {
+        const url = 'images/newspaceship.png';
+        Spaceship._dataUrlCache[hex] = url;
+        return url;
+      }
+      if (hex === '#0211d0') {
+        const url = 'images/bluenewspaceship.png';
+        Spaceship._dataUrlCache[hex] = url;
+        return url;
+      }
+
+      if (baseImg && baseImg.complete && baseImg.naturalWidth > 0) {
+        const tinted = Spaceship.tintSprite(baseImg, hex);
+        if (tinted instanceof HTMLCanvasElement) {
+          try {
+            const dataUrl = tinted.toDataURL('image/png');
+            Spaceship._dataUrlCache[hex] = dataUrl;
+            return dataUrl;
+          } catch (_) { }
+        }
+      }
+      return 'images/newspaceship.png';
+    }
+
+    static getColorName(hex) {
+      if (!hex) return 'Classic Crimson';
+      const norm = Spaceship.normalizeHexColor(hex);
+      const PRESET_NAMES = {
+        '#ef4444': 'Classic Crimson',
+        '#0211d0': 'Cobalt Blue (OG)',
+        '#00f0ff': 'Electric Cyan',
+        '#10b981': 'Neon Emerald',
+        '#facc15': 'Solar Gold',
+        '#a855f7': 'Plasma Purple',
+        '#ec4899': 'Hot Magenta',
+        '#ffffff': 'Starlight White'
+      };
+      return PRESET_NAMES[norm] || ('Custom ' + norm.toUpperCase());
     }
 
     recalculateSize(customCanvasWidth, customCanvasHeight) {
@@ -1203,7 +1338,7 @@
 
       const scale = getScreenScale(this.canvas);
       const shooterId = this.playerId || (this.selectedSkin === 'blue' ? 2 : 1);
-      const bulletColor = this.selectedSkin === 'blue' ? 'cyan' : 'gold';
+      const bulletColor = this.customColor || (this.selectedSkin === 'blue' ? 'cyan' : 'gold');
       bullets.push(new Bullet(bx, by, this.angle, this.dx, this.dy, scale, shooterId, bulletColor));
       this.soundFx.playLaser();
       return true;
@@ -1451,21 +1586,22 @@
 
       // 4. Select sprite: use moving versions showing fire underneath when gas is pressed
       let sprite;
-      if (this.selectedSkin === 'blue') {
-        sprite = this.thrusting ? this.sprites.blueMoving : this.sprites.blueNormal;
+      const col = Spaceship.normalizeHexColor(this.customColor || (this.selectedSkin === 'blue' ? '#0211d0' : '#ef4444'));
+
+      if (this.thrusting) {
+        // Alternate between moving1 and moving2 for flame jet flicker
+        const flicker = Math.floor(this.flameFrame / 5) % 2 === 0;
+        const baseMoving = flicker ? this.sprites.redMoving1 : this.sprites.redMoving2;
+        sprite = (col === '#ef4444') ? baseMoving : Spaceship.tintSprite(baseMoving, col);
       } else {
-        if (this.thrusting) {
-          // Alternate between newspacershipmoving and newspacershipmoving2 for flame jet flicker
-          const flicker = Math.floor(this.flameFrame / 5) % 2 === 0;
-          sprite = flicker ? this.sprites.redMoving1 : this.sprites.redMoving2;
-        } else {
-          sprite = this.sprites.redNormal;
-        }
+        sprite = (col === '#ef4444') ? this.sprites.redNormal : Spaceship.tintSprite(this.sprites.redNormal, col);
       }
 
-      if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+      if (sprite && (sprite.complete || sprite instanceof HTMLCanvasElement) && (sprite.naturalWidth > 0 || sprite.width > 0)) {
         // Maintain the ship body size and extend the flame naturally underneath
-        const aspect = sprite.naturalHeight / sprite.naturalWidth;
+        const sW = sprite.naturalWidth || sprite.width;
+        const sH = sprite.naturalHeight || sprite.height;
+        const aspect = sH / sW;
         const renderHeight = this.width * aspect;
         ctx.drawImage(
           sprite,
@@ -1476,7 +1612,7 @@
         );
       } else {
         // Fallback vector ship if image is loading
-        ctx.fillStyle = this.selectedSkin === 'blue' ? '#38bdf8' : '#ef4444';
+        ctx.fillStyle = col;
         ctx.beginPath();
         ctx.moveTo(0, -this.height / 2);
         ctx.lineTo(this.width / 2, this.height / 2);
@@ -2499,14 +2635,21 @@
       this.particles = new ParticleSystem(this.canvas);
       this.starfield = new Starfield(this.canvas);
 
+      // Ship Hull Color Customization (Persisted per player across all game modes)
+      this.shipColorP1 = localStorage.getItem('spaceship_flight_ship_color_p1') || '#ef4444';
+      this.shipColorP2 = localStorage.getItem('spaceship_flight_ship_color_p2') || '#0211d0';
+      this.colorStudioTarget = 'p1';
+
       // Dual ship instances for Solo and Multiplayer Co-op
       this.ship1 = new Spaceship(this.canvas, this.soundFx, this.particles);
       this.ship1.playerId = 1;
       this.ship1.selectedSkin = 'red';
+      this.ship1.customColor = this.shipColorP1;
 
       this.ship2 = new Spaceship(this.canvas, this.soundFx, this.particles);
       this.ship2.playerId = 2;
       this.ship2.selectedSkin = 'blue';
+      this.ship2.customColor = this.shipColorP2;
 
       this.ship = this.ship1;
       this.ships = [this.ship1, this.ship2];
@@ -2721,6 +2864,22 @@
         settingSound: document.getElementById('settingSound'),
         settingTouchControls: document.getElementById('settingTouchControls'),
         menuShipPreview: document.getElementById('menuShipPreview'),
+
+        // Ship Hull Color Customization UI
+        colorTargetP1Btn: document.getElementById('colorTargetP1Btn'),
+        colorTargetP2Btn: document.getElementById('colorTargetP2Btn'),
+        colorPresetsGrid: document.getElementById('colorPresetsGrid'),
+        shipColorPicker: document.getElementById('shipColorPicker'),
+        shipColorHexDisplay: document.getElementById('shipColorHexDisplay'),
+        settingsShipPreviewImg: document.getElementById('settingsShipPreviewImg'),
+        colorPreviewRoleLabel: document.getElementById('colorPreviewRoleLabel'),
+        colorPreviewNameDisplay: document.getElementById('colorPreviewNameDisplay'),
+        tab3P1ColorPicker: document.getElementById('tab3P1ColorPicker'),
+        tab3P2ColorPicker: document.getElementById('tab3P2ColorPicker'),
+        onlineColorStudio: document.getElementById('onlineColorStudio'),
+        onlineShipColorPicker: document.getElementById('onlineShipColorPicker'),
+        onlineColorHex: document.getElementById('onlineColorHex'),
+        onlineColorSwatches: document.getElementById('onlineColorSwatches'),
 
         // Customizable Controls UI
         presetSoloSelect: document.getElementById('presetSoloSelect'),
@@ -3324,6 +3483,19 @@
       this.network.onPilotUpdate = (data) => {
         if (data.hostName) this.onlineHostName = data.hostName;
         if (data.guestName) this.onlineGuestName = data.guestName;
+        if (data.hostColor || data.guestColor) {
+          if (this.isOnlineHost) {
+            if (data.guestColor) {
+              const guestTarget = (this.onlineRole === 'red') ? 'p2' : 'p1';
+              this.setShipColor(guestTarget, data.guestColor, false);
+            }
+          } else {
+            if (data.hostColor) {
+              const hostTarget = (this.onlineRole === 'red') ? 'p1' : 'p2';
+              this.setShipColor(hostTarget, data.hostColor, false);
+            }
+          }
+        }
         this.updateCrewManifestUI();
         if (this.isOnline && this.gameMode === 'multiplayer') {
           this.updateOnlineHudTags();
@@ -3596,6 +3768,105 @@
       }
     }
 
+    setShipColor(target, hexColor, notifyPeer = true) {
+      const norm = Spaceship.normalizeHexColor(hexColor);
+      if (target === 'p1' || target === 1) {
+        this.shipColorP1 = norm;
+        try { localStorage.setItem('spaceship_flight_ship_color_p1', norm); } catch (_) {}
+        if (this.ship1) this.ship1.customColor = norm;
+        if (this.gameMode === 'solo' && this.ship) this.ship.customColor = norm;
+      } else if (target === 'p2' || target === 2) {
+        this.shipColorP2 = norm;
+        try { localStorage.setItem('spaceship_flight_ship_color_p2', norm); } catch (_) {}
+        if (this.ship2) this.ship2.customColor = norm;
+      }
+
+      // If online and we are changing our local ship color:
+      if (notifyPeer && this.isOnline && this.network && this.network.isConnected) {
+        const localTarget = (this.onlineLocalPlayerId === 2) ? 'p2' : 'p1';
+        if (target === localTarget) {
+          this.network.updatePilotColor(norm);
+        }
+      }
+
+      this.updateShipColorStudioUI();
+      this.updateLivesDisplay();
+      this.updateOnlineHudTags();
+    }
+
+    updateShipColorStudioUI() {
+      const currentTarget = this.colorStudioTarget || 'p1';
+      const currentColor = (currentTarget === 'p1') ? (this.shipColorP1 || '#ef4444') : (this.shipColorP2 || '#0211d0');
+      const colorName = Spaceship.getColorName(currentColor);
+
+      // 1. Target toggle pills
+      if (this.domElements.colorTargetP1Btn) {
+        this.domElements.colorTargetP1Btn.classList.toggle('active', currentTarget === 'p1');
+      }
+      if (this.domElements.colorTargetP2Btn) {
+        this.domElements.colorTargetP2Btn.classList.toggle('active', currentTarget === 'p2');
+      }
+
+      // 2. Preset grid chips
+      if (this.domElements.colorPresetsGrid) {
+        const chips = this.domElements.colorPresetsGrid.querySelectorAll('.color-preset-chip');
+        chips.forEach(chip => {
+          const chipColor = Spaceship.normalizeHexColor(chip.dataset.color);
+          chip.classList.toggle('active', chipColor === currentColor);
+        });
+      }
+
+      // 3. Custom color input & hex display
+      if (this.domElements.shipColorPicker) {
+        this.domElements.shipColorPicker.value = currentColor;
+      }
+      if (this.domElements.shipColorHexDisplay) {
+        this.domElements.shipColorHexDisplay.textContent = currentColor.toUpperCase();
+      }
+
+      // 4. Tab 3 mini header color pickers
+      if (this.domElements.tab3P1ColorPicker) {
+        this.domElements.tab3P1ColorPicker.value = this.shipColorP1 || '#ef4444';
+      }
+      if (this.domElements.tab3P2ColorPicker) {
+        this.domElements.tab3P2ColorPicker.value = this.shipColorP2 || '#0211d0';
+      }
+
+      // 5. Online lobby color studio
+      const localOnlineColor = (this.onlineLocalPlayerId === 2) ? (this.shipColorP2 || '#0211d0') : (this.shipColorP1 || '#ef4444');
+      if (this.domElements.onlineShipColorPicker) {
+        this.domElements.onlineShipColorPicker.value = localOnlineColor;
+      }
+      if (this.domElements.onlineColorHex) {
+        this.domElements.onlineColorHex.textContent = localOnlineColor.toUpperCase();
+      }
+      if (this.domElements.onlineColorSwatches) {
+        const swatches = this.domElements.onlineColorSwatches.querySelectorAll('.mini-swatch');
+        swatches.forEach(sw => {
+          const swColor = Spaceship.normalizeHexColor(sw.dataset.color);
+          sw.classList.toggle('active', swColor === localOnlineColor);
+        });
+      }
+
+      // 6. Preview images
+      const baseSprite = (this.ship1 && this.ship1.sprites) ? this.ship1.sprites.redNormal : null;
+      const targetDataUrl = Spaceship.getRecoloredDataUrl(baseSprite, currentColor);
+      const soloDataUrl = Spaceship.getRecoloredDataUrl(baseSprite, this.shipColorP1 || '#ef4444');
+
+      if (this.domElements.settingsShipPreviewImg) {
+        this.domElements.settingsShipPreviewImg.src = targetDataUrl;
+      }
+      if (this.domElements.colorPreviewRoleLabel) {
+        this.domElements.colorPreviewRoleLabel.textContent = (currentTarget === 'p1') ? 'SOLO / P1 HULL' : 'PLAYER 2 (CO-PILOT) HULL';
+      }
+      if (this.domElements.colorPreviewNameDisplay) {
+        this.domElements.colorPreviewNameDisplay.textContent = colorName;
+      }
+      if (this.domElements.menuShipPreview) {
+        this.domElements.menuShipPreview.src = soloDataUrl;
+      }
+    }
+
     openOnlineLobby(tab = 'create') {
       this.showModal('onlineLobby');
       if (this.domElements.onlinePilotNameInput) {
@@ -3688,7 +3959,8 @@
       this.updateLobbyHostUI(false);
       this.updateCrewManifestUI();
 
-      this.network.createRoom(this.onlineRole, this.pilotName).then(code => {
+      const hostColor = (this.onlineRole === 'red') ? this.shipColorP1 : this.shipColorP2;
+      this.network.createRoom(this.onlineRole, this.pilotName, hostColor).then(code => {
         if (this.domElements.onlineRoomCodeDisplay) {
           this.domElements.onlineRoomCodeDisplay.textContent = code;
         }
@@ -3761,7 +4033,8 @@
       }
       this.updateCrewManifestUI();
 
-      this.network.joinRoom(cleanCode, this.pilotName).then(() => {
+      const guestColor = (this.onlineLocalPlayerId === 2) ? this.shipColorP2 : this.shipColorP1;
+      this.network.joinRoom(cleanCode, this.pilotName, guestColor).then(() => {
         this.updateLobbyGuestUI(true);
         if (this.domElements.onlineConnectBtn) {
           this.domElements.onlineConnectBtn.disabled = false;
@@ -3977,7 +4250,8 @@
         she: +((this.ship1.shieldEnergy != null ? this.ship1.shieldEnergy : 100).toFixed(1)),
         e: +((this.ship1.energy != null ? this.ship1.energy : 100).toFixed(1)),
         l: this.ship1.lives != null ? this.ship1.lives : 3,
-        al: !!this.ship1.alive
+        al: !!this.ship1.alive,
+        col: this.ship1.customColor || this.shipColorP1 || '#ef4444'
       };
       const s2 = {
         x: +((this.ship2.x != null ? this.ship2.x : 0).toFixed(1)),
@@ -3991,7 +4265,8 @@
         she: +((this.ship2.shieldEnergy != null ? this.ship2.shieldEnergy : 100).toFixed(1)),
         e: +((this.ship2.energy != null ? this.ship2.energy : 100).toFixed(1)),
         l: this.ship2.lives != null ? this.ship2.lives : 3,
-        al: !!this.ship2.alive
+        al: !!this.ship2.alive,
+        col: this.ship2.customColor || this.shipColorP2 || '#00f0ff'
       };
 
       const rocks = (this.rocks || []).filter(r => r && !r.popped).map(r => ({
@@ -4098,6 +4373,9 @@
         this.ship1.energy = snap.s1.e !== undefined ? snap.s1.e : 100;
         this.ship1.lives = snap.s1.l !== undefined ? snap.s1.l : 3;
         this.ship1.alive = snap.s1.al !== undefined ? snap.s1.al : true;
+        if (snap.s1.col) {
+          this.ship1.customColor = snap.s1.col;
+        }
       }
       if (snap.s2 && this.ship2) {
         this.ship2.x = snap.s2.x;
@@ -4115,6 +4393,9 @@
         this.ship2.energy = snap.s2.e !== undefined ? snap.s2.e : 100;
         this.ship2.lives = snap.s2.l !== undefined ? snap.s2.l : 3;
         this.ship2.alive = snap.s2.al !== undefined ? snap.s2.al : true;
+        if (snap.s2.col) {
+          this.ship2.customColor = snap.s2.col;
+        }
       }
 
       if (Array.isArray(snap.r)) {
@@ -4365,6 +4646,12 @@
       this.bindUI();
       this.bindOnlineLobbyUI();
       this.checkUrlRoomParam();
+      this.updateShipColorStudioUI();
+      if (this.ship1 && this.ship1.sprites && this.ship1.sprites.redNormal) {
+        this.ship1.sprites.redNormal.addEventListener('load', () => {
+          this.updateShipColorStudioUI();
+        });
+      }
 
       // Main Loop with Fixed Timestep Accumulator (Decoupled 60 FPS Physics)
       let lastTime = performance.now();
@@ -5029,23 +5316,77 @@
         });
       }
 
-      // Ship Selection (Solo mode)
-      const updateShipChoice = (skin) => {
-        this.ship1.selectedSkin = skin;
-        this.ship.selectedSkin = skin;
-        if (skin === 'blue') {
-          this.domElements.selectBlueShip.classList.add('active');
-          this.domElements.selectRedShip.classList.remove('active');
-          this.domElements.menuShipPreview.src = 'images/bluenewspaceship.png';
-        } else {
-          this.domElements.selectRedShip.classList.add('active');
-          this.domElements.selectBlueShip.classList.remove('active');
-          this.domElements.menuShipPreview.src = 'images/newspaceship.png';
-        }
-      };
+      // Ship Color Studio UI Wiring (Solo, 2-Player Local, & Online Co-op)
+      if (this.domElements.colorTargetP1Btn) {
+        this.domElements.colorTargetP1Btn.addEventListener('click', () => {
+          this.colorStudioTarget = 'p1';
+          this.updateShipColorStudioUI();
+        });
+      }
+      if (this.domElements.colorTargetP2Btn) {
+        this.domElements.colorTargetP2Btn.addEventListener('click', () => {
+          this.colorStudioTarget = 'p2';
+          this.updateShipColorStudioUI();
+        });
+      }
 
-      this.domElements.selectRedShip.addEventListener('click', () => updateShipChoice('red'));
-      this.domElements.selectBlueShip.addEventListener('click', () => updateShipChoice('blue'));
+      if (this.domElements.colorPresetsGrid) {
+        this.domElements.colorPresetsGrid.addEventListener('click', (e) => {
+          const chip = e.target.closest('.color-preset-chip');
+          if (!chip || !chip.dataset.color) return;
+          this.setShipColor(this.colorStudioTarget || 'p1', chip.dataset.color);
+        });
+      }
+
+      if (this.domElements.shipColorPicker) {
+        const handleCustomColorInput = (e) => {
+          this.setShipColor(this.colorStudioTarget || 'p1', e.target.value);
+        };
+        this.domElements.shipColorPicker.addEventListener('input', handleCustomColorInput);
+        this.domElements.shipColorPicker.addEventListener('change', handleCustomColorInput);
+      }
+
+      // Tab 3 Mini Header Color Pickers
+      if (this.domElements.tab3P1ColorPicker) {
+        const handleP1MiniColor = (e) => {
+          this.setShipColor('p1', e.target.value);
+        };
+        this.domElements.tab3P1ColorPicker.addEventListener('input', handleP1MiniColor);
+        this.domElements.tab3P1ColorPicker.addEventListener('change', handleP1MiniColor);
+      }
+      if (this.domElements.tab3P2ColorPicker) {
+        const handleP2MiniColor = (e) => {
+          this.setShipColor('p2', e.target.value);
+        };
+        this.domElements.tab3P2ColorPicker.addEventListener('input', handleP2MiniColor);
+        this.domElements.tab3P2ColorPicker.addEventListener('change', handleP2MiniColor);
+      }
+
+      // Online Lobby Color Studio Wiring
+      if (this.domElements.onlineColorSwatches) {
+        this.domElements.onlineColorSwatches.addEventListener('click', (e) => {
+          const sw = e.target.closest('.mini-swatch');
+          if (!sw || !sw.dataset.color) return;
+          const target = (this.onlineLocalPlayerId === 2) ? 'p2' : 'p1';
+          this.setShipColor(target, sw.dataset.color);
+        });
+      }
+      if (this.domElements.onlineShipColorPicker) {
+        const handleOnlinePicker = (e) => {
+          const target = (this.onlineLocalPlayerId === 2) ? 'p2' : 'p1';
+          this.setShipColor(target, e.target.value);
+        };
+        this.domElements.onlineShipColorPicker.addEventListener('input', handleOnlinePicker);
+        this.domElements.onlineShipColorPicker.addEventListener('change', handleOnlinePicker);
+      }
+
+      // Backward compatibility for legacy ship skin buttons if present
+      if (this.domElements.selectRedShip) {
+        this.domElements.selectRedShip.addEventListener('click', () => this.setShipColor('p1', '#ef4444'));
+      }
+      if (this.domElements.selectBlueShip) {
+        this.domElements.selectBlueShip.addEventListener('click', () => this.setShipColor('p1', '#0211d0'));
+      }
 
       // Ship size slider
       if (this.domElements.settingShipSize) {
@@ -5273,6 +5614,7 @@
         const w = this.canvas.width;
         const h = this.canvas.height;
         this.ship1.selectedSkin = 'red';
+        this.ship1.customColor = this.shipColorP1;
         this.ship1.playerId = 1;
         this.ship1.powerMode = this.powerMode;
         this.ship1.showStatusBars = this.showStatusBars;
@@ -5281,6 +5623,7 @@
         this.ship1.reset(true, w * 0.62, h * 0.55);
 
         this.ship2.selectedSkin = 'blue';
+        this.ship2.customColor = this.shipColorP2;
         this.ship2.playerId = 2;
         this.ship2.powerMode = this.powerMode;
         this.ship2.showStatusBars = this.showStatusBars;
@@ -5292,6 +5635,7 @@
         this.ship = (this.isOnline && this.onlineLocalShip) ? this.onlineLocalShip : this.ship1;
       } else {
         this.ship1.reset(true);
+        this.ship1.customColor = this.shipColorP1;
         this.ship1.powerMode = this.powerMode;
         this.ship1.showStatusBars = this.showStatusBars;
         this.ship1.unlimitedShield = this.unlimitedShield;
@@ -5495,12 +5839,12 @@
       const isMp = (this.gameMode === 'multiplayer' && !this.rlMode);
       if (!isMp || !this.isOnline) {
         if (this.domElements.p1TagText) {
-          this.domElements.p1TagText.textContent = 'P1 RED';
+          this.domElements.p1TagText.innerHTML = `P1 <span style="color:${this.shipColorP1 || '#ef4444'};font-size:11px;">●</span>`;
           this.domElements.p1TagText.style.fontSize = '';
           this.domElements.p1TagText.style.letterSpacing = '';
         }
         if (this.domElements.p2TagText) {
-          this.domElements.p2TagText.textContent = 'P2 BLUE';
+          this.domElements.p2TagText.innerHTML = `P2 <span style="color:${this.shipColorP2 || '#0211d0'};font-size:11px;">●</span>`;
           this.domElements.p2TagText.style.fontSize = '';
           this.domElements.p2TagText.style.letterSpacing = '';
         }
@@ -5553,13 +5897,15 @@
         el.style.textOverflow = 'clip';
         el.style.whiteSpace = 'nowrap';
 
-        const badgeColor = isYou ? (shipColor === 'red' ? '#f87171' : '#38bdf8') : '#94a3b8';
+        const badgeColor = isYou ? (shipColor || '#38bdf8') : '#94a3b8';
         const badgeText = isYou ? 'YOU' : 'CO-PILOT';
-        el.innerHTML = `${name} <span class="mp-tag-pill ${isYou ? 'you' : 'partner'}" style="font-size:${badgeSize};color:${badgeColor};margin-left:3px;">${badgeText}</span>`;
+        el.innerHTML = `${name} <span class="mp-tag-pill ${isYou ? 'you' : 'partner'}" style="font-size:${badgeSize};color:${badgeColor};border-color:${badgeColor}66;margin-left:3px;">${badgeText}</span>`;
       };
 
-      renderPilotTag(this.domElements.p1TagText, p1Raw, isLocalRed, 'red');
-      renderPilotTag(this.domElements.p2TagText, p2Raw, !isLocalRed, 'blue');
+      const p1Color = (this.ship1 && this.ship1.customColor) || this.shipColorP1 || '#ef4444';
+      const p2Color = (this.ship2 && this.ship2.customColor) || this.shipColorP2 || '#00f0ff';
+      renderPilotTag(this.domElements.p1TagText, p1Raw, isLocalRed, p1Color);
+      renderPilotTag(this.domElements.p2TagText, p2Raw, !isLocalRed, p2Color);
     }
 
     updateSoundButtons(enabled) {
@@ -5836,6 +6182,10 @@
     }
 
     updateLivesDisplay() {
+      const p1Col = (this.ship1 && this.ship1.customColor) || this.shipColorP1 || '#ef4444';
+      const p2Col = (this.ship2 && this.ship2.customColor) || this.shipColorP2 || '#0211d0';
+      const soloCol = (this.ship && this.ship.customColor) || this.shipColorP1 || '#ef4444';
+
       if (this.gameMode === 'multiplayer') {
         if (this.domElements.p1LivesIcons) {
           const p1Icons = this.domElements.p1LivesIcons.querySelectorAll('.life-icon');
@@ -5843,10 +6193,18 @@
             const poly = icon.querySelector('polygon');
             if (idx < this.ship1.lives) {
               icon.classList.add('active');
-              if (poly) poly.setAttribute('fill', '#ef4444');
+              if (poly) {
+                poly.setAttribute('fill', p1Col);
+                poly.style.fill = p1Col;
+                poly.style.filter = `drop-shadow(0 0 3px ${p1Col})`;
+              }
             } else {
               icon.classList.remove('active');
-              if (poly) poly.setAttribute('fill', '#334155');
+              if (poly) {
+                poly.setAttribute('fill', '#334155');
+                poly.style.fill = '#334155';
+                poly.style.filter = 'none';
+              }
             }
           });
         }
@@ -5856,10 +6214,18 @@
             const poly = icon.querySelector('polygon');
             if (idx < this.ship2.lives) {
               icon.classList.add('active');
-              if (poly) poly.setAttribute('fill', '#38bdf8');
+              if (poly) {
+                poly.setAttribute('fill', p2Col);
+                poly.style.fill = p2Col;
+                poly.style.filter = `drop-shadow(0 0 3px ${p2Col})`;
+              }
             } else {
               icon.classList.remove('active');
-              if (poly) poly.setAttribute('fill', '#334155');
+              if (poly) {
+                poly.setAttribute('fill', '#334155');
+                poly.style.fill = '#334155';
+                poly.style.filter = 'none';
+              }
             }
           });
         }
@@ -5868,10 +6234,18 @@
           const poly = icon.querySelector('polygon');
           if (idx < this.ship.lives) {
             icon.classList.add('active');
-            if (poly) poly.setAttribute('fill', '#00f0ff');
+            if (poly) {
+              poly.setAttribute('fill', soloCol);
+              poly.style.fill = soloCol;
+              poly.style.filter = `drop-shadow(0 0 3px ${soloCol})`;
+            }
           } else {
             icon.classList.remove('active');
-            if (poly) poly.setAttribute('fill', '#334155');
+            if (poly) {
+              poly.setAttribute('fill', '#334155');
+              poly.style.fill = '#334155';
+              poly.style.filter = 'none';
+            }
           }
         });
       }

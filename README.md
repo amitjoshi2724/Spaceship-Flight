@@ -159,7 +159,7 @@ Play co-op remotely with a friend across separate computers, laptops, iPads, or 
 - **Unified Game Over & Co-op Statistics:** Upon mission completion, both pilots receive identical final team scores, team record badges, individual asteroid kill tallies labeled with their actual usernames, and co-pilot restart requests (`PLAY AGAIN (REQUEST)`).
 
 ### 12. Customization & Persistence
-- **Ship Skin Selection:** Choose between Classic Crimson (`images/newspaceship.png`) and Cobalt Blue (`images/bluenewspaceship.png`).
+- **Fully Customizable Ship Hull Colors & Color Picker:** Choose from 8 curated arcade presets (Classic Crimson `#ef4444`, Cobalt Blue (OG) `#0211d0`, Electric Cyan `#00f0ff` for high visibility against space, Neon Emerald `#10b981`, Solar Gold `#facc15`, Plasma Purple `#a855f7`, Hot Magenta `#ec4899`, and Starlight White `#ffffff`), or use the interactive color picker to dial in any custom hex color. Independently configurable for Solo / Player 1 and Player 2 (Co-pilot) across all game modes (Solo, 2-Player Local, and 2-Player Online Co-op). Powered by dynamic offscreen canvas pixel tinting that preserves cyan glass cockpits, black outlines, and animated flame flicker while adapting HUD life gauge icons and laser bolts.
 - **On-Ship Status Bars Toggle:** Toggle real-time vertical ammo and shield status bars flanking your ship on or off.
 - **High Score Tracking:** Automatically persists your personal best record in browser `localStorage`.
 - **Favicon:** Configured with the classic red spaceship icon.

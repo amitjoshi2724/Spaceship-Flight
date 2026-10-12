@@ -21,7 +21,7 @@
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
     rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=2.3.15">
+  <link rel="stylesheet" href="style.css?v=2.3.16">
   <link rel="manifest" href="manifest.json?v=2.0.2">
   <link rel="icon" type="image/png" sizes="64x64" href="images/newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="images/newspaceship.png">
@@ -332,17 +332,80 @@
 
         <!-- Tab 1: General Gameplay & Audio Settings -->
         <div id="settingsPaneGeneral" class="settings-tab-pane active">
-          <div class="setting-group">
-            <label class="setting-label">SELECT SPACESHIP</label>
-            <div class="ship-selector">
-              <button id="selectRedShip" class="ship-option active" data-ship="red">
-                <img src="images/newspaceship.png" alt="Red & White Spaceship">
-                <span>Classic Crimson Red</span>
+          <div class="setting-group ship-color-studio-group">
+            <div class="color-studio-header">
+              <label class="setting-label">HULL COLOR & CUSTOMIZATION</label>
+              <span class="color-studio-subtext">Choose an iconic arcade preset or pick any custom color across all game modes</span>
+            </div>
+
+            <!-- Target Selection (Solo / P1 vs P2 Co-pilot) -->
+            <div class="color-target-pill-group">
+              <button type="button" class="color-target-pill active" id="colorTargetP1Btn" data-target="p1">
+                <span>👤 SOLO / PLAYER 1</span>
               </button>
-              <button id="selectBlueShip" class="ship-option" data-ship="blue">
-                <img src="images/bluenewspaceship.png" alt="Blue Spaceship">
-                <span>Cobalt Blue</span>
+              <button type="button" class="color-target-pill" id="colorTargetP2Btn" data-target="p2">
+                <span>👥 PLAYER 2 (CO-PILOT)</span>
               </button>
+            </div>
+
+            <!-- Presets Grid -->
+            <div class="color-presets-grid" id="colorPresetsGrid">
+              <button type="button" class="color-preset-chip active" data-color="#ef4444" data-name="Classic Crimson" title="Classic Crimson Red (Original 2016)">
+                <span class="preset-swatch" style="background: #ef4444;"></span>
+                <span class="preset-name">Crimson</span>
+              </button>
+              <button type="button" class="color-preset-chip" data-color="#0211d0" data-name="Cobalt Blue (OG)" title="Cobalt Blue (Original 2016 2-Player)">
+                <span class="preset-swatch" style="background: #0211d0;"></span>
+                <span class="preset-name">Cobalt (OG)</span>
+              </button>
+              <button type="button" class="color-preset-chip" data-color="#00f0ff" data-name="Electric Cyan" title="Electric Cyan (High Visibility)">
+                <span class="preset-swatch" style="background: #00f0ff; box-shadow: 0 0 6px #00f0ff;"></span>
+                <span class="preset-name">Cyan ★</span>
+              </button>
+              <button type="button" class="color-preset-chip" data-color="#10b981" data-name="Neon Emerald" title="Neon Emerald Green">
+                <span class="preset-swatch" style="background: #10b981;"></span>
+                <span class="preset-name">Emerald</span>
+              </button>
+              <button type="button" class="color-preset-chip" data-color="#facc15" data-name="Solar Gold" title="Solar Gold">
+                <span class="preset-swatch" style="background: #facc15;"></span>
+                <span class="preset-name">Gold</span>
+              </button>
+              <button type="button" class="color-preset-chip" data-color="#a855f7" data-name="Plasma Purple" title="Plasma Purple">
+                <span class="preset-swatch" style="background: #a855f7;"></span>
+                <span class="preset-name">Purple</span>
+              </button>
+              <button type="button" class="color-preset-chip" data-color="#ec4899" data-name="Hot Magenta" title="Hot Magenta Pink">
+                <span class="preset-swatch" style="background: #ec4899;"></span>
+                <span class="preset-name">Magenta</span>
+              </button>
+              <button type="button" class="color-preset-chip" data-color="#ffffff" data-name="Starlight White" title="Starlight White">
+                <span class="preset-swatch" style="background: #ffffff;"></span>
+                <span class="preset-name">White</span>
+              </button>
+            </div>
+
+            <!-- Custom Color Picker + Live Preview Bar -->
+            <div class="custom-color-bar">
+              <div class="custom-color-control">
+                <label for="shipColorPicker" class="custom-color-label">
+                  <span class="color-wheel-icon">🎨</span>
+                  <span>CUSTOM COLOR:</span>
+                </label>
+                <div class="color-input-wrapper">
+                  <input type="color" id="shipColorPicker" value="#ef4444" class="custom-color-picker-input" title="Choose any custom color">
+                  <span id="shipColorHexDisplay" class="color-hex-tag">#EF4444</span>
+                </div>
+              </div>
+
+              <div class="color-preview-card">
+                <div class="color-preview-ship-wrap">
+                  <img id="settingsShipPreviewImg" src="images/newspaceship.png" alt="Ship Preview" class="color-preview-img">
+                </div>
+                <div class="color-preview-details">
+                  <span id="colorPreviewRoleLabel" class="color-preview-role">SOLO / P1 HULL</span>
+                  <span id="colorPreviewNameDisplay" class="color-preview-title">Classic Crimson</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -527,7 +590,12 @@
             <!-- Player 1 (Red) Column -->
             <div class="player-controls-box p1-controls-box">
               <div class="player-box-header p1-header">
-                <span class="player-box-title">🔴 PLAYER 1 (CRIMSON RED)</span>
+                <div class="player-box-title-wrap">
+                  <span class="player-box-title" id="tab3P1Title">🔴 PLAYER 1</span>
+                  <div class="header-color-picker-wrap" title="Customize Player 1 Hull Color">
+                    <input type="color" id="tab3P1ColorPicker" value="#ef4444" class="mini-header-color-picker">
+                  </div>
+                </div>
                 <span id="p1ControlsSub" class="player-box-sub">Right Hand (OKL; + M)</span>
               </div>
               <div class="key-binder-grid">
@@ -557,7 +625,12 @@
             <!-- Player 2 (Blue) Column -->
             <div class="player-controls-box p2-controls-box">
               <div class="player-box-header p2-header">
-                <span class="player-box-title">🔵 PLAYER 2 (COBALT BLUE)</span>
+                <div class="player-box-title-wrap">
+                  <span class="player-box-title" id="tab3P2Title">🔵 PLAYER 2</span>
+                  <div class="header-color-picker-wrap" title="Customize Player 2 Hull Color">
+                    <input type="color" id="tab3P2ColorPicker" value="#00f0ff" class="mini-header-color-picker">
+                  </div>
+                </div>
                 <span id="p2ControlsSub" class="player-box-sub">Left Hand (WASD + Shift)</span>
               </div>
               <div class="key-binder-grid">
@@ -859,6 +932,26 @@
             </div>
           </div>
 
+          <div class="online-color-studio" id="onlineColorStudio">
+            <div class="online-color-header">
+              <span class="online-color-title">🎨 YOUR SHIP HULL COLOR</span>
+              <span id="onlineColorHex" class="color-hex-tag">#EF4444</span>
+            </div>
+            <div class="online-color-swatches" id="onlineColorSwatches">
+              <button type="button" class="mini-swatch active" data-color="#ef4444" style="background:#ef4444;" title="Crimson"></button>
+              <button type="button" class="mini-swatch" data-color="#0211d0" style="background:#0211d0;" title="Cobalt (OG)"></button>
+              <button type="button" class="mini-swatch" data-color="#00f0ff" style="background:#00f0ff;box-shadow:0 0 6px #00f0ff;" title="Cyan (High-Vis)"></button>
+              <button type="button" class="mini-swatch" data-color="#10b981" style="background:#10b981;" title="Emerald"></button>
+              <button type="button" class="mini-swatch" data-color="#facc15" style="background:#facc15;" title="Gold"></button>
+              <button type="button" class="mini-swatch" data-color="#a855f7" style="background:#a855f7;" title="Purple"></button>
+              <button type="button" class="mini-swatch" data-color="#ec4899" style="background:#ec4899;" title="Magenta"></button>
+              <button type="button" class="mini-swatch" data-color="#ffffff" style="background:#ffffff;" title="White"></button>
+              <div class="mini-picker-wrap" title="Custom color picker">
+                <input type="color" id="onlineShipColorPicker" value="#ef4444" class="mini-color-input">
+              </div>
+            </div>
+          </div>
+
           <div class="online-status-card" id="joinStatusCard">
             <div class="radar-scan-box">
               <div class="radar-pulse" id="joinRadarPulse"></div>
@@ -951,9 +1044,9 @@
   </div>
 
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="network.js?v=2.3.15"></script>
+  <script src="network.js?v=2.3.16"></script>
   <script src="rl_agent.js?v=2.1.0"></script>
-  <script src="game.js?v=2.3.15"></script>
+  <script src="game.js?v=2.3.16"></script>
 </body>
 
 </html>

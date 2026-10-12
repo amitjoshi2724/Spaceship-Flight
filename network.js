@@ -34,9 +34,11 @@
       this._pingTimer = null;
       this._lastPingTimestamp = 0;
 
-      // Pilot Names
+      // Pilot Names & Ship Hull Colors
       this.pilotName = '';
       this.peerPilotName = '';
+      this.pilotColor = '#ef4444';
+      this.peerPilotColor = '';
 
       // Host settings
       this.hostRole = 'red'; // 'red' or 'blue'
@@ -45,10 +47,10 @@
       // Callbacks
       this.onStatusChange = null; // (statusText, isError)
       this.onPeerReady = null;    // (roomCode)
-      this.onConnected = null;    // ({ isHost, hostRole, guestRole, hostName, guestName })
+      this.onConnected = null;    // ({ isHost, hostRole, guestRole, hostName, guestName, hostColor, guestColor })
       this.onDisconnected = null; // ()
-      this.onLobbyUpdate = null;  // ({ hostRole, guestRole, hostName, guestName, roomCode })
-      this.onPilotUpdate = null;  // ({ hostName, guestName })
+      this.onLobbyUpdate = null;  // ({ hostRole, guestRole, hostName, guestName, hostColor, guestColor, roomCode })
+      this.onPilotUpdate = null;  // ({ hostName, guestName, hostColor, guestColor })
       this.onGameStart = null;    // (config)
       this.onGameRestart = null;  // ()
       this.onSnapshot = null;     // (snapshot)
@@ -59,6 +61,18 @@
       this.onRequestRestart = null; // ({ name })
     }
 
+    static normalizeHexColor(col) {
+      if (!col) return '#ef4444';
+      const c = String(col).trim().toLowerCase();
+      if (c === 'red') return '#ef4444';
+      if (c === 'blue') return '#0211d0';
+      if (c === 'cyan') return '#00f0ff';
+      let h = c;
+      if (!h.startsWith('#')) h = '#' + h;
+      if (h.length === 4) h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+      return h;
+    }
+
     isPeerAvailable() {
       return typeof window !== 'undefined' && typeof window.Peer === 'function';
     }
@@ -66,7 +80,7 @@
     /**
      * Creates a new multiplayer room as Host
      */
-    createRoom(preferredHostRole = 'red', pilotName = '') {
+    createRoom(preferredHostRole = 'red', pilotName = '', pilotColor = '') {
       return new Promise((resolve, reject) => {
         if (!this.isPeerAvailable()) {
           const msg = 'WebRTC library loading or unavailable. Check internet connection.';
@@ -79,7 +93,9 @@
         this.hostRole = preferredHostRole;
         this.guestRole = preferredHostRole === 'red' ? 'blue' : 'red';
         this.pilotName = (pilotName || '').trim().slice(0, 30);
+        this.pilotColor = SpaceshipNetwork.normalizeHexColor(pilotColor || '#ef4444');
         this.peerPilotName = '';
+        this.peerPilotColor = '';
         this.roomCode = generateRoomCode();
         const peerId = getPeerIdForRoom(this.roomCode);
 
@@ -124,7 +140,7 @@
           if (err.type === 'unavailable-id') {
             // Code conflict: retry with new code
             setTimeout(() => {
-              this.createRoom(this.hostRole).then(resolve).catch(reject);
+              this.createRoom(this.hostRole, this.pilotName, this.pilotColor).then(resolve).catch(reject);
             }, 200);
             return;
           }
@@ -137,7 +153,7 @@
     /**
      * Joins an existing room as Guest
      */
-    joinRoom(roomCode, pilotName = '') {
+    joinRoom(roomCode, pilotName = '', pilotColor = '') {
       return new Promise((resolve, reject) => {
         if (!this.isPeerAvailable()) {
           const msg = 'WebRTC library loading or unavailable. Check internet connection.';
@@ -155,7 +171,9 @@
         this.disconnect();
         this.isHost = false;
         this.pilotName = (pilotName || '').trim().slice(0, 30);
+        this.pilotColor = SpaceshipNetwork.normalizeHexColor(pilotColor || '#00f0ff');
         this.peerPilotName = '';
+        this.peerPilotColor = '';
         this.roomCode = cleanCode;
         const hostPeerId = getPeerIdForRoom(this.roomCode);
 
@@ -226,6 +244,8 @@
         guestRole: this.guestRole,
         hostName: this.pilotName,
         guestName: this.peerPilotName,
+        hostColor: this.pilotColor,
+        guestColor: this.peerPilotColor,
         roomCode: this.roomCode
       };
 
@@ -258,6 +278,33 @@
             guestRole: this.guestRole,
             hostName: this.pilotName,
             guestName: this.peerPilotName,
+            hostColor: this.pilotColor,
+            guestColor: this.peerPilotColor,
+            roomCode: this.roomCode
+          });
+        }
+      }
+    }
+
+    /**
+     * Updates local player ship color and notifies remote peer
+     */
+    updatePilotColor(newColor) {
+      this.pilotColor = SpaceshipNetwork.normalizeHexColor(newColor || '#ef4444');
+      if (this.conn && this.conn.open) {
+        this.send({
+          type: 'PILOT_COLOR',
+          pilotColor: this.pilotColor
+        });
+        if (this.isHost) {
+          this.send({
+            type: 'LOBBY_STATE',
+            hostRole: this.hostRole,
+            guestRole: this.guestRole,
+            hostName: this.pilotName,
+            guestName: this.peerPilotName,
+            hostColor: this.pilotColor,
+            guestColor: this.peerPilotColor,
             roomCode: this.roomCode
           });
         }
@@ -279,19 +326,38 @@
             guestRole: this.guestRole,
             hostName: this.pilotName,
             guestName: this.peerPilotName,
+            hostColor: this.pilotColor,
+            guestColor: this.peerPilotColor,
             roomCode: this.roomCode
           });
 
           if (this.onStatusChange) this.onStatusChange('Co-pilot connected! Synchronizing callsigns...');
-          if (this.onConnected) this.onConnected({ isHost: true, hostRole: this.hostRole, guestRole: this.guestRole, hostName: this.pilotName, guestName: this.peerPilotName });
+          if (this.onConnected) this.onConnected({
+            isHost: true,
+            hostRole: this.hostRole,
+            guestRole: this.guestRole,
+            hostName: this.pilotName,
+            guestName: this.peerPilotName,
+            hostColor: this.pilotColor,
+            guestColor: this.peerPilotColor
+          });
         } else {
           if (this.onStatusChange) this.onStatusChange('Connected to Host! Announcing callsign...');
-          // Announce guest pilot name to host
+          // Announce guest pilot name and color to host
           this.send({
             type: 'PILOT_HELLO',
-            pilotName: this.pilotName
+            pilotName: this.pilotName,
+            pilotColor: this.pilotColor
           });
-          if (this.onConnected) this.onConnected({ isHost: false, hostRole: this.hostRole, guestRole: this.guestRole, hostName: this.peerPilotName, guestName: this.pilotName });
+          if (this.onConnected) this.onConnected({
+            isHost: false,
+            hostRole: this.hostRole,
+            guestRole: this.guestRole,
+            hostName: this.peerPilotName,
+            guestName: this.pilotName,
+            hostColor: this.peerPilotColor,
+            guestColor: this.pilotColor
+          });
         }
 
         this._startPingInterval();
@@ -331,20 +397,27 @@
         case 'PILOT_HELLO':
           if (this.isHost) {
             this.peerPilotName = (data.pilotName || '').trim().slice(0, 30);
-            console.log('[Network] Co-pilot announced name:', this.peerPilotName);
+            if (data.pilotColor) {
+              this.peerPilotColor = SpaceshipNetwork.normalizeHexColor(data.pilotColor);
+            }
+            console.log('[Network] Co-pilot announced name:', this.peerPilotName, 'color:', this.peerPilotColor);
             const state = {
               type: 'LOBBY_STATE',
               hostRole: this.hostRole,
               guestRole: this.guestRole,
               hostName: this.pilotName,
               guestName: this.peerPilotName,
+              hostColor: this.pilotColor,
+              guestColor: this.peerPilotColor,
               roomCode: this.roomCode
             };
             this.send(state);
             if (this.onPilotUpdate) {
               this.onPilotUpdate({
                 hostName: this.pilotName,
-                guestName: this.peerPilotName
+                guestName: this.peerPilotName,
+                hostColor: this.pilotColor,
+                guestColor: this.peerPilotColor
               });
             }
             if (this.onLobbyState) this.onLobbyState(state);
@@ -361,13 +434,43 @@
               guestRole: this.guestRole,
               hostName: this.pilotName,
               guestName: this.peerPilotName,
+              hostColor: this.pilotColor,
+              guestColor: this.peerPilotColor,
               roomCode: this.roomCode
             });
           }
           if (this.onPilotUpdate) {
             this.onPilotUpdate({
               hostName: this.isHost ? this.pilotName : this.peerPilotName,
-              guestName: this.isHost ? this.peerPilotName : this.pilotName
+              guestName: this.isHost ? this.peerPilotName : this.pilotName,
+              hostColor: this.isHost ? this.pilotColor : this.peerPilotColor,
+              guestColor: this.isHost ? this.peerPilotColor : this.pilotColor
+            });
+          }
+          break;
+
+        case 'PILOT_COLOR':
+          if (data.pilotColor) {
+            this.peerPilotColor = SpaceshipNetwork.normalizeHexColor(data.pilotColor);
+          }
+          if (this.isHost) {
+            this.send({
+              type: 'LOBBY_STATE',
+              hostRole: this.hostRole,
+              guestRole: this.guestRole,
+              hostName: this.pilotName,
+              guestName: this.peerPilotName,
+              hostColor: this.pilotColor,
+              guestColor: this.peerPilotColor,
+              roomCode: this.roomCode
+            });
+          }
+          if (this.onPilotUpdate) {
+            this.onPilotUpdate({
+              hostName: this.isHost ? this.pilotName : this.peerPilotName,
+              guestName: this.isHost ? this.peerPilotName : this.pilotName,
+              hostColor: this.isHost ? this.pilotColor : this.peerPilotColor,
+              guestColor: this.isHost ? this.peerPilotColor : this.pilotColor
             });
           }
           break;
@@ -381,10 +484,20 @@
           if (data.guestName && this.isHost) {
             this.peerPilotName = String(data.guestName).trim().slice(0, 30);
           }
+          if (data.hostColor) {
+            if (this.isHost) this.pilotColor = SpaceshipNetwork.normalizeHexColor(data.hostColor);
+            else this.peerPilotColor = SpaceshipNetwork.normalizeHexColor(data.hostColor);
+          }
+          if (data.guestColor) {
+            if (this.isHost) this.peerPilotColor = SpaceshipNetwork.normalizeHexColor(data.guestColor);
+            else this.pilotColor = SpaceshipNetwork.normalizeHexColor(data.guestColor);
+          }
           if (this.onPilotUpdate) {
             this.onPilotUpdate({
               hostName: data.hostName || (this.isHost ? this.pilotName : this.peerPilotName),
-              guestName: data.guestName || (this.isHost ? this.peerPilotName : this.pilotName)
+              guestName: data.guestName || (this.isHost ? this.peerPilotName : this.pilotName),
+              hostColor: data.hostColor || (this.isHost ? this.pilotColor : this.peerPilotColor),
+              guestColor: data.guestColor || (this.isHost ? this.peerPilotColor : this.pilotColor)
             });
           }
           if (this.onLobbyState) {
