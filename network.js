@@ -37,7 +37,7 @@
       // Pilot Names & Ship Hull Colors
       this.pilotName = '';
       this.peerPilotName = '';
-      this.pilotColor = '#ef4444';
+      this.pilotColor = '#850101';
       this.peerPilotColor = '';
 
       // Host settings
@@ -62,9 +62,9 @@
     }
 
     static normalizeHexColor(col) {
-      if (!col) return '#ef4444';
+      if (!col) return '#850101';
       const c = String(col).trim().toLowerCase();
-      if (c === 'red') return '#ef4444';
+      if (c === 'red' || c === '#ef4444') return '#850101';
       if (c === 'blue') return '#0211d0';
       if (c === 'cyan') return '#00f0ff';
       let h = c;
@@ -93,7 +93,7 @@
         this.hostRole = preferredHostRole;
         this.guestRole = preferredHostRole === 'red' ? 'blue' : 'red';
         this.pilotName = (pilotName || '').trim().slice(0, 30);
-        this.pilotColor = SpaceshipNetwork.normalizeHexColor(pilotColor || '#ef4444');
+        this.pilotColor = SpaceshipNetwork.normalizeHexColor(pilotColor || '#850101');
         this.peerPilotName = '';
         this.peerPilotColor = '';
         this.roomCode = generateRoomCode();
@@ -290,7 +290,7 @@
      * Updates local player ship color and notifies remote peer
      */
     updatePilotColor(newColor) {
-      this.pilotColor = SpaceshipNetwork.normalizeHexColor(newColor || '#ef4444');
+      this.pilotColor = SpaceshipNetwork.normalizeHexColor(newColor || '#850101');
       if (this.conn && this.conn.open) {
         this.send({
           type: 'PILOT_COLOR',

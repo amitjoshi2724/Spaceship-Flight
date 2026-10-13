@@ -979,7 +979,8 @@
       this.scalePercent = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
       this.recalculateSize();
       this.selectedSkin = 'red'; // 'red' or 'blue'
-      this.customColor = '#ef4444';
+      this.customColor = '#850101';
+      this.matchLaserColor = false;
       this.playerId = 1;
       this.alive = true;
 
@@ -1003,22 +1004,22 @@
     }
 
     static hexToRgb(hex) {
-      if (!hex) return { r: 239, g: 68, b: 68 };
+      if (!hex) return { r: 133, g: 1, b: 1 };
       let h = String(hex).trim().toLowerCase();
-      if (h === 'red') return { r: 239, g: 68, b: 68 };
-      if (h === 'blue') return { r: 2, g: 17, b: 208 };
-      if (h === 'cyan') return { r: 0, g: 240, b: 255 };
+      if (h === 'red' || h === '#ef4444' || h === '#850101') return { r: 133, g: 1, b: 1 };
+      if (h === 'blue' || h === '#0211d0') return { r: 2, g: 17, b: 208 };
+      if (h === 'cyan' || h === '#00f0ff') return { r: 0, g: 240, b: 255 };
       if (h.startsWith('#')) h = h.slice(1);
       if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
       const num = parseInt(h, 16);
-      if (isNaN(num)) return { r: 239, g: 68, b: 68 };
+      if (isNaN(num)) return { r: 133, g: 1, b: 1 };
       return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
     }
 
     static normalizeHexColor(col) {
-      if (!col) return '#ef4444';
+      if (!col) return '#850101';
       const c = String(col).trim().toLowerCase();
-      if (c === 'red') return '#ef4444';
+      if (c === 'red' || c === '#ef4444') return '#850101';
       if (c === 'blue') return '#0211d0';
       if (c === 'cyan') return '#00f0ff';
       let h = c;
@@ -1030,7 +1031,7 @@
     static tintSprite(img, targetHex) {
       if (!img || !img.complete || img.naturalWidth === 0) return img;
       const hex = Spaceship.normalizeHexColor(targetHex);
-      if (hex === '#ef4444' || hex === '#850101') return img; // Original red asset
+      if (hex === '#850101' || hex === '#ef4444') return img; // Original red asset
 
       if (!Spaceship._recolorCache) Spaceship._recolorCache = {};
       const cacheKey = (img.src || 'img') + '_' + hex;
@@ -1080,7 +1081,7 @@
         return Spaceship._dataUrlCache[hex];
       }
 
-      if (hex === '#ef4444') {
+      if (hex === '#850101' || hex === '#ef4444') {
         const url = 'images/newspaceship.png';
         Spaceship._dataUrlCache[hex] = url;
         return url;
@@ -1105,10 +1106,11 @@
     }
 
     static getColorName(hex) {
-      if (!hex) return 'Classic Crimson';
+      if (!hex) return 'Classic Crimson (OG)';
       const norm = Spaceship.normalizeHexColor(hex);
       const PRESET_NAMES = {
-        '#ef4444': 'Classic Crimson',
+        '#850101': 'Classic Crimson (OG)',
+        '#ef4444': 'Classic Crimson (OG)',
         '#0211d0': 'Cobalt Blue (OG)',
         '#00f0ff': 'Electric Cyan',
         '#10b981': 'Neon Emerald',
@@ -1338,7 +1340,9 @@
 
       const scale = getScreenScale(this.canvas);
       const shooterId = this.playerId || (this.selectedSkin === 'blue' ? 2 : 1);
-      const bulletColor = this.customColor || (this.selectedSkin === 'blue' ? 'cyan' : 'gold');
+      const bulletColor = this.matchLaserColor
+        ? (this.customColor || (shooterId === 2 ? 'cyan' : 'gold'))
+        : (shooterId === 2 ? 'cyan' : 'gold');
       bullets.push(new Bullet(bx, by, this.angle, this.dx, this.dy, scale, shooterId, bulletColor));
       this.soundFx.playLaser();
       return true;
@@ -1586,15 +1590,15 @@
 
       // 4. Select sprite: use moving versions showing fire underneath when gas is pressed
       let sprite;
-      const col = Spaceship.normalizeHexColor(this.customColor || (this.selectedSkin === 'blue' ? '#0211d0' : '#ef4444'));
+      const col = Spaceship.normalizeHexColor(this.customColor || (this.selectedSkin === 'blue' ? '#0211d0' : '#850101'));
 
       if (this.thrusting) {
         // Alternate between moving1 and moving2 for flame jet flicker
         const flicker = Math.floor(this.flameFrame / 5) % 2 === 0;
         const baseMoving = flicker ? this.sprites.redMoving1 : this.sprites.redMoving2;
-        sprite = (col === '#ef4444') ? baseMoving : Spaceship.tintSprite(baseMoving, col);
+        sprite = (col === '#850101' || col === '#ef4444') ? baseMoving : Spaceship.tintSprite(baseMoving, col);
       } else {
-        sprite = (col === '#ef4444') ? this.sprites.redNormal : Spaceship.tintSprite(this.sprites.redNormal, col);
+        sprite = (col === '#850101' || col === '#ef4444') ? this.sprites.redNormal : Spaceship.tintSprite(this.sprites.redNormal, col);
       }
 
       if (sprite && (sprite.complete || sprite instanceof HTMLCanvasElement) && (sprite.naturalWidth > 0 || sprite.width > 0)) {
@@ -2636,20 +2640,24 @@
       this.starfield = new Starfield(this.canvas);
 
       // Ship Hull Color Customization (Persisted per player across all game modes)
-      this.shipColorP1 = localStorage.getItem('spaceship_flight_ship_color_p1') || '#ef4444';
+      const rawP1 = localStorage.getItem('spaceship_flight_ship_color_p1');
+      this.shipColorP1 = (rawP1 && rawP1 !== '#ef4444') ? Spaceship.normalizeHexColor(rawP1) : '#850101';
       this.shipColorP2 = localStorage.getItem('spaceship_flight_ship_color_p2') || '#0211d0';
       this.colorStudioTarget = 'p1';
+      this.matchLaserColor = localStorage.getItem('spaceship_flight_match_laser_color') === 'true';
 
       // Dual ship instances for Solo and Multiplayer Co-op
       this.ship1 = new Spaceship(this.canvas, this.soundFx, this.particles);
       this.ship1.playerId = 1;
       this.ship1.selectedSkin = 'red';
       this.ship1.customColor = this.shipColorP1;
+      this.ship1.matchLaserColor = this.matchLaserColor;
 
       this.ship2 = new Spaceship(this.canvas, this.soundFx, this.particles);
       this.ship2.playerId = 2;
       this.ship2.selectedSkin = 'blue';
       this.ship2.customColor = this.shipColorP2;
+      this.ship2.matchLaserColor = this.matchLaserColor;
 
       this.ship = this.ship1;
       this.ships = [this.ship1, this.ship2];
@@ -2874,6 +2882,7 @@
         settingsShipPreviewImg: document.getElementById('settingsShipPreviewImg'),
         colorPreviewRoleLabel: document.getElementById('colorPreviewRoleLabel'),
         colorPreviewNameDisplay: document.getElementById('colorPreviewNameDisplay'),
+        settingMatchLaserColor: document.getElementById('settingMatchLaserColor'),
         tab3P1ColorPicker: document.getElementById('tab3P1ColorPicker'),
         tab3P2ColorPicker: document.getElementById('tab3P2ColorPicker'),
         onlineColorStudio: document.getElementById('onlineColorStudio'),
@@ -3060,6 +3069,19 @@
       try {
         localStorage.setItem('spaceship_flight_difficulty', level);
       } catch (e) { }
+    }
+
+    setMatchLaserColor(enabled) {
+      this.matchLaserColor = !!enabled;
+      try {
+        localStorage.setItem('spaceship_flight_match_laser_color', this.matchLaserColor.toString());
+      } catch (_) {}
+      for (const s of [this.ship, this.ship1, this.ship2]) {
+        if (s) s.matchLaserColor = this.matchLaserColor;
+      }
+      if (this.domElements.settingMatchLaserColor) {
+        this.domElements.settingMatchLaserColor.checked = this.matchLaserColor;
+      }
     }
 
     setPowerMode(mode) {
@@ -3796,7 +3818,7 @@
 
     updateShipColorStudioUI() {
       const currentTarget = this.colorStudioTarget || 'p1';
-      const currentColor = (currentTarget === 'p1') ? (this.shipColorP1 || '#ef4444') : (this.shipColorP2 || '#0211d0');
+      const currentColor = (currentTarget === 'p1') ? (this.shipColorP1 || '#850101') : (this.shipColorP2 || '#0211d0');
       const colorName = Spaceship.getColorName(currentColor);
 
       // 1. Target toggle pills
@@ -3805,6 +3827,14 @@
       }
       if (this.domElements.colorTargetP2Btn) {
         this.domElements.colorTargetP2Btn.classList.toggle('active', currentTarget === 'p2');
+      }
+
+      // 1b. Original Fleet (OG) Ship Selection Cards
+      if (this.domElements.selectRedShip) {
+        this.domElements.selectRedShip.classList.toggle('active', currentColor === '#850101');
+      }
+      if (this.domElements.selectBlueShip) {
+        this.domElements.selectBlueShip.classList.toggle('active', currentColor === '#0211d0');
       }
 
       // 2. Preset grid chips
@@ -3824,16 +3854,21 @@
         this.domElements.shipColorHexDisplay.textContent = currentColor.toUpperCase();
       }
 
+      // 3b. Match Laser Color Toggle
+      if (this.domElements.settingMatchLaserColor) {
+        this.domElements.settingMatchLaserColor.checked = this.matchLaserColor;
+      }
+
       // 4. Tab 3 mini header color pickers
       if (this.domElements.tab3P1ColorPicker) {
-        this.domElements.tab3P1ColorPicker.value = this.shipColorP1 || '#ef4444';
+        this.domElements.tab3P1ColorPicker.value = this.shipColorP1 || '#850101';
       }
       if (this.domElements.tab3P2ColorPicker) {
         this.domElements.tab3P2ColorPicker.value = this.shipColorP2 || '#0211d0';
       }
 
       // 5. Online lobby color studio
-      const localOnlineColor = (this.onlineLocalPlayerId === 2) ? (this.shipColorP2 || '#0211d0') : (this.shipColorP1 || '#ef4444');
+      const localOnlineColor = (this.onlineLocalPlayerId === 2) ? (this.shipColorP2 || '#0211d0') : (this.shipColorP1 || '#850101');
       if (this.domElements.onlineShipColorPicker) {
         this.domElements.onlineShipColorPicker.value = localOnlineColor;
       }
@@ -3850,8 +3885,12 @@
 
       // 6. Preview images
       const baseSprite = (this.ship1 && this.ship1.sprites) ? this.ship1.sprites.redNormal : null;
-      const targetDataUrl = Spaceship.getRecoloredDataUrl(baseSprite, currentColor);
-      const soloDataUrl = Spaceship.getRecoloredDataUrl(baseSprite, this.shipColorP1 || '#ef4444');
+      const targetDataUrl = (currentColor === '#850101')
+        ? 'images/newspaceship.png'
+        : (currentColor === '#0211d0' ? 'images/bluenewspaceship.png' : Spaceship.getRecoloredDataUrl(baseSprite, currentColor));
+      const soloDataUrl = (this.shipColorP1 === '#850101')
+        ? 'images/newspaceship.png'
+        : (this.shipColorP1 === '#0211d0' ? 'images/bluenewspaceship.png' : Spaceship.getRecoloredDataUrl(baseSprite, this.shipColorP1 || '#850101'));
 
       if (this.domElements.settingsShipPreviewImg) {
         this.domElements.settingsShipPreviewImg.src = targetDataUrl;
@@ -4081,8 +4120,8 @@
 
     updateGuestRoleDisplay(role) {
       if (this.domElements.guestRoleShipName) {
-        this.domElements.guestRoleShipName.textContent = (role === 'red') ? 'CRIMSON RED (P1)' : 'COBALT BLUE (P2)';
-        this.domElements.guestRoleShipName.style.color = (role === 'red') ? '#ef4444' : '#00f0ff';
+        this.domElements.guestRoleShipName.textContent = (role === 'red') ? 'CRIMSON (OG) (P1)' : 'COBALT BLUE (P2)';
+        this.domElements.guestRoleShipName.style.color = (role === 'red') ? '#850101' : '#00f0ff';
       }
       if (this.domElements.guestRoleNotice) {
         this.domElements.guestRoleNotice.style.display = 'block';
@@ -4251,7 +4290,7 @@
         e: +((this.ship1.energy != null ? this.ship1.energy : 100).toFixed(1)),
         l: this.ship1.lives != null ? this.ship1.lives : 3,
         al: !!this.ship1.alive,
-        col: this.ship1.customColor || this.shipColorP1 || '#ef4444'
+        col: this.ship1.customColor || this.shipColorP1 || '#850101'
       };
       const s2 = {
         x: +((this.ship2.x != null ? this.ship2.x : 0).toFixed(1)),
@@ -5380,12 +5419,34 @@
         this.domElements.onlineShipColorPicker.addEventListener('change', handleOnlinePicker);
       }
 
-      // Backward compatibility for legacy ship skin buttons if present
+      // Match Laser to Ship Color setting
+      if (this.domElements.settingMatchLaserColor) {
+        this.domElements.settingMatchLaserColor.checked = this.matchLaserColor;
+        this.domElements.settingMatchLaserColor.addEventListener('change', (e) => {
+          this.setMatchLaserColor(e.target.checked);
+        });
+      }
+
+      // Visual OG Ship Selection Buttons
       if (this.domElements.selectRedShip) {
-        this.domElements.selectRedShip.addEventListener('click', () => this.setShipColor('p1', '#ef4444'));
+        this.domElements.selectRedShip.addEventListener('click', () => {
+          const target = this.colorStudioTarget || 'p1';
+          this.setShipColor(target, '#850101');
+          if (target === 'p1') {
+            this.ship1.selectedSkin = 'red';
+            if (this.ship) this.ship.selectedSkin = 'red';
+          }
+        });
       }
       if (this.domElements.selectBlueShip) {
-        this.domElements.selectBlueShip.addEventListener('click', () => this.setShipColor('p1', '#0211d0'));
+        this.domElements.selectBlueShip.addEventListener('click', () => {
+          const target = this.colorStudioTarget || 'p1';
+          this.setShipColor(target, '#0211d0');
+          if (target === 'p1') {
+            this.ship1.selectedSkin = 'blue';
+            if (this.ship) this.ship.selectedSkin = 'blue';
+          }
+        });
       }
 
       // Ship size slider
@@ -5615,6 +5676,7 @@
         const h = this.canvas.height;
         this.ship1.selectedSkin = 'red';
         this.ship1.customColor = this.shipColorP1;
+        this.ship1.matchLaserColor = this.matchLaserColor;
         this.ship1.playerId = 1;
         this.ship1.powerMode = this.powerMode;
         this.ship1.showStatusBars = this.showStatusBars;
@@ -5624,6 +5686,7 @@
 
         this.ship2.selectedSkin = 'blue';
         this.ship2.customColor = this.shipColorP2;
+        this.ship2.matchLaserColor = this.matchLaserColor;
         this.ship2.playerId = 2;
         this.ship2.powerMode = this.powerMode;
         this.ship2.showStatusBars = this.showStatusBars;
@@ -5636,6 +5699,7 @@
       } else {
         this.ship1.reset(true);
         this.ship1.customColor = this.shipColorP1;
+        this.ship1.matchLaserColor = this.matchLaserColor;
         this.ship1.powerMode = this.powerMode;
         this.ship1.showStatusBars = this.showStatusBars;
         this.ship1.unlimitedShield = this.unlimitedShield;
@@ -5839,7 +5903,7 @@
       const isMp = (this.gameMode === 'multiplayer' && !this.rlMode);
       if (!isMp || !this.isOnline) {
         if (this.domElements.p1TagText) {
-          this.domElements.p1TagText.innerHTML = `P1 <span style="color:${this.shipColorP1 || '#ef4444'};font-size:11px;">●</span>`;
+          this.domElements.p1TagText.innerHTML = `P1 <span style="color:${this.shipColorP1 || '#850101'};font-size:11px;">●</span>`;
           this.domElements.p1TagText.style.fontSize = '';
           this.domElements.p1TagText.style.letterSpacing = '';
         }
@@ -5902,7 +5966,7 @@
         el.innerHTML = `${name} <span class="mp-tag-pill ${isYou ? 'you' : 'partner'}" style="font-size:${badgeSize};color:${badgeColor};border-color:${badgeColor}66;margin-left:3px;">${badgeText}</span>`;
       };
 
-      const p1Color = (this.ship1 && this.ship1.customColor) || this.shipColorP1 || '#ef4444';
+      const p1Color = (this.ship1 && this.ship1.customColor) || this.shipColorP1 || '#850101';
       const p2Color = (this.ship2 && this.ship2.customColor) || this.shipColorP2 || '#00f0ff';
       renderPilotTag(this.domElements.p1TagText, p1Raw, isLocalRed, p1Color);
       renderPilotTag(this.domElements.p2TagText, p2Raw, !isLocalRed, p2Color);
@@ -6182,9 +6246,9 @@
     }
 
     updateLivesDisplay() {
-      const p1Col = (this.ship1 && this.ship1.customColor) || this.shipColorP1 || '#ef4444';
+      const p1Col = (this.ship1 && this.ship1.customColor) || this.shipColorP1 || '#850101';
       const p2Col = (this.ship2 && this.ship2.customColor) || this.shipColorP2 || '#0211d0';
-      const soloCol = (this.ship && this.ship.customColor) || this.shipColorP1 || '#ef4444';
+      const soloCol = (this.ship && this.ship.customColor) || this.shipColorP1 || '#850101';
 
       if (this.gameMode === 'multiplayer') {
         if (this.domElements.p1LivesIcons) {
