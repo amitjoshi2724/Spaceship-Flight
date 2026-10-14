@@ -3467,6 +3467,20 @@ html, body {
   animation: radarGlow 1.8s infinite;
 }
 
+.crew-badge.ready-badge {
+  background: rgba(34, 197, 94, 0.22);
+  border: 1px solid rgba(74, 222, 128, 0.65);
+  color: #4ade80;
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.45);
+  animation: readyPulse 1.4s ease-in-out infinite alternate;
+}
+
+.crew-badge.not-ready-badge {
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fbbf24;
+}
+
 .online-room-box {
   background: rgba(10, 15, 30, 0.75);
   border: 1px solid rgba(56, 189, 248, 0.35);
@@ -4004,6 +4018,216 @@ html, body {
   background: #f59e0b !important;
   box-shadow: 0 0 8px #f59e0b !important;
   animation: beaconAmberPulse 1s infinite !important;
+}
+
+/* Ready Up Button Active/Ready State */
+.menu-btn.active-ready {
+  background: linear-gradient(135deg, #15803d, #22c55e) !important;
+  border-color: #4ade80 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 16px rgba(74, 222, 128, 0.5) !important;
+}
+
+@keyframes readyPulse {
+  from {
+    box-shadow: 0 0 6px rgba(74, 222, 128, 0.3);
+    transform: scale(1);
+  }
+  to {
+    box-shadow: 0 0 14px rgba(74, 222, 128, 0.65);
+    transform: scale(1.03);
+  }
+}
+
+/* Online Lobby Countdown Overlay (Fortnite Style) */
+.online-lobby-card {
+  position: relative;
+}
+
+.online-countdown-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.countdown-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 16, 32, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+.countdown-badge {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 2px solid #38bdf8;
+  border-radius: var(--radius-lg);
+  padding: 24px 36px;
+  box-shadow: 0 0 35px rgba(56, 189, 248, 0.45);
+  text-align: center;
+}
+
+.countdown-ring {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 3px solid rgba(56, 189, 248, 0.3);
+  border-top-color: #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.35);
+  animation: countdownRingSpin 1s linear infinite;
+}
+
+@keyframes countdownRingSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.countdown-number {
+  font-family: var(--font-display);
+  font-size: 42px;
+  font-weight: 900;
+  color: #38bdf8;
+  text-shadow: 0 0 16px #38bdf8;
+  animation: countdownDigitPulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes countdownDigitPulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.15); }
+}
+
+.countdown-text {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: 1px;
+}
+
+.countdown-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+}
+
+/* Online Rematch Squadron Box (Game Over Screen) */
+.online-rematch-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.rematch-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rematch-title {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  color: #94a3b8;
+  letter-spacing: 1px;
+}
+
+.rematch-count-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.rematch-roster {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.rematch-pilot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(10, 16, 32, 0.65);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.rematch-pilot-role {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+}
+
+.rematch-pilot-name {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rematch-status-badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 3px 6px;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.rematch-status-badge.waiting {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.rematch-status-badge.ready {
+  background: rgba(34, 197, 94, 0.22);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.6);
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.35);
+}
+
+.rematch-countdown-notice {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #22c55e;
+  text-shadow: 0 0 10px #22c55e;
+  text-align: center;
+  padding: 4px;
+  letter-spacing: 0.8px;
+  animation: readyPulse 1s ease-in-out infinite alternate;
 }
 
 

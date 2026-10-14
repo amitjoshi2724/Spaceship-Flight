@@ -21,7 +21,7 @@
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
     rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=2.3.18">
+  <link rel="stylesheet" href="style.css?v=2.3.19">
   <link rel="manifest" href="manifest.json?v=2.0.2">
   <link rel="icon" type="image/png" sizes="64x64" href="images/newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="images/newspaceship.png">
@@ -990,7 +990,7 @@
           </div>
 
           <div class="online-modal-nav">
-            <button id="onlineStartGameBtn" class="menu-btn primary-btn disabled" disabled>🚀 LAUNCH CO-OP MISSION</button>
+            <button id="onlineStartGameBtn" class="menu-btn primary-btn disabled" disabled>READY UP 🚀</button>
           </div>
         </div>
 
@@ -1008,7 +1008,7 @@
           <div class="crew-manifest-box" id="joinCrewManifestBox" style="display: none;">
             <div class="crew-label">
               <span>CONNECTED SQUADRON</span>
-              <span class="crew-status-dot ready">2/2 PILOTS</span>
+              <span id="joinRoomStatusBadge" class="crew-status-dot ready">2/2 PILOTS</span>
             </div>
             <div class="crew-roster">
               <div class="crew-member host" id="joinHostCard">
@@ -1020,7 +1020,7 @@
                   </div>
                   <div class="crew-name" id="joinHostNameDisplay">Host</div>
                 </div>
-                <div class="crew-badge connected">HOST</div>
+                <div class="crew-badge connected" id="joinHostStatusBadge">HOST</div>
               </div>
               <div class="crew-member guest connected" id="joinGuestCard">
                 <div class="crew-avatar">🚀</div>
@@ -1031,7 +1031,7 @@
                   </div>
                   <div class="crew-name" id="joinGuestNameDisplay">Co-Pilot</div>
                 </div>
-                <div class="crew-badge connected">YOU</div>
+                <div class="crew-badge connected" id="joinGuestStatusBadge">YOU</div>
               </div>
             </div>
           </div>
@@ -1117,12 +1117,28 @@
           </div>
 
           <div id="guestRoleNotice" class="online-subtext" style="display: none; margin-top: 10px; text-align: center; color: #38bdf8;">
-            Assigned Ship: <b id="guestRoleShipName">BLUE</b> (Host will launch the game)
+            Assigned Ship: <b id="guestRoleShipName">BLUE</b> • Ready up when prepared for flight!
+          </div>
+
+          <div class="online-modal-nav" style="margin-top: 14px;">
+            <button id="onlineGuestReadyBtn" class="menu-btn primary-btn disabled" disabled>READY UP 🚀</button>
           </div>
         </div>
 
         <div class="online-modal-nav" style="margin-top: 14px;">
           <button id="onlineLobbyCloseBtn" class="menu-btn secondary-btn">CANCEL / BACK</button>
+        </div>
+
+        <!-- Live Countdown Overlay (Fortnite Style) -->
+        <div id="onlineCountdownOverlay" class="online-countdown-overlay" style="display: none;">
+          <div class="countdown-backdrop"></div>
+          <div class="countdown-badge">
+            <div class="countdown-ring">
+              <span class="countdown-number" id="onlineCountdownNum">3</span>
+            </div>
+            <div class="countdown-text" id="onlineCountdownText">MISSION LAUNCHING IN 3...</div>
+            <div class="countdown-sub">ALL PILOTS READY • Click CANCEL READY to abort</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1189,6 +1205,29 @@
           </div>
         </div>
 
+        <!-- Online Rematch Squadron Ready Box -->
+        <div id="onlineRematchBox" class="online-rematch-box" style="display: none;">
+          <div class="rematch-header">
+            <span class="rematch-title">CO-OP REMATCH SQUADRON</span>
+            <span id="rematchReadyCountBadge" class="rematch-count-badge">0/2 READY</span>
+          </div>
+          <div class="rematch-roster">
+            <div class="rematch-pilot-card" id="rematchHostCard">
+              <span class="rematch-pilot-role">HOST</span>
+              <span class="rematch-pilot-name" id="rematchHostName">Host</span>
+              <span class="rematch-status-badge waiting" id="rematchHostBadge">NOT READY ⏳</span>
+            </div>
+            <div class="rematch-pilot-card" id="rematchGuestCard">
+              <span class="rematch-pilot-role">CO-PILOT</span>
+              <span class="rematch-pilot-name" id="rematchGuestName">Co-Pilot</span>
+              <span class="rematch-status-badge waiting" id="rematchGuestBadge">NOT READY ⏳</span>
+            </div>
+          </div>
+          <div id="rematchCountdownNotice" class="rematch-countdown-notice" style="display: none;">
+            🚀 REMATCH LAUNCHING IN <span id="rematchCountdownNum">3</span>...
+          </div>
+        </div>
+
         <nav class="menu-nav">
           <button id="retryBtn" class="menu-btn primary-btn">PLAY AGAIN</button>
           <button id="gameOverQuitBtn" class="menu-btn secondary-btn">MAIN MENU</button>
@@ -1198,9 +1237,9 @@
   </div>
 
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="network.js?v=2.3.18"></script>
+  <script src="network.js?v=2.3.19"></script>
   <script src="rl_agent.js?v=2.1.0"></script>
-  <script src="game.js?v=2.3.18"></script>
+  <script src="game.js?v=2.3.19"></script>
 </body>
 
 </html>

@@ -379,6 +379,67 @@
         osc.stop(now + 0.3);
       } catch (e) { }
     }
+
+    playCountdownTick(isFinal = false) {
+      if (!this.enabled) return;
+      this.init();
+      this.resume();
+      if (!this.ctx) return;
+
+      try {
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = isFinal ? 'triangle' : 'sine';
+        const freq = isFinal ? 1200 : 700;
+        osc.frequency.setValueAtTime(freq, now);
+        if (isFinal) {
+          osc.frequency.exponentialRampToValueAtTime(1600, now + 0.3);
+        }
+
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + (isFinal ? 0.35 : 0.15));
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + (isFinal ? 0.35 : 0.15));
+      } catch (_) { }
+    }
+
+    playReadyToggle(isReady) {
+      if (!this.enabled) return;
+      this.init();
+      this.resume();
+      if (!this.ctx) return;
+
+      try {
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        if (isReady) {
+          osc.frequency.setValueAtTime(523.25, now);
+          osc.frequency.setValueAtTime(659.25, now + 0.08);
+          osc.frequency.setValueAtTime(783.99, now + 0.16);
+        } else {
+          osc.frequency.setValueAtTime(659.25, now);
+          osc.frequency.setValueAtTime(440, now + 0.1);
+        }
+
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + (isReady ? 0.28 : 0.2));
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + (isReady ? 0.28 : 0.2));
+      } catch (_) { }
+    }
   }
 
   // ============================================================================
@@ -2695,6 +2756,17 @@
       this.bulletIdSeq = 0;
       this.ufoBulletIdSeq = 0;
 
+      // Fortnite-style Ready Up & Countdown state
+      this.onlineHostReady = false;
+      this.onlineGuestReady = false;
+      this.onlineLobbyCountdown = null;
+      this.onlineLobbyCountdownTimer = null;
+
+      this.onlineHostRematchReady = false;
+      this.onlineGuestRematchReady = false;
+      this.onlineRematchCountdown = null;
+      this.onlineRematchCountdownTimer = null;
+
       this.bullets = [];
       this.rocks = [];
       this.rockSpawnTimer = 0;
@@ -2965,6 +3037,10 @@
         createStatusTitle: document.getElementById('createStatusTitle'),
         createStatusSub: document.getElementById('createStatusSub'),
         onlineStartGameBtn: document.getElementById('onlineStartGameBtn'),
+        onlineGuestReadyBtn: document.getElementById('onlineGuestReadyBtn'),
+        onlineCountdownOverlay: document.getElementById('onlineCountdownOverlay'),
+        onlineCountdownNum: document.getElementById('onlineCountdownNum'),
+        onlineCountdownText: document.getElementById('onlineCountdownText'),
         onlineJoinCodeInput: document.getElementById('onlineJoinCodeInput'),
         onlineConnectBtn: document.getElementById('onlineConnectBtn'),
         joinRadarPulse: document.getElementById('joinRadarPulse'),
@@ -2985,6 +3061,7 @@
         randomizePilotNameBtn: document.getElementById('randomizePilotNameBtn'),
         crewRoomStatusBadge: document.getElementById('crewRoomStatusBadge'),
         crewHostCard: document.getElementById('crewHostCard'),
+        crewHostStatusBadge: document.getElementById('crewHostStatusBadge'),
         crewHostShipBadge: document.getElementById('crewHostShipBadge'),
         crewHostNameDisplay: document.getElementById('crewHostNameDisplay'),
         crewGuestCard: document.getElementById('crewGuestCard'),
@@ -2995,12 +3072,23 @@
         roleSelectRedSub: document.getElementById('roleSelectRedSub'),
         roleSelectBlueSub: document.getElementById('roleSelectBlueSub'),
         joinCrewManifestBox: document.getElementById('joinCrewManifestBox'),
+        joinRoomStatusBadge: document.getElementById('joinRoomStatusBadge'),
         joinHostCard: document.getElementById('joinHostCard'),
+        joinHostStatusBadge: document.getElementById('joinHostStatusBadge'),
         joinHostShipBadge: document.getElementById('joinHostShipBadge'),
         joinHostNameDisplay: document.getElementById('joinHostNameDisplay'),
         joinGuestCard: document.getElementById('joinGuestCard'),
+        joinGuestStatusBadge: document.getElementById('joinGuestStatusBadge'),
         joinGuestShipBadge: document.getElementById('joinGuestShipBadge'),
-        joinGuestNameDisplay: document.getElementById('joinGuestNameDisplay')
+        joinGuestNameDisplay: document.getElementById('joinGuestNameDisplay'),
+        onlineRematchBox: document.getElementById('onlineRematchBox'),
+        rematchHostBadge: document.getElementById('rematchHostBadge'),
+        rematchGuestBadge: document.getElementById('rematchGuestBadge'),
+        rematchHostName: document.getElementById('rematchHostName'),
+        rematchGuestName: document.getElementById('rematchGuestName'),
+        rematchReadyCountBadge: document.getElementById('rematchReadyCountBadge'),
+        rematchCountdownNotice: document.getElementById('rematchCountdownNotice'),
+        rematchCountdownNum: document.getElementById('rematchCountdownNum')
       };
 
       // Reinforcement Learning Controller
@@ -3487,6 +3575,8 @@
         console.log('[Game] Co-pilot peer connected!', info);
         if (info && info.hostName) this.onlineHostName = info.hostName;
         if (info && info.guestName) this.onlineGuestName = info.guestName;
+        this.onlineHostReady = false;
+        this.onlineGuestReady = false;
         if (this.isOnlineHost) {
           this.updateLobbyHostUI(true);
         } else {
@@ -3584,9 +3674,55 @@
 
       this.network.onRequestRestart = (data) => {
         console.log('[Game] Guest requested restart', data);
+        this.onlineGuestRematchReady = true;
+        this.updateRematchReadyUI();
         if (this.isOnlineHost) {
-          if (this.network) this.network.sendRestartGame();
-          this.startGame('multiplayer');
+          this.checkHostRematchReadiness();
+        }
+      };
+
+      this.network.onPilotReady = (data) => {
+        console.log('[Game] Received PILOT_READY', data);
+        if (data.from === 'host') {
+          this.onlineHostReady = !!data.isReady;
+        } else {
+          this.onlineGuestReady = !!data.isReady;
+        }
+        this.updateCrewManifestUI();
+        if (this.isOnlineHost) {
+          this.checkHostLobbyReadiness();
+        }
+      };
+
+      this.network.onRematchReady = (data) => {
+        console.log('[Game] Received REMATCH_READY', data);
+        if (data.from === 'host') {
+          this.onlineHostRematchReady = !!data.isReady;
+        } else {
+          this.onlineGuestRematchReady = !!data.isReady;
+        }
+        this.updateRematchReadyUI();
+        if (this.isOnlineHost) {
+          this.checkHostRematchReadiness();
+        }
+      };
+
+      this.network.onCountdownStart = (data) => {
+        console.log('[Game] Received COUNTDOWN_START', data);
+        const seconds = (typeof data.seconds === 'number') ? data.seconds : 3;
+        if (data.context === 'rematch') {
+          this.startRematchCountdown(seconds);
+        } else {
+          this.startLobbyCountdown(seconds);
+        }
+      };
+
+      this.network.onCountdownAbort = (data) => {
+        console.log('[Game] Received COUNTDOWN_ABORT', data);
+        if (data.context === 'rematch') {
+          this.abortRematchCountdown(data.reason);
+        } else {
+          this.abortLobbyCountdown(data.reason);
         }
       };
 
@@ -3697,12 +3833,16 @@
         });
       }
 
-      // Launch Button (Host Only)
+      // Launch/Ready Buttons (Host & Guest)
       if (this.domElements.onlineStartGameBtn) {
         this.domElements.onlineStartGameBtn.addEventListener('click', () => {
-          if (this.network && this.network.isConnected) {
-            this.startOnlineHostGame(this.onlineRole);
-          }
+          this.toggleHostReady();
+        });
+      }
+
+      if (this.domElements.onlineGuestReadyBtn) {
+        this.domElements.onlineGuestReadyBtn.addEventListener('click', () => {
+          this.toggleGuestReady();
         });
       }
 
@@ -3730,10 +3870,16 @@
       // Close / Back Button
       if (this.domElements.onlineLobbyCloseBtn) {
         this.domElements.onlineLobbyCloseBtn.addEventListener('click', () => {
-          this.hideModals();
+          this.onlineHostReady = false;
+          this.onlineGuestReady = false;
+          if (this.network && this.network.isConnected) {
+            this.network.sendPilotReady(false, this.isOnlineHost ? 'host' : 'guest');
+          }
+          this.abortLobbyCountdown('Lobby closed');
           if (this.network && !this.isOnline) {
             this.network.disconnect();
           }
+          this.hideModals();
         });
       }
     }
@@ -3971,6 +4117,9 @@
     }
 
     openOnlineLobby(tab = 'create') {
+      this.onlineHostReady = false;
+      this.onlineGuestReady = false;
+      this.abortLobbyCountdown();
       this.showModal('onlineLobby');
       if (this.domElements.onlinePilotNameInput) {
         this.domElements.onlinePilotNameInput.value = this.pilotName || '';
@@ -4012,9 +4161,26 @@
         this.domElements.roleSelectBlueSub.style.fontSize = guestSubFontSize;
       }
 
+      const readyCount = (this.onlineHostReady ? 1 : 0) + (this.onlineGuestReady ? 1 : 0);
+
       if (this.domElements.crewRoomStatusBadge) {
-        this.domElements.crewRoomStatusBadge.textContent = isConnected ? '2/2 PILOTS' : '1/2 PILOTS';
-        this.domElements.crewRoomStatusBadge.className = isConnected ? 'crew-status-dot ready' : 'crew-status-dot waiting';
+        if (isConnected) {
+          this.domElements.crewRoomStatusBadge.textContent = (readyCount === 2) ? '2/2 PILOTS (ALL READY! 🚀)' : `2/2 PILOTS (${readyCount}/2 READY)`;
+          this.domElements.crewRoomStatusBadge.className = (readyCount === 2) ? 'crew-status-dot ready' : 'crew-status-dot waiting';
+        } else {
+          this.domElements.crewRoomStatusBadge.textContent = '1/2 PILOTS (WAITING)';
+          this.domElements.crewRoomStatusBadge.className = 'crew-status-dot waiting';
+        }
+      }
+
+      if (this.domElements.crewHostStatusBadge) {
+        if (isConnected) {
+          this.domElements.crewHostStatusBadge.textContent = this.onlineHostReady ? 'READY ✅' : 'NOT READY ⏳';
+          this.domElements.crewHostStatusBadge.className = this.onlineHostReady ? 'crew-badge ready-badge' : 'crew-badge not-ready-badge';
+        } else {
+          this.domElements.crewHostStatusBadge.textContent = 'HOST (YOU)';
+          this.domElements.crewHostStatusBadge.className = 'crew-badge connected';
+        }
       }
 
       if (this.domElements.crewGuestCard) {
@@ -4031,8 +4197,13 @@
         }
       }
       if (this.domElements.crewGuestStatusBadge) {
-        this.domElements.crewGuestStatusBadge.textContent = isConnected ? 'READY' : 'WAITING';
-        this.domElements.crewGuestStatusBadge.className = isConnected ? 'crew-badge connected' : 'crew-badge waiting';
+        if (isConnected) {
+          this.domElements.crewGuestStatusBadge.textContent = this.onlineGuestReady ? 'READY ✅' : 'NOT READY ⏳';
+          this.domElements.crewGuestStatusBadge.className = this.onlineGuestReady ? 'crew-badge ready-badge' : 'crew-badge not-ready-badge';
+        } else {
+          this.domElements.crewGuestStatusBadge.textContent = 'WAITING';
+          this.domElements.crewGuestStatusBadge.className = 'crew-badge waiting';
+        }
       }
 
       // 2. Join Pane Manifest
@@ -4049,6 +4220,281 @@
         this.domElements.joinGuestShipBadge.textContent = isHostRed ? 'BLUE (P2)' : 'RED (P1)';
         this.domElements.joinGuestShipBadge.className = isHostRed ? 'crew-ship-badge blue' : 'crew-ship-badge red';
       }
+
+      if (this.domElements.joinHostStatusBadge) {
+        this.domElements.joinHostStatusBadge.textContent = this.onlineHostReady ? 'READY ✅' : 'NOT READY ⏳';
+        this.domElements.joinHostStatusBadge.className = this.onlineHostReady ? 'crew-badge ready-badge' : 'crew-badge not-ready-badge';
+      }
+      if (this.domElements.joinGuestStatusBadge) {
+        this.domElements.joinGuestStatusBadge.textContent = this.onlineGuestReady ? 'READY ✅' : 'NOT READY ⏳';
+        this.domElements.joinGuestStatusBadge.className = this.onlineGuestReady ? 'crew-badge ready-badge' : 'crew-badge not-ready-badge';
+      }
+      if (this.domElements.joinRoomStatusBadge) {
+        if (isConnected) {
+          this.domElements.joinRoomStatusBadge.textContent = (readyCount === 2) ? '2/2 PILOTS (ALL READY! 🚀)' : `2/2 PILOTS (${readyCount}/2 READY)`;
+          this.domElements.joinRoomStatusBadge.className = (readyCount === 2) ? 'crew-status-dot ready' : 'crew-status-dot waiting';
+        } else {
+          this.domElements.joinRoomStatusBadge.textContent = 'WAITING';
+          this.domElements.joinRoomStatusBadge.className = 'crew-status-dot waiting';
+        }
+      }
+
+      // Buttons
+      if (this.domElements.onlineStartGameBtn) {
+        this.domElements.onlineStartGameBtn.disabled = !isConnected;
+        this.domElements.onlineStartGameBtn.classList.toggle('disabled', !isConnected);
+        if (!isConnected) {
+          this.domElements.onlineStartGameBtn.textContent = 'WAITING FOR CO-PILOT...';
+          this.domElements.onlineStartGameBtn.classList.remove('active-ready');
+        } else {
+          this.domElements.onlineStartGameBtn.textContent = this.onlineHostReady ? 'READY! (CLICK TO CANCEL) ⏳' : 'READY UP 🚀';
+          this.domElements.onlineStartGameBtn.classList.toggle('active-ready', this.onlineHostReady);
+        }
+      }
+
+      if (this.domElements.onlineGuestReadyBtn) {
+        this.domElements.onlineGuestReadyBtn.disabled = !isConnected;
+        this.domElements.onlineGuestReadyBtn.classList.toggle('disabled', !isConnected);
+        if (!isConnected) {
+          this.domElements.onlineGuestReadyBtn.textContent = 'READY UP 🚀';
+          this.domElements.onlineGuestReadyBtn.classList.remove('active-ready');
+        } else {
+          this.domElements.onlineGuestReadyBtn.textContent = this.onlineGuestReady ? 'READY! (CLICK TO CANCEL) ⏳' : 'READY UP 🚀';
+          this.domElements.onlineGuestReadyBtn.classList.toggle('active-ready', this.onlineGuestReady);
+        }
+      }
+    }
+
+    toggleHostReady() {
+      if (!this.network || !this.network.isConnected) return;
+      this.onlineHostReady = !this.onlineHostReady;
+      if (this.soundFx) this.soundFx.playReadyToggle(this.onlineHostReady);
+      this.network.sendPilotReady(this.onlineHostReady, 'host');
+      this.updateCrewManifestUI();
+
+      if (!this.onlineHostReady && this.onlineLobbyCountdownTimer) {
+        this.abortLobbyCountdown('Host unreadied');
+        this.network.sendCountdownAbort('lobby', 'Host unreadied');
+      } else {
+        this.checkHostLobbyReadiness();
+      }
+    }
+
+    toggleGuestReady() {
+      if (!this.network || !this.network.isConnected) return;
+      this.onlineGuestReady = !this.onlineGuestReady;
+      if (this.soundFx) this.soundFx.playReadyToggle(this.onlineGuestReady);
+      this.network.sendPilotReady(this.onlineGuestReady, 'guest');
+      this.updateCrewManifestUI();
+
+      if (!this.onlineGuestReady && this.onlineLobbyCountdownTimer) {
+        this.abortLobbyCountdown('Co-pilot unreadied');
+        this.network.sendCountdownAbort('lobby', 'Co-pilot unreadied');
+      }
+    }
+
+    checkHostLobbyReadiness() {
+      if (!this.isOnlineHost) return;
+      if (this.onlineHostReady && this.onlineGuestReady) {
+        if (!this.onlineLobbyCountdownTimer) {
+          this.startLobbyCountdown(3);
+          if (this.network) this.network.sendCountdownStart(3, 'lobby');
+        }
+      } else {
+        if (this.onlineLobbyCountdownTimer) {
+          this.abortLobbyCountdown('A pilot unreadied');
+          if (this.network) this.network.sendCountdownAbort('lobby', 'A pilot unreadied');
+        }
+      }
+    }
+
+    showLobbyCountdownOverlay(num) {
+      if (this.domElements.onlineCountdownOverlay) {
+        this.domElements.onlineCountdownOverlay.style.display = 'flex';
+      }
+      if (this.domElements.onlineCountdownNum) {
+        this.domElements.onlineCountdownNum.textContent = num;
+      }
+      if (this.domElements.onlineCountdownText) {
+        this.domElements.onlineCountdownText.textContent = `MISSION LAUNCHING IN ${num}...`;
+      }
+    }
+
+    hideLobbyCountdownOverlay() {
+      if (this.domElements.onlineCountdownOverlay) {
+        this.domElements.onlineCountdownOverlay.style.display = 'none';
+      }
+    }
+
+    startLobbyCountdown(seconds = 3) {
+      if (this.onlineLobbyCountdownTimer) clearInterval(this.onlineLobbyCountdownTimer);
+      this.onlineLobbyCountdown = seconds;
+      this.showLobbyCountdownOverlay(this.onlineLobbyCountdown);
+
+      if (this.soundFx) this.soundFx.playCountdownTick(false);
+
+      this.onlineLobbyCountdownTimer = setInterval(() => {
+        this.onlineLobbyCountdown--;
+        if (this.onlineLobbyCountdown > 0) {
+          this.showLobbyCountdownOverlay(this.onlineLobbyCountdown);
+          if (this.soundFx) this.soundFx.playCountdownTick(this.onlineLobbyCountdown === 1);
+        } else {
+          clearInterval(this.onlineLobbyCountdownTimer);
+          this.onlineLobbyCountdownTimer = null;
+          this.onlineLobbyCountdown = null;
+          this.hideLobbyCountdownOverlay();
+          if (this.soundFx) this.soundFx.playCountdownTick(true);
+
+          if (this.isOnlineHost) {
+            this.startOnlineHostGame(this.onlineRole);
+          }
+        }
+      }, 1000);
+    }
+
+    abortLobbyCountdown(reason = '') {
+      if (this.onlineLobbyCountdownTimer) {
+        clearInterval(this.onlineLobbyCountdownTimer);
+        this.onlineLobbyCountdownTimer = null;
+      }
+      this.onlineLobbyCountdown = null;
+      this.hideLobbyCountdownOverlay();
+      this.updateCrewManifestUI();
+      if (this.soundFx) this.soundFx.playEmptyBattery();
+      if (this.domElements.createStatusTitle) {
+        this.domElements.createStatusTitle.textContent = 'LAUNCH ABORTED';
+      }
+      if (this.domElements.createStatusSub) {
+        this.domElements.createStatusSub.textContent = reason || 'A pilot cancelled ready. Waiting for all pilots to ready up...';
+      }
+      if (this.domElements.joinStatusTitle) {
+        this.domElements.joinStatusTitle.textContent = 'LAUNCH ABORTED';
+      }
+      if (this.domElements.joinStatusSub) {
+        this.domElements.joinStatusSub.textContent = reason || 'A pilot cancelled ready. Waiting for all pilots to ready up...';
+      }
+    }
+
+    toggleRematchReady() {
+      if (!this.network || !this.network.isConnected) return;
+      if (this.isOnlineHost) {
+        this.onlineHostRematchReady = !this.onlineHostRematchReady;
+        if (this.soundFx) this.soundFx.playReadyToggle(this.onlineHostRematchReady);
+        this.network.sendRematchReady(this.onlineHostRematchReady, 'host');
+        this.updateRematchReadyUI();
+        this.checkHostRematchReadiness();
+      } else {
+        this.onlineGuestRematchReady = !this.onlineGuestRematchReady;
+        if (this.soundFx) this.soundFx.playReadyToggle(this.onlineGuestRematchReady);
+        this.network.sendRematchReady(this.onlineGuestRematchReady, 'guest');
+        this.updateRematchReadyUI();
+      }
+    }
+
+    checkHostRematchReadiness() {
+      if (!this.isOnlineHost) return;
+      if (this.onlineHostRematchReady && this.onlineGuestRematchReady) {
+        if (!this.onlineRematchCountdownTimer) {
+          this.startRematchCountdown(3);
+          if (this.network) this.network.sendCountdownStart(3, 'rematch');
+        }
+      } else {
+        if (this.onlineRematchCountdownTimer) {
+          this.abortRematchCountdown('A pilot cancelled rematch ready');
+          if (this.network) this.network.sendCountdownAbort('rematch', 'A pilot cancelled rematch ready');
+        }
+      }
+    }
+
+    updateRematchReadyUI() {
+      if (!this.domElements.onlineRematchBox) return;
+      const isOnlineActive = (this.isOnline && this.network && this.network.isConnected);
+      this.domElements.onlineRematchBox.style.display = isOnlineActive ? 'flex' : 'none';
+      if (!isOnlineActive) return;
+
+      const hostReady = !!this.onlineHostRematchReady;
+      const guestReady = !!this.onlineGuestRematchReady;
+      const readyCount = (hostReady ? 1 : 0) + (guestReady ? 1 : 0);
+
+      const hostName = this.onlineHostName || (this.isOnlineHost ? this.pilotName : (this.network && this.network.peerPilotName)) || 'Host';
+      const guestName = this.onlineGuestName || (!this.isOnlineHost ? this.pilotName : (this.network && this.network.peerPilotName)) || 'Co-Pilot';
+
+      if (this.domElements.rematchHostName) {
+        this.domElements.rematchHostName.textContent = hostName;
+      }
+      if (this.domElements.rematchGuestName) {
+        this.domElements.rematchGuestName.textContent = guestName;
+      }
+      if (this.domElements.rematchHostBadge) {
+        this.domElements.rematchHostBadge.className = hostReady ? 'rematch-status-badge ready' : 'rematch-status-badge waiting';
+        this.domElements.rematchHostBadge.textContent = hostReady ? 'READY ✅' : 'NOT READY ⏳';
+      }
+      if (this.domElements.rematchGuestBadge) {
+        this.domElements.rematchGuestBadge.className = guestReady ? 'rematch-status-badge ready' : 'rematch-status-badge waiting';
+        this.domElements.rematchGuestBadge.textContent = guestReady ? 'READY ✅' : 'NOT READY ⏳';
+      }
+      if (this.domElements.rematchReadyCountBadge) {
+        this.domElements.rematchReadyCountBadge.textContent = (readyCount === 2) ? 'ALL READY! 🚀' : `${readyCount}/2 READY`;
+      }
+
+      const isLocalReady = this.isOnlineHost ? hostReady : guestReady;
+      if (this.domElements.retryBtn) {
+        this.domElements.retryBtn.classList.toggle('active-ready', isLocalReady);
+        this.domElements.retryBtn.textContent = isLocalReady ? 'READY! (CLICK TO CANCEL) ⏳' : 'READY FOR REMATCH 🚀';
+      }
+    }
+
+    showRematchCountdown(num) {
+      if (this.domElements.rematchCountdownNotice) {
+        this.domElements.rematchCountdownNotice.style.display = 'block';
+      }
+      if (this.domElements.rematchCountdownNum) {
+        this.domElements.rematchCountdownNum.textContent = num;
+      }
+    }
+
+    hideRematchCountdown() {
+      if (this.domElements.rematchCountdownNotice) {
+        this.domElements.rematchCountdownNotice.style.display = 'none';
+      }
+    }
+
+    startRematchCountdown(seconds = 3) {
+      if (this.onlineRematchCountdownTimer) clearInterval(this.onlineRematchCountdownTimer);
+      this.onlineRematchCountdown = seconds;
+      this.showRematchCountdown(this.onlineRematchCountdown);
+
+      if (this.soundFx) this.soundFx.playCountdownTick(false);
+
+      this.onlineRematchCountdownTimer = setInterval(() => {
+        this.onlineRematchCountdown--;
+        if (this.onlineRematchCountdown > 0) {
+          this.showRematchCountdown(this.onlineRematchCountdown);
+          if (this.soundFx) this.soundFx.playCountdownTick(this.onlineRematchCountdown === 1);
+        } else {
+          clearInterval(this.onlineRematchCountdownTimer);
+          this.onlineRematchCountdownTimer = null;
+          this.onlineRematchCountdown = null;
+          this.hideRematchCountdown();
+          if (this.soundFx) this.soundFx.playCountdownTick(true);
+
+          if (this.isOnlineHost) {
+            if (this.network) this.network.sendRestartGame();
+            this.startGame('multiplayer');
+          }
+        }
+      }, 1000);
+    }
+
+    abortRematchCountdown(reason = '') {
+      if (this.onlineRematchCountdownTimer) {
+        clearInterval(this.onlineRematchCountdownTimer);
+        this.onlineRematchCountdownTimer = null;
+      }
+      this.onlineRematchCountdown = null;
+      this.hideRematchCountdown();
+      this.updateRematchReadyUI();
+      if (this.soundFx) this.soundFx.playEmptyBattery();
     }
 
     initHostRoom() {
@@ -4305,6 +4751,14 @@
       if (this.domElements.onlinePingText) {
         this.domElements.onlinePingText.innerHTML = 'DISCONNECTED 🔴';
       }
+      this.onlineGuestReady = false;
+      this.onlineHostReady = false;
+      this.onlineHostRematchReady = false;
+      this.onlineGuestRematchReady = false;
+      this.abortLobbyCountdown('Peer disconnected');
+      this.abortRematchCountdown('Peer disconnected');
+      this.updateCrewManifestUI();
+      this.updateRematchReadyUI();
       if (this.state === 'PLAYING') {
         alert('Co-Pilot has disconnected from the flight mission.');
       }
@@ -5370,22 +5824,7 @@
       // Game Over
       this.domElements.retryBtn.addEventListener('click', () => {
         if (this.isOnline) {
-          if (this.isOnlineHost) {
-            if (this.network) this.network.sendRestartGame();
-            this.startGame('multiplayer');
-          } else {
-            if (this.network && this.network.isConnected) {
-              this.network.sendRestartRequest(this.pilotName || 'Co-pilot');
-              if (this.domElements.retryBtn) {
-                this.domElements.retryBtn.textContent = 'REQUEST SENT...';
-                setTimeout(() => {
-                  if (this.domElements.retryBtn) this.domElements.retryBtn.textContent = 'PLAY AGAIN';
-                }, 2000);
-              }
-            } else {
-              alert('Waiting for room host to restart the flight mission...');
-            }
-          }
+          this.toggleRematchReady();
           return;
         }
         if (this.rlMode === 'trained') {
@@ -5396,7 +5835,20 @@
           this.startGame(this.gameMode);
         }
       });
-      this.domElements.gameOverQuitBtn.addEventListener('click', () => this.quitToMainMenu());
+      this.domElements.gameOverQuitBtn.addEventListener('click', () => {
+        if (this.isOnline) {
+          if (this.isOnlineHost) {
+            this.onlineHostRematchReady = false;
+            if (this.network) this.network.sendRematchReady(false, 'host');
+            this.checkHostRematchReadiness();
+          } else {
+            this.onlineGuestRematchReady = false;
+            if (this.network) this.network.sendRematchReady(false, 'guest');
+          }
+          this.abortRematchCountdown('A pilot left the match');
+        }
+        this.quitToMainMenu();
+      });
 
       // Sound Toggle
       const toggleSoundAction = () => {
@@ -5739,6 +6191,20 @@
       }
       this.hideModals();
       this.domElements.startScreen.classList.remove('active');
+
+      if (this.onlineLobbyCountdownTimer) {
+        clearInterval(this.onlineLobbyCountdownTimer);
+        this.onlineLobbyCountdownTimer = null;
+      }
+      this.onlineLobbyCountdown = null;
+      this.hideLobbyCountdownOverlay();
+
+      if (this.onlineRematchCountdownTimer) {
+        clearInterval(this.onlineRematchCountdownTimer);
+        this.onlineRematchCountdownTimer = null;
+      }
+      this.onlineRematchCountdown = null;
+      this.hideRematchCountdown();
 
       this.score = 0;
       this.updateScore(0);
@@ -6268,6 +6734,12 @@
 
     quitToMainMenu() {
       if (this.isOnline) {
+        this.onlineHostReady = false;
+        this.onlineGuestReady = false;
+        this.onlineHostRematchReady = false;
+        this.onlineGuestRematchReady = false;
+        this.abortLobbyCountdown('Returned to main menu');
+        this.abortRematchCountdown('Returned to main menu');
         if (this.network) this.network.disconnect();
         this.isOnline = false;
         this.isOnlineHost = false;
@@ -6781,11 +7253,23 @@
         this.domElements.newHighScoreBanner.classList.add('hidden');
       }
 
-      if (this.domElements.retryBtn) {
-        this.domElements.retryBtn.disabled = false;
-        if (this.isOnline && !this.isOnlineHost) {
-          this.domElements.retryBtn.textContent = 'PLAY AGAIN (REQUEST)';
-        } else {
+      if (this.isOnline) {
+        this.onlineHostRematchReady = false;
+        this.onlineGuestRematchReady = false;
+        if (this.onlineRematchCountdownTimer) {
+          clearInterval(this.onlineRematchCountdownTimer);
+          this.onlineRematchCountdownTimer = null;
+        }
+        this.onlineRematchCountdown = null;
+        this.hideRematchCountdown();
+        this.updateRematchReadyUI();
+      } else {
+        if (this.domElements.onlineRematchBox) {
+          this.domElements.onlineRematchBox.style.display = 'none';
+        }
+        if (this.domElements.retryBtn) {
+          this.domElements.retryBtn.disabled = false;
+          this.domElements.retryBtn.classList.remove('active-ready');
           this.domElements.retryBtn.textContent = 'PLAY AGAIN';
         }
       }

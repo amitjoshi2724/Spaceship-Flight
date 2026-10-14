@@ -59,6 +59,10 @@
       this.onResume = null;       // ({ resumedBy, isHost })
       this.onGameOver = null;     // ({ score, highScore, p1Kills, p2Kills })
       this.onRequestRestart = null; // ({ name })
+      this.onPilotReady = null;    // ({ isReady, from })
+      this.onRematchReady = null;  // ({ isReady, from })
+      this.onCountdownStart = null;// ({ seconds, context })
+      this.onCountdownAbort = null;// ({ context, reason })
     }
 
     static normalizeHexColor(col) {
@@ -554,6 +558,22 @@
           if (this.isHost && this.onRequestRestart) this.onRequestRestart(data);
           break;
 
+        case 'PILOT_READY':
+          if (this.onPilotReady) this.onPilotReady(data);
+          break;
+
+        case 'REMATCH_READY':
+          if (this.onRematchReady) this.onRematchReady(data);
+          break;
+
+        case 'COUNTDOWN_START':
+          if (this.onCountdownStart) this.onCountdownStart(data);
+          break;
+
+        case 'COUNTDOWN_ABORT':
+          if (this.onCountdownAbort) this.onCountdownAbort(data);
+          break;
+
         default:
           break;
       }
@@ -705,6 +725,46 @@
       this.send({
         type: 'REQUEST_RESTART',
         name: (name || this.pilotName || 'Co-pilot').trim().slice(0, 30)
+      });
+      return true;
+    }
+
+    sendPilotReady(isReady, from = 'host') {
+      if (!this.conn || !this.conn.open) return false;
+      this.send({
+        type: 'PILOT_READY',
+        isReady: !!isReady,
+        from
+      });
+      return true;
+    }
+
+    sendRematchReady(isReady, from = 'host') {
+      if (!this.conn || !this.conn.open) return false;
+      this.send({
+        type: 'REMATCH_READY',
+        isReady: !!isReady,
+        from
+      });
+      return true;
+    }
+
+    sendCountdownStart(seconds = 3, context = 'lobby') {
+      if (!this.conn || !this.conn.open) return false;
+      this.send({
+        type: 'COUNTDOWN_START',
+        seconds,
+        context
+      });
+      return true;
+    }
+
+    sendCountdownAbort(context = 'lobby', reason = '') {
+      if (!this.conn || !this.conn.open) return false;
+      this.send({
+        type: 'COUNTDOWN_ABORT',
+        context,
+        reason
       });
       return true;
     }
