@@ -21,7 +21,7 @@
     href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap"
     rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css?v=2.3.17">
+  <link rel="stylesheet" href="style.css?v=2.3.18">
   <link rel="manifest" href="manifest.json?v=2.0.2">
   <link rel="icon" type="image/png" sizes="64x64" href="images/newspaceship.png">
   <link rel="shortcut icon" type="image/png" href="images/newspaceship.png">
@@ -908,6 +908,77 @@
             </div>
           </div>
 
+          <!-- Host Ship Hull Color Studio -->
+          <div class="online-color-studio" id="hostOnlineColorStudio">
+            <div class="online-color-header">
+              <div class="online-color-header-left">
+                <span class="online-color-title">🎨 YOUR SHIP HULL COLOR</span>
+                <span class="online-color-sub">Live Cockpit Transponder</span>
+              </div>
+              <span id="hostOnlineColorHex" class="color-hex-tag">#850101</span>
+            </div>
+
+            <div class="online-ship-preview-card">
+              <div class="online-ship-preview-frame">
+                <img id="hostShipPreviewImg" src="images/newspaceship.png" alt="Host Spaceship Preview" class="online-ship-img">
+              </div>
+              <div class="online-ship-info">
+                <div class="online-ship-meta-row">
+                  <span class="online-ship-role-tag" id="hostPreviewRoleBadge">HOST: RED (P1)</span>
+                </div>
+                <div class="online-ship-color-name" id="hostColorNameDisplay">Classic Crimson (OG)</div>
+                <div class="online-ship-color-desc">Synchronized hull livery for online co-op</div>
+              </div>
+            </div>
+
+            <div class="online-presets-section">
+              <div class="online-presets-grid" id="hostColorSwatches">
+                <button type="button" class="online-preset-chip active" data-color="#850101" data-name="Classic Crimson (OG)" title="Classic Crimson (OG)">
+                  <span class="preset-swatch" style="background:#850101;"></span>
+                  <span class="preset-name">Crimson (OG)</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#0211d0" data-name="Cobalt Blue (OG)" title="Cobalt Blue (OG)">
+                  <span class="preset-swatch" style="background:#0211d0;"></span>
+                  <span class="preset-name">Cobalt (OG)</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#00f0ff" data-name="Electric Cyan" title="Electric Cyan (High Visibility)">
+                  <span class="preset-swatch" style="background:#00f0ff; box-shadow:0 0 6px #00f0ff;"></span>
+                  <span class="preset-name">Cyan ★</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#10b981" data-name="Neon Emerald" title="Neon Emerald">
+                  <span class="preset-swatch" style="background:#10b981;"></span>
+                  <span class="preset-name">Emerald</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#facc15" data-name="Solar Gold" title="Solar Gold">
+                  <span class="preset-swatch" style="background:#facc15;"></span>
+                  <span class="preset-name">Gold</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#a855f7" data-name="Plasma Purple" title="Plasma Purple">
+                  <span class="preset-swatch" style="background:#a855f7;"></span>
+                  <span class="preset-name">Purple</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#ec4899" data-name="Hot Magenta" title="Hot Magenta">
+                  <span class="preset-swatch" style="background:#ec4899;"></span>
+                  <span class="preset-name">Magenta</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#ffffff" data-name="Starlight White" title="Starlight White">
+                  <span class="preset-swatch" style="background:#ffffff;"></span>
+                  <span class="preset-name">White</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="online-custom-color-row">
+              <label for="hostShipColorPicker" class="online-custom-label">
+                <span class="color-wheel-icon">🎨</span>
+                <span>CUSTOM COLOR PICKER:</span>
+              </label>
+              <div class="color-input-wrapper">
+                <input type="color" id="hostShipColorPicker" value="#850101" class="custom-color-picker-input" title="Choose any custom color">
+              </div>
+            </div>
+          </div>
+
           <div class="online-status-card">
             <div class="radar-scan-box">
               <div class="radar-pulse" id="createRadarPulse"></div>
@@ -967,20 +1038,70 @@
 
           <div class="online-color-studio" id="onlineColorStudio">
             <div class="online-color-header">
-              <span class="online-color-title">🎨 YOUR SHIP HULL COLOR</span>
-              <span id="onlineColorHex" class="color-hex-tag">#850101</span>
+              <div class="online-color-header-left">
+                <span class="online-color-title">🎨 YOUR SHIP HULL COLOR</span>
+                <span class="online-color-sub">Live Cockpit Transponder</span>
+              </div>
+              <span id="onlineColorHex" class="color-hex-tag">#0211D0</span>
             </div>
-            <div class="online-color-swatches" id="onlineColorSwatches">
-              <button type="button" class="mini-swatch active" data-color="#850101" style="background:#850101;" title="Crimson (OG)"></button>
-              <button type="button" class="mini-swatch" data-color="#0211d0" style="background:#0211d0;" title="Cobalt (OG)"></button>
-              <button type="button" class="mini-swatch" data-color="#00f0ff" style="background:#00f0ff;box-shadow:0 0 6px #00f0ff;" title="Cyan (High-Vis)"></button>
-              <button type="button" class="mini-swatch" data-color="#10b981" style="background:#10b981;" title="Emerald"></button>
-              <button type="button" class="mini-swatch" data-color="#facc15" style="background:#facc15;" title="Gold"></button>
-              <button type="button" class="mini-swatch" data-color="#a855f7" style="background:#a855f7;" title="Purple"></button>
-              <button type="button" class="mini-swatch" data-color="#ec4899" style="background:#ec4899;" title="Magenta"></button>
-              <button type="button" class="mini-swatch" data-color="#ffffff" style="background:#ffffff;" title="White"></button>
-              <div class="mini-picker-wrap" title="Custom color picker">
-                <input type="color" id="onlineShipColorPicker" value="#850101" class="mini-color-input">
+
+            <div class="online-ship-preview-card">
+              <div class="online-ship-preview-frame">
+                <img id="onlineShipPreviewImg" src="images/bluenewspaceship.png" alt="Your Spaceship Preview" class="online-ship-img">
+              </div>
+              <div class="online-ship-info">
+                <div class="online-ship-meta-row">
+                  <span class="online-ship-role-tag" id="onlinePreviewRoleBadge">CO-PILOT (P2)</span>
+                </div>
+                <div class="online-ship-color-name" id="onlineColorNameDisplay">Cobalt Blue (OG)</div>
+                <div class="online-ship-color-desc">Synchronized hull livery for online co-op</div>
+              </div>
+            </div>
+
+            <div class="online-presets-section">
+              <div class="online-presets-grid" id="onlineColorSwatches">
+                <button type="button" class="online-preset-chip" data-color="#850101" data-name="Classic Crimson (OG)" title="Classic Crimson (OG)">
+                  <span class="preset-swatch" style="background:#850101;"></span>
+                  <span class="preset-name">Crimson (OG)</span>
+                </button>
+                <button type="button" class="online-preset-chip active" data-color="#0211d0" data-name="Cobalt Blue (OG)" title="Cobalt Blue (OG)">
+                  <span class="preset-swatch" style="background:#0211d0;"></span>
+                  <span class="preset-name">Cobalt (OG)</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#00f0ff" data-name="Electric Cyan" title="Electric Cyan (High Visibility)">
+                  <span class="preset-swatch" style="background:#00f0ff; box-shadow:0 0 6px #00f0ff;"></span>
+                  <span class="preset-name">Cyan ★</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#10b981" data-name="Neon Emerald" title="Neon Emerald">
+                  <span class="preset-swatch" style="background:#10b981;"></span>
+                  <span class="preset-name">Emerald</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#facc15" data-name="Solar Gold" title="Solar Gold">
+                  <span class="preset-swatch" style="background:#facc15;"></span>
+                  <span class="preset-name">Gold</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#a855f7" data-name="Plasma Purple" title="Plasma Purple">
+                  <span class="preset-swatch" style="background:#a855f7;"></span>
+                  <span class="preset-name">Purple</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#ec4899" data-name="Hot Magenta" title="Hot Magenta">
+                  <span class="preset-swatch" style="background:#ec4899;"></span>
+                  <span class="preset-name">Magenta</span>
+                </button>
+                <button type="button" class="online-preset-chip" data-color="#ffffff" data-name="Starlight White" title="Starlight White">
+                  <span class="preset-swatch" style="background:#ffffff;"></span>
+                  <span class="preset-name">White</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="online-custom-color-row">
+              <label for="onlineShipColorPicker" class="online-custom-label">
+                <span class="color-wheel-icon">🎨</span>
+                <span>CUSTOM COLOR PICKER:</span>
+              </label>
+              <div class="color-input-wrapper">
+                <input type="color" id="onlineShipColorPicker" value="#0211d0" class="custom-color-picker-input" title="Choose any custom color">
               </div>
             </div>
           </div>
@@ -1077,9 +1198,9 @@
   </div>
 
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="network.js?v=2.3.17"></script>
+  <script src="network.js?v=2.3.18"></script>
   <script src="rl_agent.js?v=2.1.0"></script>
-  <script src="game.js?v=2.3.17"></script>
+  <script src="game.js?v=2.3.18"></script>
 </body>
 
 </html>

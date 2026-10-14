@@ -2888,7 +2888,18 @@
         onlineColorStudio: document.getElementById('onlineColorStudio'),
         onlineShipColorPicker: document.getElementById('onlineShipColorPicker'),
         onlineColorHex: document.getElementById('onlineColorHex'),
+        onlineShipPreviewImg: document.getElementById('onlineShipPreviewImg'),
+        onlinePreviewRoleBadge: document.getElementById('onlinePreviewRoleBadge'),
+        onlineColorNameDisplay: document.getElementById('onlineColorNameDisplay'),
         onlineColorSwatches: document.getElementById('onlineColorSwatches'),
+
+        hostOnlineColorStudio: document.getElementById('hostOnlineColorStudio'),
+        hostShipColorPicker: document.getElementById('hostShipColorPicker'),
+        hostOnlineColorHex: document.getElementById('hostOnlineColorHex'),
+        hostShipPreviewImg: document.getElementById('hostShipPreviewImg'),
+        hostPreviewRoleBadge: document.getElementById('hostPreviewRoleBadge'),
+        hostColorNameDisplay: document.getElementById('hostColorNameDisplay'),
+        hostColorSwatches: document.getElementById('hostColorSwatches'),
 
         // Customizable Controls UI
         presetSoloSelect: document.getElementById('presetSoloSelect'),
@@ -3742,7 +3753,15 @@
         this.domElements.onlinePaneJoin.style.display = (tab === 'join') ? 'block' : 'none';
         this.domElements.onlinePaneJoin.classList.toggle('active', tab === 'join');
       }
+      if (tab === 'join') {
+        if (!this.network || !this.network.isConnected) {
+          this.onlineLocalPlayerId = 2;
+        }
+      } else if (tab === 'create') {
+        this.onlineLocalPlayerId = (this.onlineRole === 'blue') ? 2 : 1;
+      }
       this.updateCrewManifestUI();
+      this.updateShipColorStudioUI();
     }
 
     scalePilotNameInputFont() {
@@ -3804,7 +3823,7 @@
       }
 
       // If online and we are changing our local ship color:
-      if (notifyPeer && this.isOnline && this.network && this.network.isConnected) {
+      if (notifyPeer && this.network && this.network.isConnected) {
         const localTarget = (this.onlineLocalPlayerId === 2) ? 'p2' : 'p1';
         if (target === localTarget) {
           this.network.updatePilotColor(norm);
@@ -3867,24 +3886,69 @@
         this.domElements.tab3P2ColorPicker.value = this.shipColorP2 || '#0211d0';
       }
 
-      // 5. Online lobby color studio
+      // Base sprite for tinting previews
+      const baseSprite = (this.ship1 && this.ship1.sprites) ? this.ship1.sprites.redNormal : null;
+
+      // 5. Online lobby color studio - Guest (Join Pane)
       const localOnlineColor = (this.onlineLocalPlayerId === 2) ? (this.shipColorP2 || '#0211d0') : (this.shipColorP1 || '#850101');
+      const localOnlineDataUrl = (localOnlineColor === '#850101')
+        ? 'images/newspaceship.png'
+        : (localOnlineColor === '#0211d0' ? 'images/bluenewspaceship.png' : Spaceship.getRecoloredDataUrl(baseSprite, localOnlineColor));
+
       if (this.domElements.onlineShipColorPicker) {
         this.domElements.onlineShipColorPicker.value = localOnlineColor;
       }
       if (this.domElements.onlineColorHex) {
         this.domElements.onlineColorHex.textContent = localOnlineColor.toUpperCase();
       }
+      if (this.domElements.onlineShipPreviewImg) {
+        this.domElements.onlineShipPreviewImg.src = localOnlineDataUrl;
+      }
+      if (this.domElements.onlineColorNameDisplay) {
+        this.domElements.onlineColorNameDisplay.textContent = Spaceship.getColorName(localOnlineColor);
+      }
+      if (this.domElements.onlinePreviewRoleBadge) {
+        this.domElements.onlinePreviewRoleBadge.textContent = (this.onlineLocalPlayerId === 2) ? 'CO-PILOT (P2)' : 'PILOT (P1)';
+      }
       if (this.domElements.onlineColorSwatches) {
-        const swatches = this.domElements.onlineColorSwatches.querySelectorAll('.mini-swatch');
+        const swatches = this.domElements.onlineColorSwatches.querySelectorAll('.online-preset-chip');
         swatches.forEach(sw => {
           const swColor = Spaceship.normalizeHexColor(sw.dataset.color);
           sw.classList.toggle('active', swColor === localOnlineColor);
         });
       }
 
-      // 6. Preview images
-      const baseSprite = (this.ship1 && this.ship1.sprites) ? this.ship1.sprites.redNormal : null;
+      // 5b. Online lobby color studio - Host (Create Pane)
+      const hostRoleTarget = (this.onlineRole === 'blue') ? 'p2' : 'p1';
+      const hostOnlineColor = (hostRoleTarget === 'p2') ? (this.shipColorP2 || '#0211d0') : (this.shipColorP1 || '#850101');
+      const hostOnlineDataUrl = (hostOnlineColor === '#850101')
+        ? 'images/newspaceship.png'
+        : (hostOnlineColor === '#0211d0' ? 'images/bluenewspaceship.png' : Spaceship.getRecoloredDataUrl(baseSprite, hostOnlineColor));
+
+      if (this.domElements.hostShipColorPicker) {
+        this.domElements.hostShipColorPicker.value = hostOnlineColor;
+      }
+      if (this.domElements.hostOnlineColorHex) {
+        this.domElements.hostOnlineColorHex.textContent = hostOnlineColor.toUpperCase();
+      }
+      if (this.domElements.hostShipPreviewImg) {
+        this.domElements.hostShipPreviewImg.src = hostOnlineDataUrl;
+      }
+      if (this.domElements.hostColorNameDisplay) {
+        this.domElements.hostColorNameDisplay.textContent = Spaceship.getColorName(hostOnlineColor);
+      }
+      if (this.domElements.hostPreviewRoleBadge) {
+        this.domElements.hostPreviewRoleBadge.textContent = (this.onlineRole === 'blue') ? 'HOST: BLUE (P2)' : 'HOST: RED (P1)';
+      }
+      if (this.domElements.hostColorSwatches) {
+        const hostChips = this.domElements.hostColorSwatches.querySelectorAll('.online-preset-chip');
+        hostChips.forEach(sw => {
+          const swColor = Spaceship.normalizeHexColor(sw.dataset.color);
+          sw.classList.toggle('active', swColor === hostOnlineColor);
+        });
+      }
+
+      // 6. Settings and Menu preview images
       const targetDataUrl = (currentColor === '#850101')
         ? 'images/newspaceship.png'
         : (currentColor === '#0211d0' ? 'images/bluenewspaceship.png' : Spaceship.getRecoloredDataUrl(baseSprite, currentColor));
@@ -4016,6 +4080,7 @@
 
     setHostRoleSelection(role) {
       this.onlineRole = role; // 'red' or 'blue'
+      this.onlineLocalPlayerId = (role === 'blue') ? 2 : 1;
       if (this.domElements.roleSelectRed) {
         this.domElements.roleSelectRed.classList.toggle('active', role === 'red');
       }
@@ -4023,6 +4088,7 @@
         this.domElements.roleSelectBlue.classList.toggle('active', role === 'blue');
       }
       this.updateCrewManifestUI();
+      this.updateShipColorStudioUI();
       if (this.network) {
         this.network.setHostRole(role);
       }
@@ -4119,6 +4185,7 @@
     }
 
     updateGuestRoleDisplay(role) {
+      this.onlineLocalPlayerId = (role === 'red') ? 1 : 2;
       if (this.domElements.guestRoleShipName) {
         this.domElements.guestRoleShipName.textContent = (role === 'red') ? 'CRIMSON (OG) (P1)' : 'COBALT BLUE (P2)';
         this.domElements.guestRoleShipName.style.color = (role === 'red') ? '#850101' : '#00f0ff';
@@ -4127,6 +4194,7 @@
         this.domElements.guestRoleNotice.style.display = 'block';
       }
       this.updateCrewManifestUI();
+      this.updateShipColorStudioUI();
     }
 
     copyToClipboard(text, message) {
@@ -5401,13 +5469,13 @@
         this.domElements.tab3P2ColorPicker.addEventListener('change', handleP2MiniColor);
       }
 
-      // Online Lobby Color Studio Wiring
+      // Online Lobby Color Studio Wiring - Guest
       if (this.domElements.onlineColorSwatches) {
         this.domElements.onlineColorSwatches.addEventListener('click', (e) => {
-          const sw = e.target.closest('.mini-swatch');
-          if (!sw || !sw.dataset.color) return;
+          const chip = e.target.closest('.online-preset-chip');
+          if (!chip || !chip.dataset.color) return;
           const target = (this.onlineLocalPlayerId === 2) ? 'p2' : 'p1';
-          this.setShipColor(target, sw.dataset.color);
+          this.setShipColor(target, chip.dataset.color);
         });
       }
       if (this.domElements.onlineShipColorPicker) {
@@ -5417,6 +5485,24 @@
         };
         this.domElements.onlineShipColorPicker.addEventListener('input', handleOnlinePicker);
         this.domElements.onlineShipColorPicker.addEventListener('change', handleOnlinePicker);
+      }
+
+      // Online Lobby Color Studio Wiring - Host
+      if (this.domElements.hostColorSwatches) {
+        this.domElements.hostColorSwatches.addEventListener('click', (e) => {
+          const chip = e.target.closest('.online-preset-chip');
+          if (!chip || !chip.dataset.color) return;
+          const target = (this.onlineRole === 'blue') ? 'p2' : 'p1';
+          this.setShipColor(target, chip.dataset.color);
+        });
+      }
+      if (this.domElements.hostShipColorPicker) {
+        const handleHostPicker = (e) => {
+          const target = (this.onlineRole === 'blue') ? 'p2' : 'p1';
+          this.setShipColor(target, e.target.value);
+        };
+        this.domElements.hostShipColorPicker.addEventListener('input', handleHostPicker);
+        this.domElements.hostShipColorPicker.addEventListener('change', handleHostPicker);
       }
 
       // Match Laser to Ship Color setting
