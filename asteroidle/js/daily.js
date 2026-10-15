@@ -544,15 +544,32 @@ export class DailyManager {
         if (distContainer) {
             const keys = ['0-100', '101-200', '201-300', '301-400', '401-500'];
             const maxVal = Math.max(1, ...keys.map(k => stats.distribution[k] || 0));
+            const total = this.roundScores.reduce((a, b) => a + b, 0);
+
+            // Determine if current puzzle was completed to highlight the active score bracket
+            let activeBracket = null;
+            if (this.currentRound > 5 && this.roundScores.length === 5) {
+                if (total <= 100) activeBracket = '0-100';
+                else if (total <= 200) activeBracket = '101-200';
+                else if (total <= 300) activeBracket = '201-300';
+                else if (total <= 400) activeBracket = '301-400';
+                else activeBracket = '401-500';
+            }
 
             distContainer.innerHTML = keys.map(k => {
                 const count = stats.distribution[k] || 0;
-                const pct = Math.max(8, Math.round((count / maxVal) * 100));
+                const isHighlight = (k === activeBracket && count > 0);
+                const pct = count > 0 ? Math.max(8, Math.round((count / maxVal) * 100)) : 0;
+                const fillClass = count > 0 ? 'dist-bar-fill has-data' : 'dist-bar-fill is-zero';
+                const highlightClass = isHighlight ? ' highlight' : '';
+
                 return `
                     <div class="dist-row">
                         <span class="dist-label">${k}</span>
                         <div class="dist-bar-track">
-                            <div class="dist-bar-fill" style="width: ${pct}%">${count}</div>
+                            <div class="${fillClass}${highlightClass}" style="${count > 0 ? `width: ${pct}%;` : ''}">
+                                <span class="dist-bar-num">${count}</span>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -578,7 +595,12 @@ export class DailyManager {
                     else if (s >= 35) cls = 'block-mid';
                     else cls = 'block-miss';
                 }
-                return `<div class="round-block ${cls}"><span class="block-label">R${r}</span><span class="block-val">${text}</span></div>`;
+                return `
+                    <div class="round-block ${cls}">
+                        <span class="block-label">R${r}</span>
+                        <span class="block-val">${text}</span>
+                    </div>
+                `;
             }).join('');
         }
     }

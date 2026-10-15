@@ -1123,7 +1123,9 @@
           subtext: "Perfect ballistic lead solution."
         };
       } else {
-        const threshold = Math.max(95, R * 2.6);
+        const baseDimension = Math.min(this.width, Math.max(450, this.height * 1.6)) || 800;
+        const sizeFactor = Math.max(0.2, baseDimension / 1e3);
+        const threshold = Math.max(95 * sizeFactor, R * 2.6);
         const missDist = Math.max(0, this.minSurfaceDistance);
         if (missDist <= threshold) {
           const ratio = missDist / threshold;
@@ -1135,12 +1137,12 @@
         const optimalDeg = (optimalRad * 180 / Math.PI + 90 + 360) % 360;
         let angleDiff = Math.abs(this.ship.angle - optimalDeg);
         if (angleDiff > 180) angleDiff = 360 - angleDiff;
-        const missPixels = Math.round(missDist);
+        const missMeters = Math.max(0.1, missDist / sizeFactor / 10).toFixed(1);
         this.resultTelemetry = {
           score,
           isHit: false,
           message: score >= 75 ? "\u26A1 GRAZING NEAR-MISS!" : score >= 40 ? "\u26A0\uFE0F CLOSE SHAVE" : score > 0 ? "\u26A0\uFE0F NEAR MISS" : "\u274C BALLISTIC DEFLECTION",
-          subtext: `Missed surface by ${missPixels}px (Angle error: ~${angleDiff.toFixed(1)}\xB0)`
+          subtext: `Missed surface by ${missMeters}m (Angle error: ~${angleDiff.toFixed(1)}\xB0)`
         };
       }
       this.roundScore = score;
@@ -1647,14 +1649,28 @@
       if (distContainer) {
         const keys = ["0-100", "101-200", "201-300", "301-400", "401-500"];
         const maxVal = Math.max(1, ...keys.map((k) => stats.distribution[k] || 0));
+        const total2 = this.roundScores.reduce((a, b) => a + b, 0);
+        let activeBracket = null;
+        if (this.currentRound > 5 && this.roundScores.length === 5) {
+          if (total2 <= 100) activeBracket = "0-100";
+          else if (total2 <= 200) activeBracket = "101-200";
+          else if (total2 <= 300) activeBracket = "201-300";
+          else if (total2 <= 400) activeBracket = "301-400";
+          else activeBracket = "401-500";
+        }
         distContainer.innerHTML = keys.map((k) => {
           const count = stats.distribution[k] || 0;
-          const pct = Math.max(8, Math.round(count / maxVal * 100));
+          const isHighlight = k === activeBracket && count > 0;
+          const pct = count > 0 ? Math.max(8, Math.round(count / maxVal * 100)) : 0;
+          const fillClass = count > 0 ? "dist-bar-fill has-data" : "dist-bar-fill is-zero";
+          const highlightClass = isHighlight ? " highlight" : "";
           return `
                     <div class="dist-row">
                         <span class="dist-label">${k}</span>
                         <div class="dist-bar-track">
-                            <div class="dist-bar-fill" style="width: ${pct}%">${count}</div>
+                            <div class="${fillClass}${highlightClass}" style="${count > 0 ? `width: ${pct}%;` : ""}">
+                                <span class="dist-bar-num">${count}</span>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -1676,7 +1692,12 @@
             else if (s >= 35) cls = "block-mid";
             else cls = "block-miss";
           }
-          return `<div class="round-block ${cls}"><span class="block-label">R${r}</span><span class="block-val">${text}</span></div>`;
+          return `
+                    <div class="round-block ${cls}">
+                        <span class="block-label">R${r}</span>
+                        <span class="block-val">${text}</span>
+                    </div>
+                `;
         }).join("");
       }
     }
