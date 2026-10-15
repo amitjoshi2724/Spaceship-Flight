@@ -292,6 +292,61 @@ The **penetration depth ratio** $P_{k, i} \in [0, 1]$ represents how deeply the 
 
 $$P_{k, i} = \max\left(0, 1 - \frac{d_{\text{lat}}(k, i)}{R_{\text{safe}, i}}\right)$$
 
+#### Deep Dive: Why $d_{\text{lat}}$ Matters and Why We Need the Penetration Depth Ratio $P_{k, i}$
+
+##### 1. Why is $d_{\text{lat}}$ Important?
+$d_{\text{lat}}(k, i)$ is the **closest perpendicular distance (lateral miss-distance)** between candidate flight ray $\hat{d}_k$ and the obstacle's center:
+- If the ship chooses to accelerate or steer along candidate direction $\hat{d}_k$, $d_{\text{lat}}$ tells the AI the exact closest clearance margin it will achieve relative to the asteroid's center.
+- **The Safety Threshold Comparison:**
+  - If $d_{\text{lat}} \ge R_{\text{safe}, i}$: The ray misses the obstacle's boundary completely. The ship has full clearance with safety buffer to spare.
+  - If $d_{\text{lat}} < R_{\text{safe}, i}$: The ray pierces inside the combined collision envelope ($R_{\text{ship}} + R_{\text{rock}} + \text{buffer}$). Flying along this ray results in a collision.
+
+##### 2. Why Do We Care About Penetration Depth Ratio $P_{k, i}$? (The Flaw of Binary Collision)
+In naive collision avoidance, collision detection is treated as a binary Boolean (`true` or `false`):
+- A ray either "hits" the obstacle or "misses" the obstacle.
+
+**Why binary collision fails catastrophically for arcade AI steering:**
+Imagine an asteroid directly ahead of the ship. Candidate rays are cast across different angles:
+- **Ray A**: Points dead-center into the asteroid's core ($d_{\text{lat}} = 0$). Flying here is a catastrophic head-on suicide run.
+- **Ray B**: Passes through the outer edge, clipping the asteroid boundary by just $1\text{px}$ ($d_{\text{lat}} = 0.98 R_{\text{safe}}$). A tiny $2^\circ$ steering adjustment would clear it completely.
+
+Under a binary system, **both Ray A and Ray B are treated as identical collisions** (e.g., both receive danger = $100$).  
+This causes **Gradient Starvation**:
+- The AI sees a flat "wall" of uniform danger across all intersecting rays.
+- The AI cannot tell which direction leads to safety because turning slightly away from the center (toward the edge) provides zero reduction in danger!
+- The AI often panics, freezes, oscillates wildly, or makes radical $180^\circ$ maneuvers when only a gentle $3^\circ$ nudge was needed.
+
+##### 3. How $P_{k, i}$ Creates a Smooth Evasive Gradient
+The penetration depth ratio $P_{k, i} = \max\left(0, 1 - \frac{d_{\text{lat}}}{R_{\text{safe}}}\right)$ normalizes clearance into a continuous value between $0.0$ and $1.0$:
+
+```
+                   PENETRATION RATIO SPECTRUM
+                    
+          Clean Miss           Glancing Graze        Direct Bullseye
+       (d_lat >= R_safe)      (d_lat ~= R_safe)        (d_lat = 0)
+        P_k,i = 0.0            P_k,i = 0.05            P_k,i = 1.00
+       ──────────────┬────────────────────────┬─────────────────────►
+                     │                        │
+       No collision  │  Grazes outer boundary │  Cuts straight through
+       penalty. Safe │  Very small penalty;   │  core. Massive danger
+       path to fly.  │  cleared with tiny tap │  penalty applied!
+```
+
+- **$P_{k, i} = 1.0$ (Bulls-Eye Direct Hit)**: $d_{\text{lat}} = 0$. The ray shoots directly through the obstacle's center.
+- **$P_{k, i} = 0.5$ (Deep Penetration)**: $d_{\text{lat}} = 0.5 R_{\text{safe}}$. The ray cuts through half the hazard envelope.
+- **$P_{k, i} = 0.05$ (Glancing Clip)**: $d_{\text{lat}} = 0.95 R_{\text{safe}}$. The ray barely touches the safety buffer; a minimal course correction will evade it.
+- **$P_{k, i} = 0.0$ (Clean Miss)**: $d_{\text{lat}} \ge R_{\text{safe}}$. Complete clearance.
+
+##### 4. The Quadratic Danger Advantage: $(P_{k, i})^2$
+When this ratio is plugged into the Danger Map (Section 4.5):
+$$D(k) = \sum_{i} U_i \cdot (P_{k, i})^2$$
+
+Squaring the penetration depth creates a dramatic non-linear gradient:
+- A grazing ray with $P = 0.10$ receives a penalty of $(0.10)^2 = \mathbf{0.01}$ (almost zero danger—the AI can comfortably fly near the rock's edge to slip through narrow corridors).
+- A central ray with $P = 1.0$ receives a penalty of $(1.0)^2 = \mathbf{1.0}$ ($100\times$ stronger repulsion!).
+
+This gives the steering algorithm a smooth, convex downhill gradient that naturally "pushes" the ship along the shortest path toward the safest opening, allowing the AI to weave smoothly through dense asteroid fields like a human pro.
+
 #### 4.4.1 The "Outrunning Trap": Why AIs Try to Outrun Faster Obstacles
 A classic flaw in naive raycasting occurs when a fast obstacle is closing **from behind**:
 - If the rock is behind the AI ($\vec{r}_i = \vec{x}_{\text{rock}} - \vec{x}_{\text{ai}}$ points backwards), then for any ray $\hat{d}_k$ pointing forwards, $\text{proj}_{k, i} = \vec{r}_i \cdot \hat{d}_k < 0$.
