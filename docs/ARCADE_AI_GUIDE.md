@@ -218,6 +218,48 @@ $$\text{proj}_{k, i} = \vec{r}_i \cdot \hat{d}_k$$
 
 The obstacle only poses a hazard along ray $\hat{d}_k$ if it lies in the forward half-space: $\text{proj}_{k, i} > -R_{\text{safe}, i}$.
 
+#### Geometric Intuition: Understanding $\vec{r}_i$, the Forward Half-Space, and Why $-R_{\text{safe}, i}$
+1. **What is $\vec{r}_i$?**  
+   $\vec{r}_i = \vec{x}_{\text{obs}, i} - \vec{x}_{\text{ai}}$ is the relative displacement vector pointing from **your ship directly to the obstacle's center**.
+
+2. **What does the projection $\text{proj}_{k, i}$ represent?**  
+   Because $\hat{d}_k$ is a unit direction vector ($\|\hat{d}_k\| = 1$), the scalar dot product $\text{proj}_{k, i} = \vec{r}_i \cdot \hat{d}_k$ measures how far **along the ray's line** the obstacle's center lies:
+   - $\text{proj}_{k, i} > 0$: The obstacle's center is **in front of** the ship along ray $\hat{d}_k$.
+   - $\text{proj}_{k, i} = 0$: The obstacle's center is **dead even / directly abreast** with the ship.
+   - $\text{proj}_{k, i} < 0$: The obstacle's center is **behind** the ship relative to ray $\hat{d}_k$.
+
+3. **Why isn't the forward condition just $\text{proj}_{k, i} > 0$? What is $-R_{\text{safe}, i}$?**  
+   In physics and geometry, asteroids and spaceships are **not zero-sized mathematical points**—they are solid bodies with physical radii. The combined safety clearance envelope is:
+   $$R_{\text{safe}, i} = R_{\text{ai}} + R_{\text{obs}, i} + \text{buffer}$$
+   
+   Because obstacles have physical radius, an asteroid's **center** can be slightly behind your ship ($\text{proj}_{k, i} < 0$), yet its **front hull edge still bulges forward** into your flight path!
+
+```
+          BEHIND SHIP (proj < 0)       │     AHEAD OF SHIP (proj > 0)
+                                       │
+                   Asteroid Center     │
+                         ( ● )         │
+                     /     │     \     │
+                    │      │      │    │
+                     \     │     /     │
+               ────────────┴───────────┼──────────────────────────► Ray d_k
+                         proj          │
+                        -15px          Ship (0px)
+                           ├───────────┤
+                             R_safe = 30px
+                                       │<───── Front edge reaches
+                                               +15px forward into ray!
+```
+
+   For an obstacle's circular boundary to intersect or clip your forward ray trajectory, its leading edge must extend into the positive forward zone:
+   $$\text{center position} + R_{\text{safe}, i} > 0 \iff \text{proj}_{k, i} + R_{\text{safe}, i} > 0$$
+
+   Subtracting $R_{\text{safe}, i}$ from both sides yields the exact forward half-space condition:
+   $$\mathbf{\text{proj}_{k, i} > -R_{\text{safe}, i}}$$
+
+   - **If $\text{proj}_{k, i} > -R_{\text{safe}, i}$**: Either the obstacle's center is ahead of you, or its center is slightly behind you but its front hull still protrudes forward across the ship's plane. It poses an immediate collision hazard along ray $\hat{d}_k$.
+   - **If $\text{proj}_{k, i} \le -R_{\text{safe}, i}$**: The obstacle is completely and strictly behind the ship—even its forward-most perimeter cannot touch the ray. The raycast can safely discard it without wasting repulsion calculations.
+
 The **lateral (perpendicular) distance** from the ray line to the obstacle center is:
 
 $$d_{\text{lat}}(k, i) = \left\| \vec{r}_i - \text{proj}_{k, i} \hat{d}_k \right\| = \sqrt{d_i^2 - \text{proj}_{k, i}^2}$$
