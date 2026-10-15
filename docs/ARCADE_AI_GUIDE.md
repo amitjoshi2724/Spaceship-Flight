@@ -516,10 +516,15 @@ In classical physics simulations (like gravity or Coulomb's law), every point in
 However, in **Context Steering**, danger is directional and bounded by strict geometric gates:
 1. **Forward Half-Space & Radar Gate**: Only obstacles within radar radius $R_{\text{radar}}$ and extending ahead ($\text{proj}_{k, i} > -R_{\text{safe}, i}$) are considered.
 2. **Lateral Clearance Gate ($d_{\text{lat}} < R_{\text{safe}}$)**: For ray $\hat{d}_k$ to register *any* danger from obstacle $i$, the ray line must physically penetrate the obstacle's collision radius:
+
    $$d_{\text{lat}}(k, i) < R_{\text{safe}, i}$$
+
    If the ray misses the rock's circular hull ($d_{\text{lat}} \ge R_{\text{safe}}$), the penetration depth is clamped to zero:
+
    $$P_{k, i} = \max\left(0, 1 - \frac{d_{\text{lat}}}{R_{\text{safe}}}\right) = \mathbf{0.0}$$
+
    Because danger is proportional to $P_{k, i}^2$:
+
    $$D(k) = \sum_{i} U_i \cdot \left(P_{k, i}\right)^2 = \mathbf{0.0}$$
 
 ```
@@ -553,14 +558,21 @@ Even when 2 or 3 asteroids are near the ship, they typically occupy only 4 to 6 
 
 ##### 3. How $I_{\text{boundary}}(k)$ is Actually Used
 When an imminent threat is detected ($t_{\text{impact}} < 1.6\text{s}$), Rule 1 activates:
+
 $$w_{\text{player}} = 0.0, \quad w_{\text{flank}} = 0.0, \quad w_{\text{inertia}} = 0.0$$
+
 All dogfighting drives, circling desires, and momentum bonuses are **completely shut down**. (If the AI kept trying to chase the player or hold its current velocity while an asteroid was closing in, it would steer right into the rock).
 
 Now look at what remains for the scoring function:
-- **For Hazard Rays ($D(k) > 0$)**:  
-  $$S(k) = -100.0 - 25.0 \cdot D(k) \le -100.0$$  
-  These rays are categorically rejected.
-- **For Clear Rays ($D(k) = 0$)**:  
+
+- **For Hazard Rays ($D(k) > 0$)**:
+
+  $$S(k) = -100.0 - 25.0 \cdot D(k) \le -100.0$$
+
+  These rays plunge far below $-100.0$ and are categorically rejected.
+
+- **For Clear Rays ($D(k) = 0$)**:
+
   $$S(k) = I(k) = w_{\text{bound}} \cdot I_{\text{boundary}}(k) = 1.6 \cdot (\hat{d}_k \cdot \vec{F}_{\text{bound}})$$
 
 Here is why $I_{\text{boundary}}(k)$ is essential:
