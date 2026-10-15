@@ -503,6 +503,91 @@ To eliminate this bug, game AIs implement **Hierarchical Hard Safety Masking**:
    $$S(k) = \begin{cases} I_{\text{boundary}}(k), & \text{if } D(k) = 0 \quad \text{(clear ray)} \\ -100.0 - 25.0 \cdot D(k), & \text{if } D(k) > 0 \quad \text{(hazard ray)} \end{cases}$$
    Clear rays always score $\ge -1.6$, while hazard rays plunge below $-100.0$. **No amount of interest can ever cause the AI to choose an asteroid over an open corridor.**
 
+#### Deep Dive: Why Most Rays Have $D(k) = 0$ and How $I_{\text{boundary}}(k)$ Guides Evasion
+
+A common question when analyzing the Hard Safety Barrier formula is:  
+*“Isn’t pretty much every ray $k$ going to have some positive collision danger? If all rays have $D(k) > 0$, wouldn’t they all plunge below $-100.0$, making the $D(k) = 0$ case and $I_{\text{boundary}}(k)$ useless?”*
+
+The answer is **no**, and understanding why reveals the fundamental advantage of Context Steering over traditional potential fields:
+
+##### 1. Raycast Danger is NOT a Global Potential Field (Most Rays Have Exactly $D(k) = 0$)
+In classical physics simulations (like gravity or Coulomb's law), every point in space has non-zero potential ($1/r^2$). If danger were computed that way, every direction would indeed have $D > 0$.
+
+However, in **Context Steering**, danger is directional and bounded by strict geometric gates:
+1. **Forward Half-Space & Radar Gate**: Only obstacles within radar radius $R_{\text{radar}}$ and extending ahead ($\text{proj}_{k, i} > -R_{\text{safe}, i}$) are considered.
+2. **Lateral Clearance Gate ($d_{\text{lat}} < R_{\text{safe}}$)**: For ray $\hat{d}_k$ to register *any* danger from obstacle $i$, the ray line must physically penetrate the obstacle's collision radius:
+   $$d_{\text{lat}}(k, i) < R_{\text{safe}, i}$$
+   If the ray misses the rock's circular hull ($d_{\text{lat}} \ge R_{\text{safe}}$), the penetration depth is clamped to zero:
+   $$P_{k, i} = \max\left(0, 1 - \frac{d_{\text{lat}}}{R_{\text{safe}}}\right) = \mathbf{0.0}$$
+   Because danger is proportional to $P_{k, i}^2$:
+   $$D(k) = \sum_{i} U_i \cdot \left(P_{k, i}\right)^2 = \mathbf{0.0}$$
+
+```
+                   16-RAY CONTEXT STEERING IN HAZARD ZONE
+                                  Ray 4 (D = 0)
+                                        ▲
+                        Ray 6 (D = 0)   │   Ray 2 (D = 0)
+                                  ╲     │     ╱
+                                   ╲    │    ╱
+                                    ╲   │   ╱
+                 Ray 8 (D = 0) ─────── UFO ───────► Ray 0 (D = 0)
+                                    ╱   │   ╲
+                                   ╱    │    ╲
+                     Ray 10 (D = 0)     │     ╲ Ray 14 (D = 0.85) ──► Collides!
+                                        ▼      ▼
+                                  Ray 12     Ray 15 (D = 0.35) ──► Grazes!
+                                 (D = 0)       │
+                                               ▼
+                                         [ ASTEROID ]
+```
+
+##### 2. The Narrow Angular Footprint of an Obstacle
+Consider an asteroid with safe radius $R_{\text{safe}} = 45\text{px}$ approaching at distance $d = 140\text{px}$:
+- The angular width subtended by the asteroid from the ship's position is:
+  $$\Delta \theta \approx 2 \arcsin\left(\frac{R_{\text{safe}}}{d}\right) \approx 2 \arcsin\left(\frac{45}{140}\right) \approx 2 \times 18.7^\circ \approx 37.5^\circ$$
+- The 16 candidate rays are spaced $22.5^\circ$ apart ($360^\circ / 16$).
+- A $37.5^\circ$ obstacle can only intersect **1 or 2 candidate rays** (e.g., Rays 14 and 15).
+- **The remaining 14 rays pass completely wide of the rock!** For all 14 of those rays, $d_{\text{lat}} \ge R_{\text{safe}} \implies D(k) \equiv \mathbf{0.0}$.
+
+Even when 2 or 3 asteroids are near the ship, they typically occupy only 4 to 6 rays. **The vast majority of rays (10 to 12 directions) remain completely clear with $D(k) = 0$.**
+
+##### 3. How $I_{\text{boundary}}(k)$ is Actually Used
+When an imminent threat is detected ($t_{\text{impact}} < 1.6\text{s}$), Rule 1 activates:
+$$w_{\text{player}} = 0.0, \quad w_{\text{flank}} = 0.0, \quad w_{\text{inertia}} = 0.0$$
+All dogfighting drives, circling desires, and momentum bonuses are **completely shut down**. (If the AI kept trying to chase the player or hold its current velocity while an asteroid was closing in, it would steer right into the rock).
+
+Now look at what remains for the scoring function:
+- **For Hazard Rays ($D(k) > 0$)**:  
+  $$S(k) = -100.0 - 25.0 \cdot D(k) \le -100.0$$  
+  These rays are categorically rejected.
+- **For Clear Rays ($D(k) = 0$)**:  
+  $$S(k) = I(k) = w_{\text{bound}} \cdot I_{\text{boundary}}(k) = 1.6 \cdot (\hat{d}_k \cdot \vec{F}_{\text{bound}})$$
+
+Here is why $I_{\text{boundary}}(k)$ is essential:
+- If all clear rays scored $0$, the AI would have **no criteria** to choose between turning left, turning right, or reversing.
+- In open space far from arena edges, $\vec{F}_{\text{bound}} = \vec{0}$, so all clear rays score $\approx 0$.
+- **Near Arena Boundaries, $I_{\text{boundary}}(k)$ Prevents Wall Traps**:  
+  Imagine the ship is in the bottom-left corner of the screen when an asteroid hurtles in from the center:
+  - Clear rays pointing into the wall have $\hat{d}_k \cdot \vec{F}_{\text{bound}} < 0$ (e.g. $-1.4$).
+  - Clear rays pointing back into the spacious arena interior have $\hat{d}_k \cdot \vec{F}_{\text{bound}} > 0$ (e.g. $+1.5$).
+  - **$I_{\text{boundary}}(k)$ breaks the tie among all clear rays**, compelling the ship to evade away from the asteroid **and** toward the open center of the arena rather than evading into a fatal dead-end corner.
+
+##### 4. What Happens If the Ship is Truly "Boxed In"?
+In rare, high-density situations where asteroids completely surround the ship on all 16 sides, every ray has $D(k) > 0$, so every ray drops below $-100.0$:
+- The formula evaluates to $S(k) = -100.0 - 25.0 \cdot D(k)$.
+- The ray with the **smallest danger** (e.g., $D = 0.05$ grazing the outer fringe vs $D = 1.2$ head-on center) scores $-101.25$ vs $-130.0$, directing the ship toward the thinnest obstacle edge or widest corridor.
+- Simultaneously, the game's kinematic controller triggers emergency retro-braking:
+  ```javascript
+  const isBoxedIn = chosenRay.danger > 0.25;
+  if (isBoxedIn) {
+    // Hazards on all sides: cut speed immediately to minimize collision energy
+    targetSpeed = 0;
+    this.dx *= 0.70;
+    this.dy *= 0.70;
+  }
+  ```
+  The ship kills forward momentum and stops in place, waiting for an evasive gap to open rather than blindly accelerating into a rock.
+
 ---
 
 ### 4.8 Adaptive Velocity Steering: Difficulty-Scaled Agility & Active Retro-Braking
