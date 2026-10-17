@@ -3932,26 +3932,32 @@
     scaleCrewNameFont(el, name, isWaiting = false) {
       if (!el) return;
       el.textContent = name;
+      el.style.textOverflow = 'clip';
+      el.style.overflow = 'visible';
       if (isWaiting) {
         el.className = 'crew-name waiting';
         el.style.fontSize = '';
         el.style.letterSpacing = '';
+        el.style.whiteSpace = 'nowrap';
         return;
       }
       el.className = 'crew-name';
+      el.style.whiteSpace = 'normal';
+      el.style.wordBreak = 'break-word';
+      el.style.overflowWrap = 'anywhere';
       const len = (name || '').length;
       if (len <= 12) {
-        el.style.fontSize = '13px';
-        el.style.letterSpacing = '1px';
+        el.style.fontSize = '13.5px';
+        el.style.letterSpacing = '0.8px';
       } else if (len <= 18) {
-        el.style.fontSize = '11.5px';
-        el.style.letterSpacing = '0.6px';
+        el.style.fontSize = '12px';
+        el.style.letterSpacing = '0.5px';
       } else if (len <= 24) {
-        el.style.fontSize = '10px';
-        el.style.letterSpacing = '0.3px';
+        el.style.fontSize = '10.5px';
+        el.style.letterSpacing = '0.2px';
       } else {
-        el.style.fontSize = '9px';
-        el.style.letterSpacing = '0.1px';
+        el.style.fontSize = '9.5px';
+        el.style.letterSpacing = '0px';
       }
     }
 

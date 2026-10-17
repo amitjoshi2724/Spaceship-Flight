@@ -3351,14 +3351,15 @@ html, body {
 }
 
 .crew-member {
-  background: rgba(15, 23, 42, 0.65);
+  background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
   padding: 10px 12px;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   position: relative;
+  min-width: 0;
   transition: all 0.3s ease;
 }
 
@@ -3377,21 +3378,40 @@ html, body {
   background: rgba(15, 23, 42, 0.85);
 }
 
+.crew-member-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.crew-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
 .crew-avatar {
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .crew-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .crew-role-line {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 2px;
   flex-wrap: wrap;
 }
 
@@ -3401,6 +3421,7 @@ html, body {
   font-weight: 700;
   letter-spacing: 1.5px;
   color: #94a3b8;
+  white-space: nowrap;
 }
 
 .crew-ship-badge {
@@ -3409,6 +3430,7 @@ html, body {
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 4px;
+  white-space: nowrap;
 }
 
 .crew-ship-badge.red {
@@ -3423,17 +3445,27 @@ html, body {
   border: 1px solid rgba(56, 189, 248, 0.35);
 }
 
+.crew-name-row {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
 .crew-name {
   font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 13.5px;
+  font-weight: 800;
   color: #ffffff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  letter-spacing: 1px;
+  letter-spacing: 0.8px;
+  width: 100%;
   min-width: 0;
-  max-width: 100%;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.25;
   transition: font-size 0.15s ease, letter-spacing 0.15s ease;
 }
 
@@ -3443,15 +3475,18 @@ html, body {
   font-weight: 500;
   font-style: italic;
   letter-spacing: normal;
+  white-space: nowrap;
 }
 
 .crew-badge {
   font-family: var(--font-display);
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 1px;
-  padding: 3px 7px;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
   border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .crew-badge.connected {
@@ -3622,9 +3657,11 @@ html, body {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
   max-width: 100%;
   transition: font-size 0.15s ease;
 }
@@ -4187,12 +4224,15 @@ html, body {
 
 .rematch-pilot-name {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   color: #f8fafc;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.2;
 }
 
 .rematch-status-badge {
