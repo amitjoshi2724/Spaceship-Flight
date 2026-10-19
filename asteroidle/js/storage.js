@@ -43,8 +43,112 @@ const DEFAULT_STATS = {
     }
 };
 
-let memoryStats = loadLocalStats();
+/**
+ * Compute current and max streaks from sorted history ledger
+ */
+function computeStreaksFromHistory(history) {
+    const dates = Object.keys(history || {}).sort();
+    if (dates.length === 0) return { currentStreak: 0, maxStreak: 0 };
+
+    let maxStreak = 0;
+    let tempStreak = 0;
+    let prevDate = null;
+
+    for (const d of dates) {
+        if (!prevDate) {
+            tempStreak = 1;
+        } else {
+            const p = new Date(prevDate + 'T00:00:00Z');
+            const c = new Date(d + 'T00:00:00Z');
+            const diffDays = Math.round((c - p) / (1000 * 60 * 60 * 24));
+            if (diffDays === 1) {
+                tempStreak++;
+            } else if (diffDays > 1) {
+                tempStreak = 1;
+            }
+        }
+        if (tempStreak > maxStreak) maxStreak = tempStreak;
+        prevDate = d;
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const lastDate = dates[dates.length - 1];
+    const p = new Date(lastDate + 'T00:00:00Z');
+    const t = new Date(todayStr + 'T00:00:00Z');
+    const diffFromToday = Math.round((t - p) / (1000 * 60 * 60 * 24));
+    const currentStreak = (diffFromToday <= 1) ? tempStreak : 0;
+
+    return { currentStreak, maxStreak };
+}
+
+/**
+ * Sanitize and heal stats against history records.
+ * Resolves exponential doubling issues from previous sync addition bugs.
+ */
+function sanitizeStats(stats, history) {
+    const cleanStats = { ...DEFAULT_STATS, ...(stats || {}) };
+    cleanStats.distribution = { ...DEFAULT_STATS.distribution, ...(cleanStats.distribution || {}) };
+
+    const historyEntries = Object.values(history || {});
+    if (historyEntries.length > 0) {
+        // True ground truth: actual recorded completed games
+        const histDist = {
+            '0-100': 0,
+            '101-200': 0,
+            '201-300': 0,
+            '301-400': 0,
+            '401-500': 0
+        };
+        let histWon = 0;
+        let histTotalScore = 0;
+        let histHighScore = 0;
+
+        for (const rec of historyEntries) {
+            if (!rec || typeof rec.totalScore !== 'number') continue;
+            const s = Math.max(0, Math.min(500, Math.round(rec.totalScore)));
+            histTotalScore += s;
+            if (s > histHighScore) histHighScore = s;
+            if (s >= 350) histWon++;
+
+            if (s <= 100) histDist['0-100']++;
+            else if (s <= 200) histDist['101-200']++;
+            else if (s <= 300) histDist['201-300']++;
+            else if (s <= 400) histDist['301-400']++;
+            else histDist['401-500']++;
+        }
+
+        const currentDistSum = Object.values(cleanStats.distribution).reduce((a, b) => a + (Number(b) || 0), 0);
+        const isCorrupt = currentDistSum > cleanStats.played ||
+            Object.values(cleanStats.distribution).some(v => v > historyEntries.length || v > 1000) ||
+            currentDistSum !== historyEntries.length;
+
+        if (isCorrupt) {
+            cleanStats.distribution = histDist;
+            cleanStats.played = Math.max(cleanStats.played || 0, historyEntries.length);
+            cleanStats.won = Math.max(cleanStats.won || 0, histWon);
+            cleanStats.highScore = Math.max(cleanStats.highScore || 0, histHighScore);
+            cleanStats.totalScore = Math.max(cleanStats.totalScore || 0, histTotalScore);
+            const { currentStreak, maxStreak } = computeStreaksFromHistory(history);
+            cleanStats.currentStreak = currentStreak;
+            cleanStats.maxStreak = Math.max(cleanStats.maxStreak || 0, maxStreak);
+        }
+    } else {
+        const maxAllowed = Math.max(0, cleanStats.played || 0);
+        for (const k of Object.keys(cleanStats.distribution)) {
+            const v = Number(cleanStats.distribution[k]) || 0;
+            if (v > maxAllowed || v > 1000) {
+                cleanStats.distribution[k] = 0;
+            }
+        }
+    }
+    return cleanStats;
+}
+
 let memoryHistory = loadLocalHistory();
+let memoryStats = sanitizeStats(loadLocalStats(), memoryHistory);
+try {
+    localStorage.setItem(STATS_KEY, JSON.stringify(memoryStats));
+} catch (e) { }
 let firestoreUnsubscribe = null;
 const storageChangeListeners = new Set();
 
@@ -82,7 +186,7 @@ function loadLocalHistory() {
  * Save stats locally
  */
 export function saveLocalStats(stats) {
-    memoryStats = { ...stats };
+    memoryStats = sanitizeStats(stats, memoryHistory);
     try {
         localStorage.setItem(STATS_KEY, JSON.stringify(memoryStats));
     } catch (e) {
@@ -112,42 +216,12 @@ export function recordDailyCompletion(dateStr, puzzleNum, roundScores, totalScor
         console.error("Failed to save history locally:", e);
     }
 
-    // Update stats
-    const stats = { ...memoryStats };
-    stats.played += 1;
-    stats.totalScore += totalScore;
-    if (totalScore > stats.highScore) {
-        stats.highScore = totalScore;
-    }
-    if (totalScore >= 350) {
-        stats.won += 1;
-    }
-
-    // Streaks
-    const today = dateStr;
-    if (!stats.lastPlayedDate) {
-        stats.currentStreak = 1;
-    } else {
-        const prev = new Date(stats.lastPlayedDate);
-        const curr = new Date(today);
-        const diffDays = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
-        if (diffDays === 1) {
-            stats.currentStreak += 1;
-        } else if (diffDays > 1) {
-            stats.currentStreak = 1;
-        }
-    }
-    stats.lastPlayedDate = today;
-    if (stats.currentStreak > stats.maxStreak) {
-        stats.maxStreak = stats.currentStreak;
-    }
-
-    // Distribution
-    if (totalScore <= 100) stats.distribution['0-100'] += 1;
-    else if (totalScore <= 200) stats.distribution['101-200'] += 1;
-    else if (totalScore <= 300) stats.distribution['201-300'] += 1;
-    else if (totalScore <= 400) stats.distribution['301-400'] += 1;
-    else stats.distribution['401-500'] += 1;
+    // Reconcile and update stats directly from canonical history ledger
+    const stats = sanitizeStats(memoryStats, memoryHistory);
+    stats.lastPlayedDate = dateStr;
+    const { currentStreak, maxStreak } = computeStreaksFromHistory(memoryHistory);
+    stats.currentStreak = currentStreak;
+    stats.maxStreak = Math.max(stats.maxStreak || 0, maxStreak);
 
     saveLocalStats(stats);
     clearActiveState(dateStr);
@@ -187,7 +261,7 @@ export function clearActiveState(dateStr) {
 }
 
 export function getStats() {
-    return { ...memoryStats };
+    return sanitizeStats(memoryStats, memoryHistory);
 }
 
 export function getHistory() {
@@ -218,8 +292,9 @@ async function syncToCloud() {
 
     try {
         const userRef = firestoreFns.doc(firestoreDb, 'users', user.uid);
+        const cleanStats = sanitizeStats(memoryStats, memoryHistory);
         await firestoreFns.setDoc(userRef, {
-            asteroidle_stats: memoryStats,
+            asteroidle_stats: cleanStats,
             asteroidle_history: memoryHistory,
             lastUpdated: Date.now()
         }, { merge: true });
@@ -256,33 +331,33 @@ onAuthChange(async (user) => {
                 }
             }
 
-            // Merge stats: highest totals & streaks
+            // Merge stats: highest totals & streaks (never add distributions!)
             const mergedStats = {
                 ...DEFAULT_STATS,
                 ...cloudStats,
-                played: Math.max(memoryStats.played, cloudStats.played || 0),
-                won: Math.max(memoryStats.won, cloudStats.won || 0),
-                currentStreak: Math.max(memoryStats.currentStreak, cloudStats.currentStreak || 0),
-                maxStreak: Math.max(memoryStats.maxStreak, cloudStats.maxStreak || 0),
-                highScore: Math.max(memoryStats.highScore, cloudStats.highScore || 0),
-                totalScore: Math.max(memoryStats.totalScore, cloudStats.totalScore || 0),
+                played: Math.max(memoryStats.played || 0, cloudStats.played || 0),
+                won: Math.max(memoryStats.won || 0, cloudStats.won || 0),
+                currentStreak: Math.max(memoryStats.currentStreak || 0, cloudStats.currentStreak || 0),
+                maxStreak: Math.max(memoryStats.maxStreak || 0, cloudStats.maxStreak || 0),
+                highScore: Math.max(memoryStats.highScore || 0, cloudStats.highScore || 0),
+                totalScore: Math.max(memoryStats.totalScore || 0, cloudStats.totalScore || 0),
                 distribution: {
-                    '0-100': (memoryStats.distribution['0-100'] || 0) + (cloudStats.distribution?.['0-100'] || 0),
-                    '101-200': (memoryStats.distribution['101-200'] || 0) + (cloudStats.distribution?.['101-200'] || 0),
-                    '201-300': (memoryStats.distribution['201-300'] || 0) + (cloudStats.distribution?.['201-300'] || 0),
-                    '301-400': (memoryStats.distribution['301-400'] || 0) + (cloudStats.distribution?.['301-400'] || 0),
-                    '401-500': (memoryStats.distribution['401-500'] || 0) + (cloudStats.distribution?.['401-500'] || 0)
+                    '0-100': Math.max(memoryStats.distribution?.['0-100'] || 0, cloudStats.distribution?.['0-100'] || 0),
+                    '101-200': Math.max(memoryStats.distribution?.['101-200'] || 0, cloudStats.distribution?.['101-200'] || 0),
+                    '201-300': Math.max(memoryStats.distribution?.['201-300'] || 0, cloudStats.distribution?.['201-300'] || 0),
+                    '301-400': Math.max(memoryStats.distribution?.['301-400'] || 0, cloudStats.distribution?.['301-400'] || 0),
+                    '401-500': Math.max(memoryStats.distribution?.['401-500'] || 0, cloudStats.distribution?.['401-500'] || 0)
                 }
             };
 
-            memoryStats = mergedStats;
             memoryHistory = mergedHistory;
+            memoryStats = sanitizeStats(mergedStats, memoryHistory);
 
             localStorage.setItem(STATS_KEY, JSON.stringify(memoryStats));
             localStorage.setItem(HISTORY_KEY, JSON.stringify(memoryHistory));
             notifyListeners();
 
-            // Push merged back to cloud
+            // Push clean merged data back to cloud
             await syncToCloud();
         } else {
             // First time login for this user: seed cloud with current local stats
@@ -293,8 +368,12 @@ onAuthChange(async (user) => {
         firestoreUnsubscribe = firestoreFns.onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
                 const updated = docSnap.data();
-                if (updated.asteroidle_stats) memoryStats = { ...DEFAULT_STATS, ...updated.asteroidle_stats };
-                if (updated.asteroidle_history) memoryHistory = { ...updated.asteroidle_history };
+                if (updated.asteroidle_history) memoryHistory = { ...memoryHistory, ...updated.asteroidle_history };
+                if (updated.asteroidle_stats) {
+                    memoryStats = sanitizeStats({ ...DEFAULT_STATS, ...updated.asteroidle_stats }, memoryHistory);
+                } else {
+                    memoryStats = sanitizeStats(memoryStats, memoryHistory);
+                }
                 localStorage.setItem(STATS_KEY, JSON.stringify(memoryStats));
                 localStorage.setItem(HISTORY_KEY, JSON.stringify(memoryHistory));
                 notifyListeners();
