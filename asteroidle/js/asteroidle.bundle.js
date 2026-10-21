@@ -53,12 +53,24 @@
     const d = String(date.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
+  function parseDate(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0);
+  }
   function getPuzzleNumber(dateStr, epochStr = EPOCH_DATE_STR) {
     const [y1, m1, d1] = dateStr.split("-").map(Number);
     const [y2, m2, d2] = epochStr.split("-").map(Number);
     const utc1 = Date.UTC(y1, m1 - 1, d1);
     const utc2 = Date.UTC(y2, m2 - 1, d2);
     return Math.max(1, Math.round((utc1 - utc2) / (1e3 * 60 * 60 * 24)) + 1);
+  }
+  function getDateForPuzzleNumber(puzzleNum, epochStr = EPOCH_DATE_STR) {
+    const [y2, m2, d2] = epochStr.split("-").map(Number);
+    const d = new Date(Date.UTC(y2, m2 - 1, d2 + (puzzleNum - 1)));
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
   }
   function getTodayDateStr() {
     return formatDate(/* @__PURE__ */ new Date());
@@ -1282,6 +1294,9 @@
       this.isUnlimited = false;
       this.currentDateStr = getTodayDateStr();
       this.puzzleNum = getPuzzleNumber(this.currentDateStr);
+      const todayObj = parseDate(this.currentDateStr);
+      this.calYear = todayObj.getFullYear();
+      this.calMonth = todayObj.getMonth();
       this.challenges = [];
       this.currentRound = 1;
       this.roundScores = [];
@@ -1599,6 +1614,7 @@
         this.renderStatsModal();
         document.getElementById("stats-modal")?.classList.add("active");
       });
+      this.setupArchiveTabs();
       document.getElementById("archive-modal-btn")?.addEventListener("click", () => {
         this.renderArchiveModal();
         document.getElementById("archive-modal")?.classList.add("active");
@@ -1791,50 +1807,208 @@ https://amitjoshi2724.github.io/Spaceship-Flight/asteroidle/`;
       toast.classList.remove("hidden");
       setTimeout(() => toast.classList.add("hidden"), 2500);
     }
-    renderArchiveModal() {
-      const history = getHistory();
-      const listElem = document.getElementById("archive-list-container");
-      if (!listElem) return;
-      const today = /* @__PURE__ */ new Date();
-      const items = [];
-      for (let i = 0; i < 30; i++) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        const dateStr = formatDate(d);
-        const pNum = getPuzzleNumber(dateStr);
-        const record = history[dateStr];
-        items.push({
-          dateStr,
-          pNum,
-          isToday: i === 0,
-          completed: record && record.completed,
-          score: record ? record.totalScore : null
+    setupArchiveTabs() {
+      const calTab = document.getElementById("archive-tab-calendar");
+      const listTab = document.getElementById("archive-tab-list");
+      const calView = document.getElementById("archive-calendar-view");
+      const listView = document.getElementById("archive-list-view");
+      if (calTab && listTab && calView && listView) {
+        calTab.addEventListener("click", () => {
+          calTab.classList.add("active");
+          listTab.classList.remove("active");
+          calView.style.display = "block";
+          listView.style.display = "none";
+          this.renderCalendarView();
+        });
+        listTab.addEventListener("click", () => {
+          listTab.classList.add("active");
+          calTab.classList.remove("active");
+          listView.style.display = "block";
+          calView.style.display = "none";
+          this.renderArchiveList();
         });
       }
-      listElem.innerHTML = items.map((item) => {
+      const yearSelect = document.getElementById("cal-year-select");
+      if (yearSelect) {
+        yearSelect.innerHTML = "";
+        const currentYear = parseDate(getTodayDateStr()).getFullYear();
+        for (let y = currentYear; y >= 2024; y--) {
+          const opt = document.createElement("option");
+          opt.value = String(y);
+          opt.textContent = String(y);
+          yearSelect.appendChild(opt);
+        }
+        yearSelect.value = String(this.calYear);
+        yearSelect.addEventListener("change", (e) => {
+          this.calYear = Number(e.target.value);
+          this.renderCalendarView();
+        });
+      }
+      const monthSelect = document.getElementById("cal-month-select");
+      if (monthSelect) {
+        monthSelect.value = String(this.calMonth);
+        monthSelect.addEventListener("change", (e) => {
+          this.calMonth = Number(e.target.value);
+          this.renderCalendarView();
+        });
+      }
+      document.getElementById("cal-prev-month-btn")?.addEventListener("click", () => {
+        this.calMonth--;
+        if (this.calMonth < 0) {
+          this.calMonth = 11;
+          this.calYear--;
+        }
+        this.renderCalendarView();
+      });
+      document.getElementById("cal-next-month-btn")?.addEventListener("click", () => {
+        this.calMonth++;
+        if (this.calMonth > 11) {
+          this.calMonth = 0;
+          this.calYear++;
+        }
+        this.renderCalendarView();
+      });
+      document.getElementById("cal-today-btn")?.addEventListener("click", () => {
+        const t = parseDate(getTodayDateStr());
+        this.calYear = t.getFullYear();
+        this.calMonth = t.getMonth();
+        this.renderCalendarView();
+      });
+      const searchInput = document.getElementById("archive-search");
+      if (searchInput) {
+        searchInput.addEventListener("input", () => {
+          this.renderArchiveList(searchInput.value);
+        });
+      }
+      document.querySelectorAll(".archive-filter-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".archive-filter-btn").forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          this.renderArchiveList(searchInput ? searchInput.value : "");
+        });
+      });
+    }
+    renderArchiveModal() {
+      this.renderCalendarView();
+      this.renderArchiveList();
+    }
+    renderCalendarView() {
+      const container = document.getElementById("calendar-days-container");
+      if (!container) return;
+      const todayStr = getTodayDateStr();
+      const todayDate = parseDate(todayStr);
+      const monthSelect = document.getElementById("cal-month-select");
+      const yearSelect = document.getElementById("cal-year-select");
+      const nextBtn = document.getElementById("cal-next-month-btn");
+      if (monthSelect) monthSelect.value = String(this.calMonth);
+      if (yearSelect) yearSelect.value = String(this.calYear);
+      if (nextBtn) {
+        const isFutureMonth = this.calYear > todayDate.getFullYear() || this.calYear === todayDate.getFullYear() && this.calMonth >= todayDate.getMonth();
+        nextBtn.disabled = isFutureMonth;
+      }
+      const firstDayIndex = new Date(this.calYear, this.calMonth, 1).getDay();
+      const totalDaysInMonth = new Date(this.calYear, this.calMonth + 1, 0).getDate();
+      const history = getHistory();
+      const cellsHtml = [];
+      const TOTAL_SLOTS = 42;
+      for (let i = 0; i < firstDayIndex; i++) {
+        cellsHtml.push('<div class="calendar-day-cell is-empty"></div>');
+      }
+      for (let day = 1; day <= totalDaysInMonth; day++) {
+        const dateStr = `${this.calYear}-${String(this.calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const isFuture = dateStr > todayStr;
+        const isToday = dateStr === todayStr;
+        if (isFuture) {
+          cellsHtml.push(`
+                    <div class="calendar-day-cell is-future">
+                        <div class="cal-day-num">${day}</div>
+                    </div>
+                `);
+          continue;
+        }
+        const pNum = getPuzzleNumber(dateStr);
+        const record = history[dateStr];
         let statusClass = "status-pending";
-        let scoreText = "Unplayed";
-        if (item.completed) {
+        let statusTag = isToday ? "\u{1F680} Mission" : "\u26AA Play";
+        if (record && record.completed) {
           statusClass = "status-completed";
-          scoreText = `Score: ${item.score}/500`;
+          statusTag = record.totalScore === 500 ? "\u{1F3C6} 500" : `\u2B50 ${record.totalScore} pts`;
+        }
+        cellsHtml.push(`
+                <div class="calendar-day-cell ${statusClass} ${isToday ? "is-today" : ""}"
+                     data-date="${dateStr}" title="Mission #${pNum} \u2014 ${dateStr}">
+                    <div class="cal-day-num">${day}</div>
+                    <div class="cal-puzzle-num">#${pNum}</div>
+                    <div class="cal-status-tag">${statusTag}</div>
+                </div>
+            `);
+      }
+      const filled = firstDayIndex + totalDaysInMonth;
+      for (let i = filled; i < TOTAL_SLOTS; i++) {
+        cellsHtml.push('<div class="calendar-day-cell is-empty"></div>');
+      }
+      container.innerHTML = cellsHtml.join("");
+      container.querySelectorAll(".calendar-day-cell:not(.is-empty):not(.is-future)").forEach((el) => {
+        el.addEventListener("click", () => {
+          const date = el.dataset.date;
+          document.getElementById("archive-modal")?.classList.remove("active");
+          this.isUnlimited = false;
+          this.updateModeButton();
+          this.startPuzzle(date);
+        });
+      });
+    }
+    renderArchiveList(searchFilter = "") {
+      const container = document.getElementById("archive-list-container");
+      if (!container) return;
+      const history = getHistory();
+      const todayStr = getTodayDateStr();
+      const todayNum = getPuzzleNumber(todayStr);
+      const activeFilterBtn = document.querySelector(".archive-filter-btn.active");
+      const filterMode = activeFilterBtn ? activeFilterBtn.dataset.filter : "all";
+      const items = [];
+      for (let pNum = todayNum; pNum >= 1; pNum--) {
+        const dateStr = getDateForPuzzleNumber(pNum);
+        const record = history[dateStr];
+        const isCompleted = record && record.completed;
+        const isPlayed = !!record;
+        if (filterMode === "solved" && !isCompleted) continue;
+        if (filterMode === "unplayed" && isPlayed) continue;
+        if (searchFilter) {
+          const query = searchFilter.toLowerCase();
+          if (!dateStr.includes(query) && !String(pNum).includes(query)) continue;
+        }
+        items.push({ pNum, dateStr, record, isCompleted, isPlayed, isToday: dateStr === todayStr });
+      }
+      if (items.length === 0) {
+        container.innerHTML = '<div style="padding: 20px; color: var(--text-secondary); text-align: center;">No missions match this filter.</div>';
+        return;
+      }
+      container.innerHTML = items.map((item) => {
+        let statusClass = "status-pending";
+        let badgeText = item.isToday ? "Today's Mission" : "Unplayed";
+        if (item.isCompleted) {
+          statusClass = "status-completed";
+          badgeText = item.record.totalScore === 500 ? "\u{1F3C6} 500 / 500" : `Score: ${item.record.totalScore} / 500`;
         } else if (item.isToday) {
           statusClass = "status-today";
-          scoreText = "Today's Mission";
         }
         return `
-                <div class="archive-card ${statusClass}" data-date="${item.dateStr}">
+                <div class="archive-card ${statusClass}">
                     <div class="archive-info">
-                        <span class="archive-number">#${item.pNum}</span>
+                        <span class="archive-number">Mission #${item.pNum}</span>
                         <span class="archive-date">${item.dateStr}</span>
                     </div>
                     <div class="archive-action">
-                        <span class="archive-badge">${scoreText}</span>
-                        <button class="archive-play-btn menu-btn" data-date="${item.dateStr}">Play</button>
+                        <span class="archive-badge">${badgeText}</span>
+                        <button class="archive-play-btn menu-btn" data-date="${item.dateStr}">
+                            ${item.isCompleted ? "Review" : "Launch"}
+                        </button>
                     </div>
                 </div>
             `;
       }).join("");
-      listElem.querySelectorAll(".archive-play-btn").forEach((btn) => {
+      container.querySelectorAll(".archive-play-btn").forEach((btn) => {
         btn.addEventListener("click", (e) => {
           const date = e.target.dataset.date;
           document.getElementById("archive-modal")?.classList.remove("active");

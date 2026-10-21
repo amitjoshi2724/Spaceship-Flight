@@ -208,17 +208,75 @@
       </div>
     </div>
 
-    <!-- Archive Modal (Daily Calendar View) -->
+    <!-- Archive Modal (Mastermindle / Element-Speller Calendar & List View) -->
     <div id="archive-modal" class="modal-backdrop">
-      <div class="modal-dialog glass-panel">
+      <div class="modal-dialog glass-panel archive-modal-dialog">
         <div class="modal-header">
-          <h3 class="modal-title">📅 Daily Challenge Archive</h3>
+          <h3 class="modal-title">📅 Mission Archive</h3>
           <button class="modal-close-btn" data-close="archive-modal">&times;</button>
         </div>
-        <div class="modal-body">
-          <p style="font-size: 13px; color: var(--text-secondary);">Play past daily puzzles from the last 30 days. Puzzles refresh at midnight local time.</p>
-          <div id="archive-list-container" class="archive-list">
-            <!-- Rendered dynamically -->
+        <div class="modal-body archive-modal-body">
+          <!-- View Switcher Tabs -->
+          <div class="archive-view-tabs">
+            <button id="archive-tab-calendar" class="archive-tab-btn active">📅 Calendar View</button>
+            <button id="archive-tab-list" class="archive-tab-btn">📋 List View</button>
+          </div>
+
+          <!-- VIEW 1: Calendar View (Default) -->
+          <div id="archive-calendar-view">
+            <div class="calendar-nav-bar">
+              <button id="cal-prev-month-btn" class="calendar-nav-btn" title="Previous Month">◀ Prev</button>
+              <div class="calendar-selectors-group">
+                <select id="cal-month-select" class="calendar-select" aria-label="Select Month">
+                  <option value="0">January</option>
+                  <option value="1">February</option>
+                  <option value="2">March</option>
+                  <option value="3">April</option>
+                  <option value="4">May</option>
+                  <option value="5">June</option>
+                  <option value="6">July</option>
+                  <option value="7">August</option>
+                  <option value="8">September</option>
+                  <option value="9">October</option>
+                  <option value="10">November</option>
+                  <option value="11">December</option>
+                </select>
+                <select id="cal-year-select" class="calendar-select" aria-label="Select Year">
+                  <!-- Populated in JS -->
+                </select>
+                <button id="cal-today-btn" class="calendar-nav-btn">Today</button>
+              </div>
+              <button id="cal-next-month-btn" class="calendar-nav-btn" title="Next Month">Next ▶</button>
+            </div>
+
+            <div class="calendar-weekdays-grid">
+              <div>Sun</div>
+              <div>Mon</div>
+              <div>Tue</div>
+              <div>Wed</div>
+              <div>Thu</div>
+              <div>Fri</div>
+              <div>Sat</div>
+            </div>
+
+            <div id="calendar-days-container" class="calendar-days-grid">
+              <!-- Dynamically generated day slots with Day #, Mission #, and score status -->
+            </div>
+          </div>
+
+          <!-- VIEW 2: List View -->
+          <div id="archive-list-view" style="display: none;">
+            <div class="archive-controls">
+              <input type="text" id="archive-search" class="archive-search-input" placeholder="Search by date (YYYY-MM-DD) or mission #...">
+              <div class="archive-filter-group">
+                <button class="archive-filter-btn active" data-filter="all">All</button>
+                <button class="archive-filter-btn" data-filter="solved">Completed</button>
+                <button class="archive-filter-btn" data-filter="unplayed">Unplayed</button>
+              </div>
+            </div>
+            <div id="archive-list-container" class="archive-list">
+              <!-- Rendered dynamically -->
+            </div>
           </div>
         </div>
       </div>
