@@ -132,15 +132,15 @@
   }
 
   // asteroidle/js/firebase-config.js
-  var _k = atob("QUl6YVN5RG5JMG5FcTBLbTNHR1dRRFR3V1lhN2tiUExJRDNwWXpV");
+  var _k = atob("QUl6YVN5QTBEa1F4VWtPNHRURFdiY1pTbk5kX1Y0amtibTMtMUN3");
   var FIREBASE_CONFIG = {
     apiKey: _k,
     authDomain: "spaceship-flight-amitjoshi2724.firebaseapp.com",
     projectId: "spaceship-flight-amitjoshi2724",
     storageBucket: "spaceship-flight-amitjoshi2724.firebasestorage.app",
-    messagingSenderId: "790815043624",
-    appId: "1:790815043624:web:66f0dc2d1d4dbda06bc51d",
-    measurementId: "G-JQP8CHKRGR"
+    messagingSenderId: "136029640810",
+    appId: "1:136029640810:web:43aa5ead9489769b9d9213",
+    measurementId: "G-47DC4EN81S"
   };
   var app = null;
   var auth = null;
