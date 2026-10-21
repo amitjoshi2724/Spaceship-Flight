@@ -135,9 +135,9 @@
   var _k = atob("QUl6YVN5RG5JMG5FcTBLbTNHR1dRRFR3V1lhN2tiUExJRDNwWXpV");
   var FIREBASE_CONFIG = {
     apiKey: _k,
-    authDomain: "mastermind-amitjoshi2724.firebaseapp.com",
-    projectId: "mastermind-amitjoshi2724",
-    storageBucket: "mastermind-amitjoshi2724.firebasestorage.app",
+    authDomain: "spaceship-flight-amitjoshi2724.firebaseapp.com",
+    projectId: "spaceship-flight-amitjoshi2724",
+    storageBucket: "spaceship-flight-amitjoshi2724.firebasestorage.app",
     messagingSenderId: "790815043624",
     appId: "1:790815043624:web:66f0dc2d1d4dbda06bc51d",
     measurementId: "G-JQP8CHKRGR"
