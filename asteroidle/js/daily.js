@@ -41,7 +41,11 @@ export class DailyManager {
         this.checkURLParams();
         this.setupModals();
         this.setupSettings();
-        this.startPuzzle(this.currentDateStr);
+        if (this.isUnlimited) {
+            this.startUnlimitedPuzzle();
+        } else {
+            this.startPuzzle(this.currentDateStr);
+        }
     }
 
     checkURLParams() {
@@ -49,17 +53,23 @@ export class DailyManager {
         const dateParam = urlParams.get('date');
         const modeParam = urlParams.get('mode');
 
-        if (modeParam === 'unlimited') {
-            this.isUnlimited = true;
-            this.updateModeButton();
-            this.startUnlimitedPuzzle();
-            return;
-        }
-
         if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
             this.currentDateStr = dateParam;
             this.puzzleNum = getPuzzleNumber(dateParam);
+            this.isUnlimited = false;
+        } else if (modeParam === 'practice' || modeParam === 'unlimited') {
+            this.isUnlimited = true;
+        } else if (modeParam === 'daily') {
+            this.isUnlimited = false;
+        } else {
+            const savedMode = localStorage.getItem('asteroidle_game_mode');
+            if (savedMode === 'practice' || savedMode === 'unlimited') {
+                this.isUnlimited = true;
+            } else {
+                this.isUnlimited = false;
+            }
         }
+        this.updateModeButton();
     }
 
     initDOM() {
@@ -68,17 +78,21 @@ export class DailyManager {
             this.onRoundResolved(score, telem);
         });
 
-        // Mode switch
+        // Segmented Mode Toggle (Daily vs Practice)
+        const dailyBtn = document.getElementById('mode-daily-btn');
+        const practiceBtn = document.getElementById('mode-practice-btn');
+        if (dailyBtn) {
+            dailyBtn.addEventListener('click', () => this.setGameMode(false));
+        }
+        if (practiceBtn) {
+            practiceBtn.addEventListener('click', () => this.setGameMode(true));
+        }
+
+        // Backward compatibility for single mode toggle button
         const modeBtn = document.getElementById('mode-toggle-btn');
         if (modeBtn) {
             modeBtn.addEventListener('click', () => {
-                this.isUnlimited = !this.isUnlimited;
-                this.updateModeButton();
-                if (this.isUnlimited) {
-                    this.startUnlimitedPuzzle();
-                } else {
-                    this.startPuzzle(getTodayDateStr());
-                }
+                this.setGameMode(!this.isUnlimited);
             });
         }
 
@@ -123,18 +137,60 @@ export class DailyManager {
         this.updateModeButton();
     }
 
-    updateModeButton() {
-        const modeBtn = document.getElementById('mode-toggle-btn');
-        if (!modeBtn) return;
+    setGameMode(isUnlimited) {
+        if (this.isUnlimited === isUnlimited) return;
+        this.isUnlimited = isUnlimited;
+        this.updateModeButton();
         if (this.isUnlimited) {
-            modeBtn.textContent = 'DAILY';
-            modeBtn.classList.add('unlimited-active');
-            modeBtn.title = 'Switch to Daily Puzzle Mode';
+            this.startUnlimitedPuzzle();
         } else {
-            modeBtn.textContent = 'UNLIMITED';
-            modeBtn.classList.remove('unlimited-active');
-            modeBtn.title = 'Switch to Unlimited Practice Mode';
+            this.startPuzzle(getTodayDateStr());
         }
+    }
+
+    updateModeButton() {
+        const dailyBtn = document.getElementById('mode-daily-btn');
+        const practiceBtn = document.getElementById('mode-practice-btn');
+
+        if (dailyBtn && practiceBtn) {
+            if (this.isUnlimited) {
+                dailyBtn.classList.remove('active');
+                practiceBtn.classList.add('active');
+            } else {
+                practiceBtn.classList.remove('active');
+                dailyBtn.classList.add('active');
+            }
+        }
+
+        const modeBtn = document.getElementById('mode-toggle-btn');
+        if (modeBtn) {
+            if (this.isUnlimited) {
+                modeBtn.textContent = 'DAILY';
+                modeBtn.classList.add('unlimited-active');
+            } else {
+                modeBtn.textContent = 'UNLIMITED';
+                modeBtn.classList.remove('unlimited-active');
+            }
+        }
+
+        const newMode = this.isUnlimited ? 'practice' : 'daily';
+        try {
+            localStorage.setItem('asteroidle_game_mode', newMode);
+        } catch (e) { }
+
+        try {
+            const url = new URL(window.location.href);
+            if (this.isUnlimited) {
+                url.searchParams.delete('date');
+                url.searchParams.set('mode', 'practice');
+            } else {
+                url.searchParams.delete('mode');
+                if (this.currentDateStr === getTodayDateStr()) {
+                    url.searchParams.delete('date');
+                }
+            }
+            window.history.replaceState({}, '', url.toString());
+        } catch (e) { }
     }
 
     startPuzzle(dateStr) {

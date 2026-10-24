@@ -60,7 +60,14 @@
       </div>
 
       <div class="hud-right">
-        <button id="mode-toggle-btn" class="hud-btn mode-btn" title="Toggle Unlimited / Daily Mode">UNLIMITED</button>
+        <div class="mode-segmented-toggle" role="group" aria-label="Game Mode">
+          <button type="button" id="mode-daily-btn" class="mode-toggle-btn active" data-mode="daily">
+            <span class="mode-icon">📅</span> Daily
+          </button>
+          <button type="button" id="mode-practice-btn" class="mode-toggle-btn" data-mode="practice">
+            <span class="mode-icon">🎯</span> Practice
+          </button>
+        </div>
         <button id="archive-modal-btn" class="hud-btn" title="Daily Archive (Past 30 Days)">📅</button>
         <button id="stats-modal-btn" class="hud-btn" title="Statistics & Share Score">📊</button>
         <button id="help-modal-btn" class="hud-btn" title="How to Play">❓</button>
