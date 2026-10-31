@@ -7,13 +7,6 @@
 
 const CANONICAL_W = 1600;
 const CANONICAL_H = 900;
-const TIER_BULLET_SPEEDS = {
-    1: 8.5,
-    2: 11.5,
-    3: 14.0,
-    4: 17.5,
-    5: 21.0
-};
 
 export class AsteroidleEngine {
     constructor(canvas, onRoundComplete) {
@@ -259,12 +252,10 @@ export class AsteroidleEngine {
         this.ship.rotation = this.ship.angle;
         this.updateAimUI();
 
-        // Compute round bullet speed from challenge bulletTier (AST-L1)
-        const baseTierSpeed = TIER_BULLET_SPEEDS[ch.bulletTier] || 14.0;
+        // Authentic bullet speed from SpaceshipCore.Bullet / Spaceship
         const scale = this.core.getScreenScale ? this.core.getScreenScale(this.arenaProxyCanvas) : 1.0;
         const bScale = Math.max(0.85, Math.min(1.25, scale));
-        this.currentBulletSpeed = baseTierSpeed * bScale;
-        this.currentBaseTierSpeed = baseTierSpeed;
+        this.currentBulletSpeed = 14.0 * bScale; // 17.5 in canonical 1600x900 space
 
         // Create and configure the authentic Rock instance using SpaceshipCore.Rock (AST-M1)
         const RockClass = this.core.Rock;
@@ -353,7 +344,7 @@ export class AsteroidleEngine {
 
         let b = null;
         if (typeof this.ship.createMuzzleBullet === 'function') {
-            b = this.ship.createMuzzleBullet(this.currentBaseTierSpeed || null, false);
+            b = this.ship.createMuzzleBullet(null, false);
         }
         if (b) {
             b.isTracer = true;
@@ -379,7 +370,7 @@ export class AsteroidleEngine {
         this.firingElapsedFrames = 0;
 
         if (typeof this.ship.createMuzzleBullet === 'function') {
-            this.interceptBullet = this.ship.createMuzzleBullet(this.currentBaseTierSpeed || null, false);
+            this.interceptBullet = this.ship.createMuzzleBullet(null, false);
             if (this.interceptBullet) {
                 this.currentBulletSpeed = Math.hypot(this.interceptBullet.dx, this.interceptBullet.dy) || this.currentBulletSpeed;
             }

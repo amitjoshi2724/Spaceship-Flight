@@ -155,11 +155,9 @@ export function generateDailyChallenges(dateStr) {
         // and verified closed-form ballistic intercept inside the canonical 1600x900 arena
         const CANON_W = 1600;
         const CANON_H = 900;
-        const tierSpeeds = { 1: 8.5, 2: 11.5, 3: 14.0, 4: 17.5, 5: 21.0 };
-        const scale = Math.max(0.42, Math.min(1.2, CANON_H / 720));
-        const bScale = Math.max(0.85, Math.min(1.25, scale));
-        const vB = (tierSpeeds[bulletTier] || 14.0) * bScale;
-        const rSpeed = 3.2 * speed * scale;
+        const scale = 1.25;
+        const vB = 14.0 * scale; // Authentic bullet speed (17.5) from Spaceship-Flight
+        const rSpeed = (2.5 * speed) * scale;
 
         const hasVisibleIntercept = (sxNorm, syNorm, rxNorm, ryNorm, mAngle) => {
             const rx = rxNorm * CANON_W;

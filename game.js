@@ -629,68 +629,25 @@
     return Math.max(0.6, Math.min(2.0, baseDimension / 1000));
   }
 
-  const nativeCanvasWidthDesc = typeof HTMLCanvasElement !== 'undefined'
-    ? Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'width')
-    : null;
-  const nativeCanvasHeightDesc = typeof HTMLCanvasElement !== 'undefined'
-    ? Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'height')
-    : null;
-
   function setCanvasLogicalSize(canvas, ctx, logicalW, logicalH) {
     if (!canvas) return 1;
     const w = Math.max(1, Math.floor(logicalW));
     const h = Math.max(1, Math.floor(logicalH));
-    const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
+    canvas.width = w;
+    canvas.height = h;
     canvas._logicalWidth = w;
     canvas._logicalHeight = h;
-    canvas._dpr = dpr;
+    canvas._dpr = 1;
 
-    if (!canvas._hiDpiHooked && nativeCanvasWidthDesc && nativeCanvasHeightDesc) {
-      canvas._hiDpiHooked = true;
-      Object.defineProperty(canvas, 'width', {
-        configurable: true,
-        enumerable: true,
-        get() {
-          return this._logicalWidth !== undefined ? this._logicalWidth : nativeCanvasWidthDesc.get.call(this);
-        },
-        set(val) {
-          const lw = Math.max(1, Math.floor(val));
-          const curDpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
-          this._logicalWidth = lw;
-          this._dpr = curDpr;
-          nativeCanvasWidthDesc.set.call(this, Math.round(lw * curDpr));
-        }
-      });
-      Object.defineProperty(canvas, 'height', {
-        configurable: true,
-        enumerable: true,
-        get() {
-          return this._logicalHeight !== undefined ? this._logicalHeight : nativeCanvasHeightDesc.get.call(this);
-        },
-        set(val) {
-          const lh = Math.max(1, Math.floor(val));
-          const curDpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
-          this._logicalHeight = lh;
-          this._dpr = curDpr;
-          nativeCanvasHeightDesc.set.call(this, Math.round(lh * curDpr));
-        }
-      });
+    if (canvas.style) {
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
     }
-
-    if (nativeCanvasWidthDesc && nativeCanvasHeightDesc) {
-      nativeCanvasWidthDesc.set.call(canvas, Math.round(w * dpr));
-      nativeCanvasHeightDesc.set.call(canvas, Math.round(h * dpr));
-    } else {
-      canvas.width = w;
-      canvas.height = h;
-    }
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
 
     if (ctx) {
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
-    return dpr;
+    return 1;
   }
 
   // Shortest squared Euclidean distance from point (px, py) to segment (x1, y1) -> (x2, y2)
@@ -1036,11 +993,17 @@
 
     configureFromChallenge(ch, arenaW, arenaH) {
       const scale = getScreenScale({ width: arenaW, height: arenaH });
-      this.radius = 28 * ch.radiusScale * scale;
+      if (typeof ch.baseRadius === 'number') {
+        this.radius = ch.baseRadius * scale;
+      } else if (typeof ch.radiusScale === 'number') {
+        this.radius = 28 * ch.radiusScale * scale;
+      } else {
+        this.radius = 28 * scale;
+      }
       this.scale = this.radius / 25;
       this.rotation = 0;
-      this.rotSpeed = ch.rotSpeed;
-      this.shapeIndex = ch.shapeIndex % ROCK_SHAPES.length;
+      this.rotSpeed = typeof ch.rotSpeed === 'number' ? ch.rotSpeed : 0.02;
+      this.shapeIndex = ((typeof ch.shapeIndex === 'number' ? ch.shapeIndex : 0) % ROCK_SHAPES.length + ROCK_SHAPES.length) % ROCK_SHAPES.length;
       const chosen = ROCK_SHAPES[this.shapeIndex];
 
       let sumX = 0, sumY = 0;
@@ -1059,14 +1022,29 @@
         });
       }
 
-      const speedMagnitude = (2.2 * ch.speed) * Math.max(0.85, Math.min(1.25, scale));
+      const speedMult = typeof ch.speed === 'number' ? ch.speed : 1.0;
+      const speedMagnitude = (2.5 * speedMult) * Math.max(0.85, Math.min(1.25, scale));
       this.baseSpeedMagnitude = speedMagnitude;
-      this.startX = ch.startX * arenaW;
-      this.startY = ch.startY * arenaH;
+      this.startX = (typeof ch.startX === 'number' ? ch.startX : 0.5) * arenaW;
+      this.startY = (typeof ch.startY === 'number' ? ch.startY : 0.5) * arenaH;
       this.x = this.startX;
       this.y = this.startY;
-      this.dx = ch.vx * speedMagnitude;
-      this.dy = ch.vy * speedMagnitude;
+
+      if (typeof ch.moveAngle === 'number') {
+        this.dx = Math.cos(ch.moveAngle) * speedMagnitude;
+        this.dy = Math.sin(ch.moveAngle) * speedMagnitude;
+      } else if (typeof ch.vx === 'number' && typeof ch.vy === 'number') {
+        this.dx = ch.vx * speedMagnitude;
+        this.dy = ch.vy * speedMagnitude;
+      } else if (typeof ch.targetX === 'number' && typeof ch.targetY === 'number') {
+        const angle = Math.atan2(ch.targetY * arenaH - this.startY, ch.targetX * arenaW - this.startX);
+        this.dx = Math.cos(angle) * speedMagnitude;
+        this.dy = Math.sin(angle) * speedMagnitude;
+      } else {
+        this.dx = speedMagnitude;
+        this.dy = 0;
+      }
+
       this.popped = false;
       return this;
     }
@@ -5595,8 +5573,9 @@
         if (this.particles) this.particles.suppress = suppressFX;
         if (this.ship) this.ship.suppressParticles = suppressFX;
 
+        const isTraining = (this.state === 'PLAYING' && this.rlMode === 'training');
         while (accumulator >= FIXED_TIMESTEP) {
-          const ticks = (this.state === 'PLAYING' && this.rlMode === 'training') ? this.trainingSpeed : 1;
+          const ticks = isTraining ? this.trainingSpeed : 1;
           for (let s = 0; s < ticks; s++) {
             this.update(dtSeconds);
             if (ticks > 1 && (performance.now() - stepStart) > 12) {
@@ -5604,7 +5583,7 @@
             }
           }
           accumulator -= FIXED_TIMESTEP;
-          if ((performance.now() - stepStart) > 12) {
+          if (isTraining && (performance.now() - stepStart) > 12) {
             accumulator = 0;
             break;
           }
