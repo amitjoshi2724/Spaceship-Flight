@@ -749,21 +749,45 @@
   function solveBallisticIntercept(
     originX,
     originY,
-    targetX,
-    targetY,
-    targetVx,
-    targetVy,
-    bulletSpeed,
-    muzzleOffset = 0,
-    shooterVx = 0,
-    shooterVy = 0
+    arg3,
+    arg4,
+    arg5,
+    arg6,
+    arg7,
+    arg8 = 0,
+    arg9 = 0,
+    arg10 = 0
   ) {
+    let targetX, targetY, targetVx, targetVy, bulletSpeed, muzzleOffset, shooterVx, shooterVy;
+
+    // Detect if called as (originX, originY, shooterVx, shooterVy, targetX, targetY, targetVx, targetVy, bulletSpeed, muzzleOffset)
+    if (typeof arg9 === 'number' && arg9 > 0 && typeof arg5 === 'number' && typeof arg6 === 'number' && (Math.abs(arg5) > 25 || Math.abs(arg6) > 25)) {
+      shooterVx = arg3 || 0;
+      shooterVy = arg4 || 0;
+      targetX = arg5;
+      targetY = arg6;
+      targetVx = arg7 || 0;
+      targetVy = arg8 || 0;
+      bulletSpeed = arg9;
+      muzzleOffset = arg10 || 0;
+    } else {
+      // Standard signature: (originX, originY, targetX, targetY, targetVx, targetVy, bulletSpeed, muzzleOffset, shooterVx, shooterVy)
+      targetX = arg3;
+      targetY = arg4;
+      targetVx = arg5 || 0;
+      targetVy = arg6 || 0;
+      bulletSpeed = arg7;
+      muzzleOffset = arg8 || 0;
+      shooterVx = arg9 || 0;
+      shooterVy = arg10 || 0;
+    }
+
     const dPx = targetX - originX;
     const dPy = targetY - originY;
     const vRx = targetVx - shooterVx;
     const vRy = targetVy - shooterVy;
     const dist = Math.hypot(dPx, dPy);
-    const vB = Math.max(1e-4, bulletSpeed);
+    const vB = Math.max(1e-4, bulletSpeed || 14);
     const dNose = Math.max(0, muzzleOffset);
 
     const a = vRx * vRx + vRy * vRy - vB * vB;
@@ -805,16 +829,24 @@
 
     return {
       t: tStar,
+      time: tStar,
       hasExactIntercept,
       impactX,
       impactY,
+      aimX: impactX,
+      aimY: impactY,
       leadVecX,
       leadVecY,
+      leadX: leadVecX,
+      leadY: leadVecY,
+      predX: leadVecX,
+      predY: leadVecY,
       leadDist,
       dirX,
       dirY,
       angleRad,
-      angleDeg
+      angleDeg,
+      headingDeg: angleDeg
     };
   }
 

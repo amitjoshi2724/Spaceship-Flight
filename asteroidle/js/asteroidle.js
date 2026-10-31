@@ -743,19 +743,21 @@ export class AsteroidleEngine {
                 ? this.core.solveBallisticIntercept(
                     this.ship.x,
                     this.ship.y,
-                    0,
-                    0,
                     endState.x,
                     endState.y,
-                    endState.dx,
-                    endState.dy,
+                    endState.dx || 0,
+                    endState.dy || 0,
                     this.currentBulletSpeed || 14.0,
-                    muzzleOffset
+                    muzzleOffset,
+                    0,
+                    0
                 )
                 : null;
 
             let optimalDeg;
-            if (sol && typeof sol.headingDeg === 'number') {
+            if (sol && typeof sol.angleDeg === 'number') {
+                optimalDeg = sol.angleDeg;
+            } else if (sol && typeof sol.headingDeg === 'number') {
                 optimalDeg = sol.headingDeg;
             } else {
                 const optimalRad = Math.atan2(this.rock.y - this.ship.y, this.rock.x - this.ship.x);

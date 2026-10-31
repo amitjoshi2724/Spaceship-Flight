@@ -245,6 +245,7 @@ function generateDailyChallenges(dateStr) {
 
 // Public client configuration (encoded to prevent secret scanner false alarms on static client IDs)
 const _k = atob("QUl6YVN5QTBEa1F4VWtPNHRURFdiY1pTbk5kX1Y0amtibTMtMUN3");
+
 const FIREBASE_CONFIG = {
     apiKey: _k,
     authDomain: "spaceship-flight-amitjoshi2724.firebaseapp.com",
@@ -254,6 +255,7 @@ const FIREBASE_CONFIG = {
     appId: "1:136029640810:web:43aa5ead9489769b9d9213",
     measurementId: "G-47DC4EN81S"
 };
+
 let app = null;
 let auth = null;
 let db = null;
@@ -261,6 +263,7 @@ let googleProvider = null;
 let isFirebaseSupported = false;
 
 let initPromise = null;
+
 function initFirebase() {
     if (initPromise) return initPromise;
 
@@ -298,6 +301,7 @@ function initFirebase() {
  * Handles Google Sign-In, Sign-Out, and Auth State subscriptions.
  * Supports file:// protocol and offline gameplay with graceful local fallback.
  */
+
 
 let firebaseAuth = null;
 let firebaseProvider = null;
@@ -491,6 +495,7 @@ function renderAuthUI(user) {
  * Offline-first localStorage with optional real-time Firestore cloud synchronization.
  * Operates seamlessly on file:// protocol, offline, or with active network connection.
  */
+
 
 
 
@@ -756,6 +761,7 @@ function saveActiveState(dateStr, round, scores) {
         localStorage.setItem(ACTIVE_KEY, JSON.stringify(payload));
     } catch (e) { }
 }
+
 function loadActiveState(dateStr) {
     try {
         const raw = localStorage.getItem(ACTIVE_KEY);
@@ -766,6 +772,7 @@ function loadActiveState(dateStr) {
     } catch (e) { }
     return null;
 }
+
 function clearActiveState(dateStr) {
     try {
         const raw = localStorage.getItem(ACTIVE_KEY);
@@ -777,15 +784,19 @@ function clearActiveState(dateStr) {
         }
     } catch (e) { }
 }
+
 function getStats() {
     return sanitizeStats(memoryStats, memoryHistory);
 }
+
 function getHistory() {
     return { ...memoryHistory };
 }
+
 function getRecordForDate(dateStr) {
     return memoryHistory[dateStr] || null;
 }
+
 function onStorageChange(callback) {
     storageChangeListeners.add(callback);
     return () => storageChangeListeners.delete(callback);
@@ -914,6 +925,7 @@ const TIER_BULLET_SPEEDS = {
     4: 17.5,
     5: 21.0
 };
+
 class AsteroidleEngine {
     constructor(canvas, onRoundComplete) {
         this.canvas = canvas;
@@ -1642,19 +1654,21 @@ class AsteroidleEngine {
                 ? this.core.solveBallisticIntercept(
                     this.ship.x,
                     this.ship.y,
-                    0,
-                    0,
                     endState.x,
                     endState.y,
-                    endState.dx,
-                    endState.dy,
+                    endState.dx || 0,
+                    endState.dy || 0,
                     this.currentBulletSpeed || 14.0,
-                    muzzleOffset
+                    muzzleOffset,
+                    0,
+                    0
                 )
                 : null;
 
             let optimalDeg;
-            if (sol && typeof sol.headingDeg === 'number') {
+            if (sol && typeof sol.angleDeg === 'number') {
+                optimalDeg = sol.angleDeg;
+            } else if (sol && typeof sol.headingDeg === 'number') {
                 optimalDeg = sol.headingDeg;
             } else {
                 const optimalRad = Math.atan2(this.rock.y - this.ship.y, this.rock.x - this.ship.x);
@@ -1819,7 +1833,7 @@ class AsteroidleEngine {
 
 
 
-import './auth.js'; // Initializes Google Auth
+ // Initializes Google Auth
 
 const SOLO_PRESETS = {
     arrows: { thrust: 'ArrowUp', rotateLeft: 'ArrowLeft', rotateRight: 'ArrowRight', fire: 'Space', shield: 'ArrowDown' },
@@ -1843,6 +1857,7 @@ function formatKeyCodeLabel(code) {
     if (code.startsWith('Numpad')) return 'NUM ' + code.slice(6);
     return code.toUpperCase();
 }
+
 class DailyManager {
     constructor() {
         this.isUnlimited = false;
