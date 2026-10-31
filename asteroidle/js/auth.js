@@ -109,12 +109,27 @@ export function getCurrentUser() {
     return currentAuthUser;
 }
 
+let docDropdownListenerBound = false;
+
 /**
  * Render the Auth UI in the header
  */
 export function renderAuthUI(user) {
     const authContainer = document.getElementById('auth-container');
     if (!authContainer) return;
+
+    if (!docDropdownListenerBound) {
+        docDropdownListenerBound = true;
+        document.addEventListener('click', (e) => {
+            const container = document.getElementById('auth-container');
+            const dd = document.getElementById('identity-dropdown');
+            const btn = document.getElementById('user-info-btn');
+            if (container && dd && !container.contains(e.target)) {
+                dd.classList.remove('active');
+                if (btn) btn.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
 
     if (!user) {
         authContainer.innerHTML = `
@@ -164,13 +179,6 @@ export function renderAuthUI(user) {
                 const isOpen = dropdown.classList.contains('active');
                 dropdown.classList.toggle('active', !isOpen);
                 userInfoBtn.setAttribute('aria-expanded', String(!isOpen));
-            });
-
-            document.addEventListener('click', (e) => {
-                if (!authContainer.contains(e.target)) {
-                    dropdown.classList.remove('active');
-                    userInfoBtn.setAttribute('aria-expanded', 'false');
-                }
             });
         }
 

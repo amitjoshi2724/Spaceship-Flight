@@ -5,12 +5,13 @@
  */
 import { initFirebase } from './firebase-config.js';
 import { onAuthChange, getCurrentUser } from './auth.js';
+import { getTodayDateStr, getPuzzleNumber } from './prng.js';
 
 let firestoreDb = null;
 let firestoreFns = null;
 
-// Initialize Firestore if running on http/https
-(async () => {
+// Initialize Firestore if running on http/https and expose readiness promise (AST-M5)
+const firestoreReadyPromise = (async () => {
     try {
         const fb = await initFirebase();
         if (fb && fb.db) {
@@ -44,23 +45,22 @@ const DEFAULT_STATS = {
 };
 
 /**
- * Compute current and max streaks from sorted history ledger
+ * Compute current and max streaks from sorted history ledger using local date arithmetic (AST-M2)
  */
 function computeStreaksFromHistory(history) {
-    const dates = Object.keys(history || {}).sort();
+    const dates = Object.keys(history || {}).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
     if (dates.length === 0) return { currentStreak: 0, maxStreak: 0 };
 
     let maxStreak = 0;
     let tempStreak = 0;
-    let prevDate = null;
+    let prevPuzzleNum = null;
 
     for (const d of dates) {
-        if (!prevDate) {
+        const curNum = getPuzzleNumber(d);
+        if (prevPuzzleNum === null) {
             tempStreak = 1;
         } else {
-            const p = new Date(prevDate + 'T00:00:00Z');
-            const c = new Date(d + 'T00:00:00Z');
-            const diffDays = Math.round((c - p) / (1000 * 60 * 60 * 24));
+            const diffDays = curNum - prevPuzzleNum;
             if (diffDays === 1) {
                 tempStreak++;
             } else if (diffDays > 1) {
@@ -68,17 +68,29 @@ function computeStreaksFromHistory(history) {
             }
         }
         if (tempStreak > maxStreak) maxStreak = tempStreak;
-        prevDate = d;
+        prevPuzzleNum = curNum;
     }
 
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getTodayDateStr();
     const lastDate = dates[dates.length - 1];
-    const p = new Date(lastDate + 'T00:00:00Z');
-    const t = new Date(todayStr + 'T00:00:00Z');
-    const diffFromToday = Math.round((t - p) / (1000 * 60 * 60 * 24));
+    const diffFromToday = getPuzzleNumber(todayStr) - getPuzzleNumber(lastDate);
     const currentStreak = (diffFromToday <= 1) ? tempStreak : 0;
 
     return { currentStreak, maxStreak };
+}
+
+/**
+ * Merge two history dictionaries, preserving the higher totalScore for each date (AST-M4)
+ */
+function mergeHistoryRecords(baseHistory, incomingHistory) {
+    const merged = { ...(baseHistory || {}) };
+    for (const [date, rec] of Object.entries(incomingHistory || {})) {
+        if (!rec) continue;
+        if (!merged[date] || ((rec.totalScore || 0) > (merged[date].totalScore || 0))) {
+            merged[date] = rec;
+        }
+    }
+    return merged;
 }
 
 /**
@@ -228,6 +240,27 @@ export function recordDailyCompletion(dateStr, puzzleNum, roundScores, totalScor
 }
 
 /**
+ * Reset a completed daily puzzle so the player can genuinely replay it from Round 1 (AST-C4)
+ */
+export function resetDailyCompletion(dateStr) {
+    if (dateStr && memoryHistory[dateStr]) {
+        delete memoryHistory[dateStr];
+        try {
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(memoryHistory));
+        } catch (e) { }
+    }
+    clearActiveState(dateStr);
+
+    // Recompute canonical stats from remaining history
+    const freshBase = { ...DEFAULT_STATS, distribution: { ...DEFAULT_STATS.distribution } };
+    const updatedStats = sanitizeStats(freshBase, memoryHistory);
+    const { currentStreak, maxStreak } = computeStreaksFromHistory(memoryHistory);
+    updatedStats.currentStreak = currentStreak;
+    updatedStats.maxStreak = maxStreak;
+    saveLocalStats(updatedStats);
+}
+
+/**
  * Save in-progress round state (so reload preserves mid-puzzle progress)
  */
 export function saveActiveState(dateStr, round, scores) {
@@ -287,6 +320,7 @@ function notifyListeners() {
  * Sync local state to Firestore
  */
 async function syncToCloud() {
+    await firestoreReadyPromise;
     const user = getCurrentUser();
     if (!user || !firestoreDb || !firestoreFns) return;
 
@@ -312,6 +346,7 @@ onAuthChange(async (user) => {
         firestoreUnsubscribe = null;
     }
 
+    await firestoreReadyPromise;
     if (!user || !firestoreDb || !firestoreFns) return;
 
     try {
@@ -324,12 +359,7 @@ onAuthChange(async (user) => {
             const cloudHistory = cloudData.asteroidle_history || {};
 
             // Merge history: union of completed puzzles, keeping higher score if duplicate
-            const mergedHistory = { ...memoryHistory };
-            for (const [date, rec] of Object.entries(cloudHistory)) {
-                if (!mergedHistory[date] || (rec.totalScore > mergedHistory[date].totalScore)) {
-                    mergedHistory[date] = rec;
-                }
-            }
+            const mergedHistory = mergeHistoryRecords(memoryHistory, cloudHistory);
 
             // Merge stats: highest totals & streaks (never add distributions!)
             const mergedStats = {
@@ -368,7 +398,9 @@ onAuthChange(async (user) => {
         firestoreUnsubscribe = firestoreFns.onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
                 const updated = docSnap.data();
-                if (updated.asteroidle_history) memoryHistory = { ...memoryHistory, ...updated.asteroidle_history };
+                if (updated.asteroidle_history) {
+                    memoryHistory = mergeHistoryRecords(memoryHistory, updated.asteroidle_history);
+                }
                 if (updated.asteroidle_stats) {
                     memoryStats = sanitizeStats({ ...DEFAULT_STATS, ...updated.asteroidle_stats }, memoryHistory);
                 } else {

@@ -196,6 +196,7 @@
 
       let activeCount = 0;
       let maxScore = -Infinity;
+      const normR = Math.max(1, Math.sqrt(W * H) * 0.5);
 
       for (let i = 0; i < N && activeCount < 64; i++) {
         const r = rocks[i];
@@ -207,8 +208,8 @@
         const relVy = r.dy - ship.dy;
         const bVel = MathUtils.toBodyFrame(relVx, relVy, shipAngle);
 
-        const x0 = MathUtils.clamp(bPos.x / (W * 0.5), -1, 1);
-        const x1 = MathUtils.clamp(bPos.y / (H * 0.5), -1, 1);
+        const x0 = MathUtils.clamp(bPos.x / normR, -1, 1);
+        const x1 = MathUtils.clamp(bPos.y / normR, -1, 1);
         const x2 = MathUtils.clamp(bVel.x / 6.0, -1, 1);
         const x3 = MathUtils.clamp(bVel.y / 6.0, -1, 1);
         const x4 = MathUtils.clamp((r.radius || 20) / 36.0, 0, 1);
@@ -284,6 +285,12 @@
     static extract(game) {
       const W = game.canvas.width;
       const H = game.canvas.height;
+      const normR = Math.max(1, Math.sqrt(W * H) * 0.5);
+      const scale = (typeof window !== 'undefined' && window.SpaceshipCore && window.SpaceshipCore.getScreenScale)
+        ? window.SpaceshipCore.getScreenScale(game.canvas)
+        : Math.max(0.42, Math.min(1.2, (H || 720) / 720));
+      const detectRange = 380 * scale;
+
       const ship = game.ship;
       const shipAngle = ship.angle;
       const rad = (shipAngle * Math.PI) / 180;
@@ -310,8 +317,8 @@
         const uRelVy = (game.ufo.dy || 0) - ship.dy;
         const uBodyV = MathUtils.toBodyFrame(uRelVx, uRelVy, shipAngle);
 
-        obs[7] = MathUtils.clamp(uBody.x / (W * 0.5), -1, 1);
-        obs[8] = MathUtils.clamp(uBody.y / (H * 0.5), -1, 1);
+        obs[7] = MathUtils.clamp(uBody.x / normR, -1, 1);
+        obs[8] = MathUtils.clamp(uBody.y / normR, -1, 1);
         obs[9] = MathUtils.clamp(uBodyV.x / 6.0, -1, 1);
         obs[10] = MathUtils.clamp(uBodyV.y / 6.0, -1, 1);
         obs[11] = 1.0;
@@ -335,7 +342,7 @@
       // Check UFO first if alive and within direct shootable range
       if (game.ufo && game.ufo.alive) {
         const uDirect = MathUtils.directDelta(game.ufo.x, game.ufo.y, ship.x, ship.y);
-        if (uDirect.dist <= 380 && Math.abs(uDirect.dx) <= W * 0.5 && Math.abs(uDirect.dy) <= H * 0.5) {
+        if (uDirect.dist <= detectRange && Math.abs(uDirect.dx) <= W * 0.5 && Math.abs(uDirect.dy) <= H * 0.5) {
           shootTarget = {
             type: 'ufo',
             x: game.ufo.x, y: game.ufo.y,
@@ -354,7 +361,7 @@
           const r = game.rocks[i];
           if (r.popped) continue;
           const direct = MathUtils.directDelta(r.x, r.y, ship.x, ship.y);
-          if (direct.dist <= 380 && Math.abs(direct.dx) <= W * 0.5 && Math.abs(direct.dy) <= H * 0.5) {
+          if (direct.dist <= detectRange && Math.abs(direct.dx) <= W * 0.5 && Math.abs(direct.dy) <= H * 0.5) {
             if (direct.dist < shootTargetDist) {
               shootTargetDist = direct.dist;
               shootTarget = {
@@ -391,18 +398,43 @@
       }
 
       if (shootTarget) {
-        const BULLET_SPEED = 14.0;
-        const leadTime = Math.min(1.2, shootTarget.dist / BULLET_SPEED);
-        const predX = shootTarget.dx + (shootTarget.vx - ship.dx * 0.25) * leadTime;
-        const predY = shootTarget.dy + (shootTarget.vy - ship.dy * 0.25) * leadTime;
+        const bScale = Math.max(0.85, Math.min(1.25, scale));
+        const BULLET_SPEED = 14.0 * bScale;
+        const muzzleOffset = (ship.height || 52) * 0.55;
+        const solveIntercept = (typeof window !== 'undefined' && window.SpaceshipCore && window.SpaceshipCore.solveBallisticIntercept);
+        const sol = solveIntercept
+          ? solveIntercept(
+              ship.x,
+              ship.y,
+              ship.dx * 0.25,
+              ship.dy * 0.25,
+              shootTarget.x,
+              shootTarget.y,
+              shootTarget.vx,
+              shootTarget.vy,
+              BULLET_SPEED,
+              muzzleOffset
+            )
+          : null;
+
+        let predX, predY;
+        if (sol) {
+          predX = sol.aimX - ship.x;
+          predY = sol.aimY - ship.y;
+        } else {
+          const effDist = Math.max(0, shootTarget.dist - muzzleOffset);
+          const leadTime = Math.min(45.0, effDist / BULLET_SPEED);
+          predX = shootTarget.dx + (shootTarget.vx - ship.dx * 0.25) * leadTime;
+          predY = shootTarget.dy + (shootTarget.vy - ship.dy * 0.25) * leadTime;
+        }
 
         const bPos = MathUtils.toBodyFrame(predX, predY, shipAngle);
         const relVx = shootTarget.vx - ship.dx;
         const relVy = shootTarget.vy - ship.dy;
         const bVel = MathUtils.toBodyFrame(relVx, relVy, shipAngle);
 
-        obs[12] = MathUtils.clamp(bPos.x / (W * 0.5), -1, 1);
-        obs[13] = MathUtils.clamp(bPos.y / (H * 0.5), -1, 1);
+        obs[12] = MathUtils.clamp(bPos.x / normR, -1, 1);
+        obs[13] = MathUtils.clamp(bPos.y / normR, -1, 1);
         obs[14] = MathUtils.clamp(bVel.x / 6.0, -1, 1);
         obs[15] = MathUtils.clamp(bVel.y / 6.0, -1, 1);
         obs[16] = MathUtils.clamp((shootTarget.radius || 20) / 36.0, 0, 1);
@@ -440,17 +472,17 @@
         if (uDelta.dist < closestHazardDist) closestHazardDist = uDelta.dist;
       }
 
-      const safeRadius = ship.width * 2.4 + 25;
+      const safeRadius = ship.width * 2.4 + 25 * scale;
       const isCriticalDanger = (closestHazardDist < safeRadius || (maxClosingSpeed > 0 && (closestHazardDist / Math.max(0.1, maxClosingSpeed)) < 35)) ? 1.0 : 0.0;
       const minThreatDist = Math.min(closestHazardDist, ufoDist);
 
       obs[33] = MathUtils.clamp(targetAimError, -1, 1);
-      obs[34] = MathUtils.clamp(minThreatDist / (W * 0.5), 0, 1);
+      obs[34] = MathUtils.clamp(minThreatDist / normR, 0, 1);
       obs[35] = isCriticalDanger;
       obs[36] = isShieldReady;
       obs[37] = (game.bullets ? game.bullets.length : 0) / 10.0;
 
-      const normDist = MathUtils.clamp(minThreatDist / (W * 0.5), 0, 1);
+      const normDist = MathUtils.clamp(minThreatDist / normR, 0, 1);
       return {
         features: obs,
         closestDist: minThreatDist,
@@ -889,7 +921,30 @@
         const ship = game.ship;
         const W = game.canvas.width;
         const H = game.canvas.height;
+        const scale = (typeof window !== 'undefined' && window.SpaceshipCore && window.SpaceshipCore.getScreenScale)
+          ? window.SpaceshipCore.getScreenScale(game.canvas)
+          : Math.max(0.42, Math.min(1.2, (H || 720) / 720));
         const shipAngle = ship.angle;
+
+        const pushThreat = (type, x, y, vx, vy, radius, delta) => {
+          const relVx = vx - ship.dx;
+          const relVy = vy - ship.dy;
+          const vClosing = delta.dist > 0 ? -(relVx * delta.dx + relVy * delta.dy) / delta.dist : 0;
+          const vSq = relVx * relVx + relVy * relVy;
+          const tCPA = vSq > 1e-6 ? Math.max(0, -(delta.dx * relVx + delta.dy * relVy) / vSq) : 0;
+          const dCPA = Math.hypot(delta.dx + relVx * tCPA, delta.dy + relVy * tCPA);
+          threats.push({
+            type,
+            x, y,
+            vx, vy,
+            radius,
+            dx: delta.dx, dy: delta.dy,
+            dist: delta.dist,
+            vClosing,
+            tCPA,
+            dCPA
+          });
+        };
 
         // 1. GATHER ALL COLLISION HAZARDS (Wrapped Torus Physics - rocks and ship DO wrap)
         const threats = [];
@@ -898,35 +953,13 @@
             const r = game.rocks[i];
             if (r.popped) continue;
             const delta = MathUtils.wrappedDelta(r.x, r.y, ship.x, ship.y, W, H);
-            const relVx = r.dx - ship.dx;
-            const relVy = r.dy - ship.dy;
-            const vClosing = delta.dist > 0 ? -(relVx * delta.dx + relVy * delta.dy) / delta.dist : 0;
-            threats.push({
-              type: 'rock',
-              x: r.x, y: r.y,
-              vx: r.dx, vy: r.dy,
-              radius: r.radius || 20,
-              dx: delta.dx, dy: delta.dy,
-              dist: delta.dist,
-              vClosing
-            });
+            pushThreat('rock', r.x, r.y, r.dx, r.dy, r.radius || 20, delta);
           }
         }
 
         if (game.ufo && game.ufo.alive) {
           const uDelta = MathUtils.wrappedDelta(game.ufo.x, game.ufo.y, ship.x, ship.y, W, H);
-          const uRelVx = (game.ufo.dx || 0) - ship.dx;
-          const uRelVy = (game.ufo.dy || 0) - ship.dy;
-          const uVClosing = uDelta.dist > 0 ? -(uRelVx * uDelta.dx + uRelVy * uDelta.dy) / uDelta.dist : 0;
-          threats.push({
-            type: 'ufo',
-            x: game.ufo.x, y: game.ufo.y,
-            vx: game.ufo.dx || 0, vy: game.ufo.dy || 0,
-            radius: (game.ufo.width || 40) * 0.5,
-            dx: uDelta.dx, dy: uDelta.dy,
-            dist: uDelta.dist,
-            vClosing: uVClosing
-          });
+          pushThreat('ufo', game.ufo.x, game.ufo.y, game.ufo.dx || 0, game.ufo.dy || 0, (game.ufo.width || 40) * 0.5, uDelta);
         }
 
         // Hostile UFO plasma bullets: high-priority hazards
@@ -934,19 +967,8 @@
           for (let i = 0; i < game.ufoBullets.length; i++) {
             const ub = game.ufoBullets[i];
             const bDelta = MathUtils.wrappedDelta(ub.x, ub.y, ship.x, ship.y, W, H);
-            if (bDelta.dist < 260) {
-              const bRelVx = ub.dx - ship.dx;
-              const bRelVy = ub.dy - ship.dy;
-              const bVClosing = bDelta.dist > 0 ? -(bRelVx * bDelta.dx + bRelVy * bDelta.dy) / bDelta.dist : 0;
-              threats.push({
-                type: 'bullet',
-                x: ub.x, y: ub.y,
-                vx: ub.dx, vy: ub.dy,
-                radius: 12,
-                dx: bDelta.dx, dy: bDelta.dy,
-                dist: bDelta.dist,
-                vClosing: bVClosing
-              });
+            if (bDelta.dist < 300 * scale) {
+              pushThreat('bullet', ub.x, ub.y, ub.dx, ub.dy, 12 * scale, bDelta);
             }
           }
         }
@@ -962,7 +984,8 @@
         for (let i = 0; i < Math.min(5, threats.length); i++) {
           const t = threats[i];
           const safeMargin = ship.width * 2.4 + t.radius;
-          const isClosingFast = t.vClosing > 0 && (t.dist / Math.max(0.1, t.vClosing)) < 40;
+          const isClosingFast = (t.tCPA > 0 && t.tCPA < 40 && t.dCPA < safeMargin * 0.85) ||
+            (t.vClosing > 0 && (t.dist / Math.max(0.1, t.vClosing)) < 40);
           if (t.dist < safeMargin || isClosingFast) {
             const urgency = Math.max(0, (safeMargin - t.dist) / safeMargin) + (isClosingFast ? 0.45 : 0);
             dangerLevel += urgency;
@@ -971,17 +994,26 @@
           }
         }
 
-        // 3. IMMEDIATE EMERGENCY SHIELD REFLEX
+        // 3. IMMEDIATE EMERGENCY SHIELD REFLEX (Closed-Form t_CPA & d_CPA across all threats)
         const isDedicatedCapacitor = (game.powerMode === 'dual' || game.powerMode === 'shield_only');
         const canShieldDeploy = ship.unlimitedShield || (!ship.invincible && (
           isDedicatedCapacitor ? ship.shieldEnergy >= 100 : ship.energy >= 50
         ));
 
         let shield = 0;
-        if (closest && canShieldDeploy) {
-          const lethalDist = ship.width * 1.1 + closest.radius + Math.max(0, closest.vClosing * 4.5);
-          if (closest.dist < lethalDist || (closest.type === 'bullet' && closest.dist < 38)) {
-            shield = 1;
+        if (canShieldDeploy) {
+          const shipRadius = (ship.width || 48) * 0.52;
+          for (let i = 0; i < threats.length; i++) {
+            const t = threats[i];
+            const impactRadius = shipRadius + t.radius + 8 * scale;
+            if (
+              (t.tCPA > 0 && t.tCPA <= 14 && t.dCPA <= impactRadius) ||
+              t.dist < (shipRadius * 1.65 + t.radius) ||
+              (t.type === 'bullet' && t.dist < 42 * scale)
+            ) {
+              shield = 1;
+              break;
+            }
           }
         }
 
@@ -1018,10 +1050,10 @@
             steer = aimErrorRad > 0 ? 2 : 0; // Rotate to track / lead target
           }
 
-          // Maintain optimal standoff range [160px, 300px]
-          if (shootTarget.dist > 290 && Math.abs(aimErrorRad) < 0.5) {
+          // Maintain scale-invariant optimal standoff range
+          if (shootTarget.dist > 290 * scale && Math.abs(aimErrorRad) < 0.5) {
             thrust = 1; // Gently close distance
-          } else if (shootTarget.dist < 150 && Math.abs(aimErrorRad) > 1.1) {
+          } else if (shootTarget.dist < 150 * scale && Math.abs(aimErrorRad) > 1.1) {
             thrust = 1; // Accelerate away from nearby rocks behind the ship
           }
         } else {
@@ -1036,24 +1068,38 @@
 
         let fire = 0;
         if (shootTarget) {
-          // Direct effective firing range [60px, 350px]
-          const inEffectiveRange = shootTarget.dist >= 60 && shootTarget.dist <= 350;
+          // Direct scale-invariant effective firing range
+          const inEffectiveRange = shootTarget.dist >= 55 * scale && shootTarget.dist <= 360 * scale;
           // Accurate angular alignment (~8.5 degrees tolerance)
           const isAimed = Math.abs(aimErrorRad) < 0.15;
 
-          // In-flight bullet intercept check (prevent wasteful over-shooting)
+          // Closed-form t_CPA, d_CPA in-flight bullet intercept check (prevent wasteful over-shooting)
           let bulletsEnRoute = 0;
           if (game.bullets) {
+            const computeCPA = (typeof window !== 'undefined' && window.SpaceshipCore && window.SpaceshipCore.computeCPA);
             for (let i = 0; i < game.bullets.length; i++) {
               const b = game.bullets[i];
               if (b.hit) continue;
-              const bDist = MathUtils.directDelta(shootTarget.x, shootTarget.y, b.x, b.y).dist;
-              if (bDist < (shootTarget.radius + 35)) {
-                bulletsEnRoute++;
+              if (computeCPA) {
+                const cpa = computeCPA(b.x, b.y, b.dx, b.dy, shootTarget.x, shootTarget.y, shootTarget.vx, shootTarget.vy);
+                if (cpa.tCPA >= 0 && cpa.tCPA <= 45 && cpa.dCPA <= (shootTarget.radius + (b.collisionRadius || 4))) {
+                  bulletsEnRoute++;
+                }
+              } else {
+                const rPx = b.x - shootTarget.x;
+                const rPy = b.y - shootTarget.y;
+                const rVx = b.dx - shootTarget.vx;
+                const rVy = b.dy - shootTarget.vy;
+                const vSq = rVx * rVx + rVy * rVy;
+                const tCPA = vSq > 1e-6 ? Math.max(0, -(rPx * rVx + rPy * rVy) / vSq) : 0;
+                const dCPA = Math.hypot(rPx + rVx * tCPA, rPy + rVy * tCPA);
+                if (tCPA >= 0 && tCPA <= 45 && dCPA <= (shootTarget.radius + (b.collisionRadius || 4))) {
+                  bulletsEnRoute++;
+                }
               }
             }
           }
-          const hitsNeeded = shootTarget.radius > 25 ? 2 : 1;
+          const hitsNeeded = shootTarget.radius > 25 * scale ? 2 : 1;
           const alreadyTargeted = bulletsEnRoute >= hitsNeeded;
 
           // Strict Mode-Aware Energy & Ammo Conservation:
@@ -1064,8 +1110,8 @@
           if (!isGodMode && !isShieldOnly) {
             if (game.powerMode === 'shared') {
               // Shared Reactor: preserve >= 52 energy for emergency shield,
-              // unless target is dangerously close (< 90px) where destroying it saves ship!
-              const minReserve = shootTarget.dist < 90 ? 12 : 52;
+              // unless target is dangerously close where destroying it saves ship!
+              const minReserve = shootTarget.dist < 90 * scale ? 12 : 52;
               if (ship.energy < minReserve) {
                 hasEnergyReserve = false;
               }
@@ -1141,7 +1187,7 @@
       return decision;
     }
 
-    // Step environment in training mode: store transition & reward
+    // Step environment in training mode: store transition & reward (capped at 2048 steps per rollout)
     recordStep(stepData, reward, done) {
       this.totalSteps++;
       this.currentEpisodeReward += reward;
@@ -1158,26 +1204,28 @@
         done: done
       });
 
-      if (done) {
-        this.finishEpisode();
+      if (done || this.trajectory.length >= 2048) {
+        this.finishEpisode(!done);
       }
     }
 
-    // Update Actor-Critic policy at the end of an episode using GAE & Policy Gradients
-    finishEpisode() {
-      this.episodes++;
-      this.episodeRewardsHistory.push(this.currentEpisodeReward);
-      if (this.episodeRewardsHistory.length > 50) {
-        this.episodeRewardsHistory.shift();
-      }
+    // Update Actor-Critic policy at the end of an episode (or 2048-step truncated horizon) using GAE & Adam Policy Gradients
+    finishEpisode(isTruncated = false) {
+      if (!isTruncated) {
+        this.episodes++;
+        this.episodeRewardsHistory.push(this.currentEpisodeReward);
+        if (this.episodeRewardsHistory.length > 50) {
+          this.episodeRewardsHistory.shift();
+        }
 
-      const sum = this.episodeRewardsHistory.reduce((a, b) => a + b, 0);
-      this.averageReward = sum / this.episodeRewardsHistory.length;
+        const sum = this.episodeRewardsHistory.reduce((a, b) => a + b, 0);
+        this.averageReward = sum / this.episodeRewardsHistory.length;
+      }
 
       const T = this.trajectory.length;
       if (T < 2) {
         this.trajectory = [];
-        this.currentEpisodeReward = 0;
+        if (!isTruncated) this.currentEpisodeReward = 0;
         return;
       }
 
@@ -1187,7 +1235,9 @@
       let gae = 0;
 
       for (let t = T - 1; t >= 0; t--) {
-        const nextVal = (t === T - 1 || this.trajectory[t].done) ? 0 : this.trajectory[t + 1].value;
+        const nextVal = (t === T - 1)
+          ? (this.trajectory[t].done ? 0 : this.trajectory[t].value)
+          : (this.trajectory[t].done ? 0 : this.trajectory[t + 1].value);
         const delta = this.trajectory[t].reward + this.gamma * nextVal - this.trajectory[t].value;
         gae = delta + this.gamma * this.lambda * gae;
         advantages[t] = gae;
@@ -1207,70 +1257,176 @@
         advantages[i] = (advantages[i] - advMean) / advStd;
       }
 
-      // Mini-batch policy gradient update using Adam
+      // Mini-batch policy gradient update using full backprop + Adam
       this.updatePolicy(this.trajectory, advantages, returns);
 
       // Anneal entropy coefficient slightly over time
       this.entropyCoef = Math.max(0.005, this.entropyCoef * 0.995);
 
       this.trajectory = [];
-      this.currentEpisodeReward = 0;
+      if (!isTruncated) this.currentEpisodeReward = 0;
     }
 
     updatePolicy(traj, advantages, returns) {
       const net = this.network;
       const N = traj.length;
+      if (N === 0) return;
+
+      const inD = net.inputDim;
+      const hidD = net.hiddenDim;
+
+      const g_W1 = new Float32Array(net.W1.length);
+      const g_b1 = new Float32Array(net.b1.length);
+      const g_W2 = new Float32Array(net.W2.length);
+      const g_b2 = new Float32Array(net.b2.length);
+      const g_W_steer = new Float32Array(net.W_steer.length);
+      const g_b_steer = new Float32Array(net.b_steer.length);
+      const g_W_thrust = new Float32Array(net.W_thrust.length);
+      const g_b_thrust = new Float32Array(net.b_thrust.length);
+      const g_W_fire = new Float32Array(net.W_fire.length);
+      const g_b_fire = new Float32Array(net.b_fire.length);
+      const g_W_shield = new Float32Array(net.W_shield.length);
+      const g_b_shield = new Float32Array(net.b_shield.length);
+      const g_W_val = new Float32Array(net.W_val.length);
+      const g_b_val = new Float32Array(net.b_val.length);
+
+      const dh2 = new Float32Array(hidD);
+      const dz2 = new Float32Array(hidD);
+      const dh1 = new Float32Array(hidD);
+      const dSteer = new Float32Array(3);
+      const dThrust = new Float32Array(2);
+      const dFire = new Float32Array(2);
+      const dShield = new Float32Array(2);
+
       let totalLoss = 0;
 
-      // Accumulate gradients across episode trajectory
       for (let t = 0; t < N; t++) {
         const step = traj[t];
         const out = net.forward(step.obs);
         const adv = MathUtils.clamp(advantages[t], -4, 4);
 
-        // Value Loss: 0.5 * (V(s) - Return)^2
-        const vError = out.value - returns[t];
-        const vLoss = 0.5 * (vError ** 2);
+        // Critic Value Loss: 0.5 * (V(s) - Return)^2
+        const vError = MathUtils.clamp(out.value - returns[t], -10, 10);
+        const vLoss = 0.5 * (vError * vError);
+        const dVal = 0.5 * vError;
 
-        // Policy gradient step:
-        // dL/dLogits = -adv * (1 - prob) for chosen action, adv * prob for other actions
-        const dSteer = out.steerProbs[step.steer] - 1.0;
-        const dThrust = out.thrustProbs[step.thrust] - 1.0;
-        const dFire = out.fireProbs[step.fire] - 1.0;
-        const dShield = out.shieldProbs[step.shield] - 1.0;
+        // Full Softmax Logit Gradients across all action classes:
+        // dL/dz_k = -adv * (1_{k == a} - pi_k)
+        for (let k = 0; k < 3; k++) {
+          const p = out.steerProbs[k];
+          dSteer[k] = -adv * ((k === step.steer ? 1.0 : 0.0) - p);
+          g_b_steer[k] += dSteer[k];
+        }
+        for (let k = 0; k < 2; k++) {
+          const pt = out.thrustProbs[k];
+          dThrust[k] = -adv * ((k === step.thrust ? 1.0 : 0.0) - pt);
+          g_b_thrust[k] += dThrust[k];
 
-        // Apply momentum step to output layers & backprop into Layer 2
-        const lr = net.lr;
-        const stepMag = lr * adv * 0.05;
-        const dh2 = new Float32Array(net.hiddenDim);
+          const pf = out.fireProbs[k];
+          dFire[k] = -adv * ((k === step.fire ? 1.0 : 0.0) - pf);
+          g_b_fire[k] += dFire[k];
 
-        for (let j = 0; j < net.hiddenDim; j++) {
-          const h = out.h2[j];
-          net.W_steer[j * 3 + step.steer] -= stepMag * dSteer * h;
-          net.W_thrust[j * 2 + step.thrust] -= stepMag * dThrust * h;
-          net.W_fire[j * 2 + step.fire] -= stepMag * dFire * h;
-          net.W_shield[j * 2 + step.shield] -= stepMag * dShield * h;
-          net.W_val[j] -= lr * vError * h * 0.1;
+          const ps = out.shieldProbs[k];
+          dShield[k] = -adv * ((k === step.shield ? 1.0 : 0.0) - ps);
+          g_b_shield[k] += dShield[k];
+        }
+        g_b_val[0] += dVal;
 
-          dh2[j] += stepMag * dSteer * net.W_steer[j * 3 + step.steer];
-          dh2[j] += stepMag * dThrust * net.W_thrust[j * 2 + step.thrust];
-          dh2[j] += stepMag * dFire * net.W_fire[j * 2 + step.fire];
-          dh2[j] += stepMag * dShield * net.W_shield[j * 2 + step.shield];
+        dh2.fill(0);
+        for (let j = 0; j < hidD; j++) {
+          const h2j = out.h2[j];
+          let gradH2 = dVal * net.W_val[j];
+          g_W_val[j] += dVal * h2j;
+
+          const sOff = j * 3;
+          for (let k = 0; k < 3; k++) {
+            g_W_steer[sOff + k] += dSteer[k] * h2j;
+            gradH2 += dSteer[k] * net.W_steer[sOff + k];
+          }
+
+          const bOff = j * 2;
+          for (let k = 0; k < 2; k++) {
+            g_W_thrust[bOff + k] += dThrust[k] * h2j;
+            gradH2 += dThrust[k] * net.W_thrust[bOff + k];
+
+            g_W_fire[bOff + k] += dFire[k] * h2j;
+            gradH2 += dFire[k] * net.W_fire[bOff + k];
+
+            g_W_shield[bOff + k] += dShield[k] * h2j;
+            gradH2 += dShield[k] * net.W_shield[bOff + k];
+          }
+          dh2[j] = gradH2;
         }
 
-        // Tanh gradient for Layer 2: (1 - h2^2)
-        for (let j = 0; j < net.hiddenDim; j++) {
-          const dz2 = dh2[j] * (1.0 - out.h2[j] * out.h2[j]);
-          for (let i = 0; i < net.hiddenDim; i++) {
-            net.W2[i * net.hiddenDim + j] -= lr * 0.01 * dz2 * out.h1[i];
+        // Backprop through Layer 2 Tanh: dz2 = dh2 * (1 - h2^2)
+        for (let j = 0; j < hidD; j++) {
+          const zGrad = dh2[j] * (1.0 - out.h2[j] * out.h2[j]);
+          dz2[j] = zGrad;
+          g_b2[j] += zGrad;
+        }
+
+        dh1.fill(0);
+        for (let i = 0; i < hidD; i++) {
+          const h1i = out.h1[i];
+          const w2Row = i * hidD;
+          let gradH1 = 0;
+          for (let j = 0; j < hidD; j++) {
+            const zGrad = dz2[j];
+            g_W2[w2Row + j] += h1i * zGrad;
+            gradH1 += zGrad * net.W2[w2Row + j];
           }
-          net.b2[j] -= lr * 0.01 * dz2;
+          dh1[i] = gradH1;
+        }
+
+        // Backprop through Layer 1 Tanh: dz1 = dh1 * (1 - h1^2) into W1, b1
+        for (let j = 0; j < hidD; j++) {
+          const z1Grad = dh1[j] * (1.0 - out.h1[j] * out.h1[j]);
+          g_b1[j] += z1Grad;
+          for (let i = 0; i < inD; i++) {
+            g_W1[i * hidD + j] += step.obs[i] * z1Grad;
+          }
         }
 
         totalLoss += Math.abs(adv) + vLoss;
       }
 
-      this.lastLoss = totalLoss / N;
+      // Apply Adam Optimizer update across all 14 parameter tensors
+      net.t = (net.t || 0) + 1;
+      const invN = 1.0 / N;
+      const b1 = net.beta1 || 0.9;
+      const b2 = net.beta2 || 0.999;
+      const eps = net.eps || 1e-8;
+      const lr = net.lr || 0.001;
+      const bc1 = 1.0 - Math.pow(b1, net.t);
+      const bc2 = 1.0 - Math.pow(b2, net.t);
+
+      const paramPairs = [
+        [net.W1, g_W1], [net.b1, g_b1],
+        [net.W2, g_W2], [net.b2, g_b2],
+        [net.W_steer, g_W_steer], [net.b_steer, g_b_steer],
+        [net.W_thrust, g_W_thrust], [net.b_thrust, g_b_thrust],
+        [net.W_fire, g_W_fire], [net.b_fire, g_b_fire],
+        [net.W_shield, g_W_shield], [net.b_shield, g_b_shield],
+        [net.W_val, g_W_val], [net.b_val, g_b_val]
+      ];
+
+      let mIdx = 0;
+      for (let p = 0; p < paramPairs.length; p++) {
+        const param = paramPairs[p][0];
+        const gradArr = paramPairs[p][1];
+        for (let i = 0; i < param.length; i++, mIdx++) {
+          const g = MathUtils.clamp(gradArr[i] * invN, -1.0, 1.0);
+          const mVal = b1 * net.m[mIdx] + (1.0 - b1) * g;
+          const vVal = b2 * net.v[mIdx] + (1.0 - b2) * (g * g);
+          net.m[mIdx] = mVal;
+          net.v[mIdx] = vVal;
+          const mHat = mVal / bc1;
+          const vHat = vVal / bc2;
+          param[i] -= lr * mHat / (Math.sqrt(vHat) + eps);
+        }
+      }
+
+      this.lastLoss = totalLoss * invN;
     }
   }
 

@@ -1,14 +1,32 @@
 /**
  * Asteroidle - Core Game Engine
- * Reuses the authentic Spaceship, Rock, Bullet, Starfield, SoundFX, and ParticleSystem
- * directly from Spaceship-Flight (game.js) via window.SpaceshipCore.
+ * Reuses the authentic Spaceship, Rock, Bullet, Starfield, SoundFX, ParticleSystem,
+ * and closed-form ballistic/collision primitives directly from Spaceship-Flight (game.js)
+ * via window.SpaceshipCore.
  */
+
+const CANONICAL_W = 1600;
+const CANONICAL_H = 900;
+const TIER_BULLET_SPEEDS = {
+    1: 8.5,
+    2: 11.5,
+    3: 14.0,
+    4: 17.5,
+    5: 21.0
+};
 
 export class AsteroidleEngine {
     constructor(canvas, onRoundComplete) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.onRoundComplete = onRoundComplete;
+
+        // Canonical 1600x900 physics arena for 100% cross-device parity (AST-H1)
+        this.width = CANONICAL_W;
+        this.height = CANONICAL_H;
+        this.viewScale = 1.0;
+        this.viewOffsetX = 0;
+        this.viewOffsetY = 0;
 
         // Core engine classes from game.js
         this.core = window.SpaceshipCore || {};
@@ -17,31 +35,46 @@ export class AsteroidleEngine {
         const SpaceshipClass = this.core.Spaceship || class {};
         const StarfieldClass = this.core.Starfield || class {};
 
+        // Virtual canonical canvas proxy for internal entity sizing
+        this.arenaProxyCanvas = { width: CANONICAL_W, height: CANONICAL_H };
+
         this.soundFx = new SoundFXClass();
         const savedSound = localStorage.getItem('spaceship_flight_sound');
         if (this.soundFx) this.soundFx.enabled = (savedSound === 'true');
 
-        this.particles = new ParticleSystemClass();
-        this.ship = new SpaceshipClass(this.canvas, this.soundFx, this.particles);
+        this.particles = new ParticleSystemClass(this.arenaProxyCanvas);
+        this.ship = new SpaceshipClass(this.arenaProxyCanvas, this.soundFx, this.particles);
         if (this.ship) this.ship.showStatusBars = false;
-        
-        // Restore user skin & scale preference from Spaceship Flight
+
+        // Restore user skin, custom hex color, laser match, stars & scale preference from Spaceship Flight (AST-C6, AST-C7)
         const savedSkin = localStorage.getItem('spaceship_flight_ship_skin') || 'red';
-        if (this.ship) this.ship.selectedSkin = savedSkin;
+        const savedColorP1 = localStorage.getItem('spaceship_flight_ship_color_p1') || (savedSkin === 'blue' ? '#0211d0' : '#850101');
+        const savedMatchLaser = localStorage.getItem('spaceship_flight_match_laser_color') === 'true';
+        this.showStars = localStorage.getItem('spaceship_flight_stars') !== 'false';
+
+        if (this.ship) {
+            this.ship.selectedSkin = savedSkin;
+            this.ship.customColor = savedColorP1;
+            this.ship.matchLaserColor = savedMatchLaser;
+        }
 
         const savedScale = parseInt(localStorage.getItem('spaceship_flight_ship_scale') || '100', 10);
         if (this.ship && typeof this.ship.setScalePercent === 'function') {
             this.ship.setScalePercent(savedScale);
         }
 
+        // Load shared 1-Player custom keybinds from Spaceship Flight (AST-C7)
+        this.controlsSolo = this.loadSoloControls();
+
         // Fullscreen authentic deep space starfield from game.js
-        this.starfield = new StarfieldClass(this.canvas);
+        this.starfield = new StarfieldClass(this.arenaProxyCanvas);
 
         // Challenge definition
         this.challenge = null;
         this.rock = null;
         this.rockInitialState = null;
         this.rockClipEndState = null;
+        this.currentBulletSpeed = 14.0;
 
         // Continuous keyboard rotation state (matches game.js rate: 4.5 deg/frame)
         this.keys = {
@@ -55,6 +88,7 @@ export class AsteroidleEngine {
         this.clipFrame = 0;
         this.loopClip = false;
         this.isPlayingClip = false;
+        this.firingElapsedFrames = 0;
 
         // Bullets
         this.testBullets = [];
@@ -64,6 +98,7 @@ export class AsteroidleEngine {
         this.directHit = false;
         this.roundScore = 0;
         this.resultTelemetry = null;
+        this.lastImpactPos = null;
 
         // Screen shake on hit
         this.screenShake = 0;
@@ -85,41 +120,48 @@ export class AsteroidleEngine {
         this.animId = requestAnimationFrame(this.loop);
     }
 
+    loadSoloControls() {
+        const defaults = {
+            thrust: 'ArrowUp',
+            rotateLeft: 'ArrowLeft',
+            rotateRight: 'ArrowRight',
+            fire: 'Space',
+            shield: 'ArrowDown'
+        };
+        try {
+            const raw = localStorage.getItem('spaceship_flight_controls_solo');
+            if (raw) {
+                return { ...defaults, ...JSON.parse(raw) };
+            }
+        } catch (_) {}
+        return defaults;
+    }
+
+    setSoloControls(controls) {
+        this.controlsSolo = { ...this.controlsSolo, ...(controls || {}) };
+    }
+
     /**
-     * Fullscreen responsive canvas matching Spaceship Flight (game.js)
+     * Fullscreen high-DPI responsive canvas with non-destructive canonical 1600x900 viewport transform (AST-H1, AST-H2, AST-L9)
      */
     resizeCanvas() {
-        const screenW = window.visualViewport ? window.visualViewport.width : window.innerWidth;
-        const screenH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        const screenW = Math.floor(window.visualViewport ? window.visualViewport.width : window.innerWidth);
+        const screenH = Math.floor(window.visualViewport ? window.visualViewport.height : window.innerHeight);
         const isPortrait = screenH > screenW;
 
-        if (isPortrait) {
-            // 16:9 widescreen canvas horizontally with letterbox padding
-            this.canvas.width = Math.floor(screenW);
-            this.canvas.height = Math.floor(screenW * (9 / 16));
+        const targetW = screenW;
+        const targetH = isPortrait ? Math.floor(screenW * (9 / 16)) : screenH;
+
+        if (this.core.setCanvasLogicalSize) {
+            this.core.setCanvasLogicalSize(this.canvas, this.ctx, targetW, targetH);
         } else {
-            // Fullscreen widescreen in landscape / desktop
-            this.canvas.width = Math.floor(screenW);
-            this.canvas.height = Math.floor(screenH);
+            this.canvas.width = targetW;
+            this.canvas.height = targetH;
         }
 
-        this.width = this.canvas.width;
-        this.height = this.canvas.height;
-
-        // Resize authentic starfield
-        if (this.starfield && typeof this.starfield.resize === 'function') {
-            this.starfield.resize();
-        }
-
-        // Adaptive Ship Sizing: authentic proportions decided in Spaceship Flight
-        if (this.ship && typeof this.ship.recalculateSize === 'function') {
-            this.ship.canvas = this.canvas;
-            this.ship.recalculateSize();
-        }
-
-        if (this.challenge) {
-            this.updateEntityPositions();
-        }
+        this.viewScale = Math.min(targetW / CANONICAL_W, targetH / CANONICAL_H);
+        this.viewOffsetX = (targetW - CANONICAL_W * this.viewScale) * 0.5;
+        this.viewOffsetY = (targetH - CANONICAL_H * this.viewScale) * 0.5;
     }
 
     setSound(enabled) {
@@ -140,9 +182,40 @@ export class AsteroidleEngine {
         }
     }
 
+    setShipColor(hexColor) {
+        if (this.ship) {
+            const norm = (this.core.Spaceship && this.core.Spaceship.normalizeHexColor)
+                ? this.core.Spaceship.normalizeHexColor(hexColor)
+                : hexColor;
+            this.ship.customColor = norm;
+            this.ship.selectedSkin = (norm === '#0211d0') ? 'blue' : 'red';
+            try {
+                localStorage.setItem('spaceship_flight_ship_color_p1', norm);
+                localStorage.setItem('spaceship_flight_ship_skin', this.ship.selectedSkin);
+            } catch (e) { }
+        }
+    }
+
+    setMatchLaserColor(enabled) {
+        if (this.ship) {
+            this.ship.matchLaserColor = !!enabled;
+            try {
+                localStorage.setItem('spaceship_flight_match_laser_color', enabled ? 'true' : 'false');
+            } catch (e) { }
+        }
+    }
+
+    setShowStars(enabled) {
+        this.showStars = !!enabled;
+        try {
+            localStorage.setItem('spaceship_flight_stars', enabled ? 'true' : 'false');
+        } catch (e) { }
+    }
+
     setShipScale(scalePercent) {
         if (this.ship && typeof this.ship.setScalePercent === 'function') {
             this.ship.setScalePercent(scalePercent);
+            this.ship.recalculateSize(CANONICAL_W, CANONICAL_H);
         }
     }
 
@@ -158,125 +231,64 @@ export class AsteroidleEngine {
         this.directHit = false;
         this.roundScore = 0;
         this.resultTelemetry = null;
+        this.lastImpactPos = null;
         this.clipFrame = 0;
+        this.firingElapsedFrames = 0;
 
         this.updateEntityPositions();
-        this.playClip();
+        this.playClip(true);
     }
 
     updateEntityPositions() {
         if (!this.challenge) return;
 
-        const W = this.width;
-        const H = this.height;
+        const W = CANONICAL_W;
+        const H = CANONICAL_H;
         const ch = this.challenge;
 
-        // Position the authentic spaceship at the fixed round coordinates
+        // Position the authentic spaceship at the fixed canonical round coordinates
+        this.ship.recalculateSize(W, H);
         this.ship.x = ch.shipX * W;
         this.ship.y = ch.shipY * H;
         this.ship.dx = 0;
         this.ship.dy = 0;
 
-        // Initial heading is completely RANDOM (or deterministic per daily seed) - NEVER pre-aimed!
+        // Initial heading is deterministic per seed
         const initialAngle = (ch.initialHeading !== undefined) ? ch.initialHeading : Math.floor(Math.random() * 360);
-        this.ship.angle = initialAngle;
+        this.ship.angle = ((initialAngle % 360) + 360) % 360;
+        this.ship.rotation = this.ship.angle;
         this.updateAimUI();
 
-        // Create the authentic Rock instance using SpaceshipCore.Rock
+        // Compute round bullet speed from challenge bulletTier (AST-L1)
+        const baseTierSpeed = TIER_BULLET_SPEEDS[ch.bulletTier] || 14.0;
+        const scale = this.core.getScreenScale ? this.core.getScreenScale(this.arenaProxyCanvas) : 1.0;
+        const bScale = Math.max(0.85, Math.min(1.25, scale));
+        this.currentBulletSpeed = baseTierSpeed * bScale;
+        this.currentBaseTierSpeed = baseTierSpeed;
+
+        // Create and configure the authentic Rock instance using SpaceshipCore.Rock (AST-M1)
         const RockClass = this.core.Rock;
         if (!RockClass) return;
 
         this.rock = new RockClass(W, H, ch.speed);
-        this.rock.shapeIndex = ch.shapeIndex % 5;
-
-        // Apply challenge baseRadius scaled to arena dimensions
-        const baseDimension = Math.min(W, Math.max(450, H * 1.6));
-        const sizeFactor = baseDimension / 1000;
-        if (ch.baseRadius) {
-            this.rock.radius = ch.baseRadius * sizeFactor;
-            this.rock.scale = (this.rock.radius / 25);
+        if (typeof this.rock.configureFromChallenge === 'function') {
+            this.rock.configureFromChallenge(ch, W, H);
         }
 
-        // Re-center polygon points for the chosen shape template
-        const shapes = this.core.ROCK_SHAPES || [
-            { x: [0, 25, 15, -5, -8], y: [0, 5, 30, 25, 15] },
-            { x: [-18, 6, 26, 18, -8, -24], y: [-20, -26, -6, 22, 26, 6] },
-            { x: [0, 20, 28, 12, -10, -26, -16], y: [-28, -14, 8, 26, 22, 2, -18] },
-            { x: [-14, 10, 26, 20, 8, -14, -28, -20], y: [-24, -22, -4, 16, 28, 24, 6, -12] },
-            { x: [-10, 14, 30, 16, -14, -24], y: [-30, -26, 6, 28, 30, -6] }
-        ];
-        const chosen = shapes[this.rock.shapeIndex];
-        let sumX = 0, sumY = 0;
-        for (let i = 0; i < chosen.x.length; i++) {
-            sumX += chosen.x[i];
-            sumY += chosen.y[i];
-        }
-        const avgX = sumX / chosen.x.length;
-        const avgY = sumY / chosen.y.length;
-        this.rock.localPoints = [];
-        for (let i = 0; i < chosen.x.length; i++) {
-            this.rock.localPoints.push({
-                x: (chosen.x[i] - avgX) * this.rock.scale * 1.5,
-                y: (chosen.y[i] - avgY) * this.rock.scale * 1.5
-            });
-        }
-
-        // Spawn position: support arbitrary origins (center, interior quadrants, or perimeter)
-        let startX, startY, moveAngle;
-        if (ch.startX !== undefined && ch.startY !== undefined) {
-            startX = ch.startX * W;
-            startY = ch.startY * H;
-            if (ch.moveAngle !== undefined) {
-                moveAngle = ch.moveAngle;
-            } else if (ch.targetX !== undefined && ch.targetY !== undefined) {
-                moveAngle = Math.atan2(ch.targetY * H - startY, ch.targetX * W - startX);
-            } else {
-                moveAngle = Math.random() * Math.PI * 2;
-            }
-        } else {
-            // Legacy perimeter edge spawn fallback
-            const offset = 30;
-            if (ch.side === 0) { // Left
-                startX = -this.rock.radius - offset;
-                startY = ch.sidePos * H;
-            } else if (ch.side === 1) { // Top
-                startX = ch.sidePos * W;
-                startY = -this.rock.radius - offset;
-            } else if (ch.side === 2) { // Right
-                startX = W + this.rock.radius + offset;
-                startY = ch.sidePos * H;
-            } else { // Bottom
-                startX = ch.sidePos * W;
-                startY = H + this.rock.radius + offset;
-            }
-            const targetX = ch.targetX * W;
-            const targetY = ch.targetY * H;
-            moveAngle = Math.atan2(targetY - startY, targetX - startX);
-        }
-
-        const speedMagnitude = (2.2 * ch.speed) * (W / 800);
-
-        this.rock.x = startX;
-        this.rock.y = startY;
-        this.rock.dx = Math.cos(moveAngle) * speedMagnitude;
-        this.rock.dy = Math.sin(moveAngle) * speedMagnitude;
-        this.rock.rotation = 0;
-        this.rock.rotSpeed = ch.rotSpeed;
-
-        // Cache initial state
+        // Cache initial state at t = 0
         this.rockInitialState = {
-            x: startX,
-            y: startY,
+            x: this.rock.x,
+            y: this.rock.y,
             dx: this.rock.dx,
             dy: this.rock.dy,
             rotation: 0,
             rotSpeed: this.rock.rotSpeed
         };
 
-        // Precompute where the asteroid will be at t = 1.0s (frame 60)
+        // Precompute exact state at t = 1.0s (frame 60)
         this.rockClipEndState = {
-            x: startX + this.rock.dx * this.clipDurationFrames,
-            y: startY + this.rock.dy * this.clipDurationFrames,
+            x: this.rock.x + this.rock.dx * this.clipDurationFrames,
+            y: this.rock.y + this.rock.dy * this.clipDurationFrames,
             dx: this.rock.dx,
             dy: this.rock.dy,
             rotation: this.rock.rotSpeed * this.clipDurationFrames,
@@ -285,9 +297,10 @@ export class AsteroidleEngine {
     }
 
     /**
-     * Replay the 1-second preview clip
+     * Replay the 1-second preview clip (guarded against FIRING / RESOLVED states - AST-C3)
      */
-    playClip() {
+    playClip(force = false) {
+        if (!force && (this.state === 'FIRING' || this.state === 'RESOLVED')) return;
         if (!this.rockInitialState) return;
         this.state = 'PREVIEW';
         this.isPlayingClip = true;
@@ -314,38 +327,35 @@ export class AsteroidleEngine {
     }
 
     setAngle(deg) {
-        if (!this.ship) return;
-        this.ship.angle = Math.round((deg % 360 + 360) % 360);
+        if (!this.ship || this.state === 'FIRING' || this.state === 'RESOLVED') return;
+        this.ship.angle = ((deg % 360) + 360) % 360;
+        this.ship.rotation = this.ship.angle;
         this.updateAimUI();
     }
 
     adjustAngle(deltaDeg) {
-        if (!this.ship) return;
+        if (!this.ship || this.state === 'FIRING' || this.state === 'RESOLVED') return;
         this.setAngle(this.ship.angle + deltaDeg);
     }
 
     aimAtPoint(px, py) {
-        if (!this.ship) return;
+        if (!this.ship || this.state === 'FIRING' || this.state === 'RESOLVED') return;
         const rad = Math.atan2(py - this.ship.y, px - this.ship.x);
         const deg = (rad * 180 / Math.PI) + 90;
         this.setAngle(deg);
     }
 
     /**
-     * Test-fire a tracer bullet (uses standard bullet speed from game.js)
+     * Test-fire a tracer bullet using Spaceship.prototype.createMuzzleBullet (AST-C3, AST-C7, AST-L1)
      */
     testFire() {
-        if (this.state === 'FIRING' || !this.ship) return;
+        if ((this.state !== 'AIMING' && this.state !== 'PREVIEW') || !this.ship) return;
 
-        const rad = ((this.ship.angle - 90) * Math.PI) / 180;
-        const noseDist = this.ship.height * 0.55;
-        const bx = this.ship.x + Math.cos(rad) * noseDist;
-        const by = this.ship.y + Math.sin(rad) * noseDist;
-        const scale = this.core.getScreenScale ? this.core.getScreenScale(this.canvas) : 1.0;
-
-        const BulletClass = this.core.Bullet;
-        if (BulletClass) {
-            const b = new BulletClass(bx, by, this.ship.angle, 0, 0, scale);
+        let b = null;
+        if (typeof this.ship.createMuzzleBullet === 'function') {
+            b = this.ship.createMuzzleBullet(this.currentBaseTierSpeed || null, false);
+        }
+        if (b) {
             b.isTracer = true;
             this.testBullets.push(b);
         }
@@ -356,26 +366,23 @@ export class AsteroidleEngine {
     }
 
     /**
-     * Commit the real interception shot using the standard game Bullet!
+     * Commit the real interception shot using Spaceship.prototype.createMuzzleBullet (AST-C1, AST-C7, AST-L1)
      */
     fireInterceptShot() {
         if (this.state !== 'AIMING' && this.state !== 'PREVIEW') return;
         if (!this.ship) return;
 
-        // Ensure rock is placed at the t = 1.0s clip end position
+        // Place rock at the exact t = 1.0s clip end position
         this.restoreRockState(this.rockClipEndState);
         this.state = 'FIRING';
         this.isPlayingClip = false;
+        this.firingElapsedFrames = 0;
 
-        const rad = ((this.ship.angle - 90) * Math.PI) / 180;
-        const noseDist = this.ship.height * 0.55;
-        const bx = this.ship.x + Math.cos(rad) * noseDist;
-        const by = this.ship.y + Math.sin(rad) * noseDist;
-        const scale = this.core.getScreenScale ? this.core.getScreenScale(this.canvas) : 1.0;
-
-        const BulletClass = this.core.Bullet;
-        if (BulletClass) {
-            this.interceptBullet = new BulletClass(bx, by, this.ship.angle, 0, 0, scale);
+        if (typeof this.ship.createMuzzleBullet === 'function') {
+            this.interceptBullet = this.ship.createMuzzleBullet(this.currentBaseTierSpeed || null, false);
+            if (this.interceptBullet) {
+                this.currentBulletSpeed = Math.hypot(this.interceptBullet.dx, this.interceptBullet.dy) || this.currentBulletSpeed;
+            }
         }
 
         this.closestDistance = Infinity;
@@ -387,19 +394,27 @@ export class AsteroidleEngine {
         }
     }
 
+    isAnyModalOpen() {
+        return !!document.querySelector('.modal-backdrop.active, .overlay.active');
+    }
+
     setupInputHandlers() {
         let isPointerDown = false;
 
         const handlePointer = (e) => {
+            if (this.state === 'FIRING' || this.state === 'RESOLVED') return;
             const rect = this.canvas.getBoundingClientRect();
             const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
             const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
-            const px = clientX - rect.left;
-            const py = clientY - rect.top;
+            const screenX = clientX - rect.left;
+            const screenY = clientY - rect.top;
+            const px = (screenX - this.viewOffsetX) / (this.viewScale || 1);
+            const py = (screenY - this.viewOffsetY) / (this.viewScale || 1);
             this.aimAtPoint(px, py);
         };
 
         this.canvas.addEventListener('mousedown', (e) => {
+            if (this.isAnyModalOpen()) return;
             isPointerDown = true;
             handlePointer(e);
         });
@@ -413,30 +428,41 @@ export class AsteroidleEngine {
         });
 
         this.canvas.addEventListener('touchstart', (e) => {
+            if (this.isAnyModalOpen()) return;
             isPointerDown = true;
             handlePointer(e);
             e.preventDefault();
         }, { passive: false });
 
         window.addEventListener('touchmove', (e) => {
-            if (isPointerDown) handlePointer(e);
+            if (isPointerDown) {
+                e.preventDefault();
+                handlePointer(e);
+            }
         }, { passive: false });
 
         window.addEventListener('touchend', () => {
             isPointerDown = false;
         });
 
-        // Continuous arrow key rotation matching game.js exactly (4.5 deg/frame)
+        // Continuous key rotation & hotkeys respecting custom Solo controls and open modals (AST-C7, AST-L2)
         window.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+            if (this.isAnyModalOpen()) return;
 
-            if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+            const leftKey = (this.controlsSolo && this.controlsSolo.rotateLeft) || 'ArrowLeft';
+            const rightKey = (this.controlsSolo && this.controlsSolo.rotateRight) || 'ArrowRight';
+            const fireKey = (this.controlsSolo && this.controlsSolo.fire) || 'Space';
+
+            if (e.code === leftKey || e.code === 'ArrowLeft' || e.code === 'KeyA') {
                 this.keys.left = true;
-            } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+            } else if (e.code === rightKey || e.code === 'ArrowRight' || e.code === 'KeyD') {
                 this.keys.right = true;
             } else if (e.code === 'KeyT') {
                 this.testFire();
-            } else if (e.code === 'Space') {
+            } else if (e.code === fireKey || e.code === 'Space') {
+                const banner = document.getElementById('round-result-banner');
+                if (banner && banner.classList.contains('visible')) return;
                 e.preventDefault();
                 if (this.state === 'AIMING' || this.state === 'PREVIEW') {
                     this.fireInterceptShot();
@@ -447,14 +473,16 @@ export class AsteroidleEngine {
         });
 
         window.addEventListener('keyup', (e) => {
-            if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+            const leftKey = (this.controlsSolo && this.controlsSolo.rotateLeft) || 'ArrowLeft';
+            const rightKey = (this.controlsSolo && this.controlsSolo.rotateRight) || 'ArrowRight';
+            if (e.code === leftKey || e.code === 'ArrowLeft' || e.code === 'KeyA') {
                 this.keys.left = false;
-            } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+            } else if (e.code === rightKey || e.code === 'ArrowRight' || e.code === 'KeyD') {
                 this.keys.right = false;
             }
         });
 
-        // Bind on-screen tactile buttons (identical to Spaceship Flight touch controls)
+        // Bind on-screen tactile buttons
         const btnLeft = document.getElementById('btnLeft');
         const btnRight = document.getElementById('btnRight');
         const btnFire = document.getElementById('btnFire');
@@ -501,15 +529,22 @@ export class AsteroidleEngine {
         }
 
         if (replayBtn) {
-            replayBtn.addEventListener('click', () => this.playClip());
+            replayBtn.addEventListener('click', () => {
+                replayBtn.blur();
+                this.playClip();
+            });
         }
 
         if (testFireBtn) {
-            testFireBtn.addEventListener('click', () => this.testFire());
+            testFireBtn.addEventListener('click', () => {
+                testFireBtn.blur();
+                this.testFire();
+            });
         }
 
         document.querySelectorAll('.finetune-pill').forEach(btn => {
             btn.addEventListener('click', () => {
+                btn.blur();
                 const step = parseFloat(btn.dataset.step || '0');
                 this.adjustAngle(step);
             });
@@ -518,13 +553,15 @@ export class AsteroidleEngine {
 
     updateAimUI() {
         if (!this.ship) return;
-        const deg = Math.round((this.ship.angle % 360 + 360) % 360);
+        const deg = ((this.ship.angle % 360) + 360) % 360;
         const degElem = document.getElementById('telemetry-angle-val');
-        if (degElem) degElem.textContent = `${deg}°`;
+        if (degElem) {
+            degElem.textContent = `${deg.toFixed(1)}°`;
+        }
     }
 
     loop(timestamp) {
-        const dt = Math.min(0.05, (timestamp - this.lastTime) / 1000);
+        const dt = Math.min(0.05, Math.max(0.001, (timestamp - this.lastTime) / 1000));
         this.lastTime = timestamp;
 
         this.update(dt);
@@ -534,25 +571,29 @@ export class AsteroidleEngine {
     }
 
     update(dt) {
+        const dtSteps = dt * 60; // Normalized 60Hz frame steps (AST-M6)
+
         // Starfield gentle parallax update
         if (this.starfield && typeof this.starfield.update === 'function') {
-            this.starfield.update(0.25, 0);
+            this.starfield.update(0.25 * dtSteps, 0);
         }
 
         // Screen shake decay
         if (this.screenShake > 0) {
-            this.screenShake *= 0.9;
+            this.screenShake *= Math.pow(0.9, dtSteps);
             if (this.screenShake < 0.5) this.screenShake = 0;
         }
 
-        // Continuous keyboard rotation (using ship.rotateLeft / rotateRight from game.js)
+        // Continuous keyboard rotation scaled by dtSteps
         if (this.ship && (this.state === 'AIMING' || this.state === 'PREVIEW')) {
             if (this.keys.left) {
-                this.ship.rotateLeft();
+                this.ship.angle = (((this.ship.angle - 4.5 * dtSteps) % 360) + 360) % 360;
+                this.ship.rotation = this.ship.angle;
                 this.updateAimUI();
             }
             if (this.keys.right) {
-                this.ship.rotateRight();
+                this.ship.angle = (this.ship.angle + 4.5 * dtSteps) % 360;
+                this.ship.rotation = this.ship.angle;
                 this.updateAimUI();
             }
         }
@@ -566,67 +607,55 @@ export class AsteroidleEngine {
         for (let i = this.testBullets.length - 1; i >= 0; i--) {
             const b = this.testBullets[i];
             if (typeof b.update === 'function') {
-                b.update(this.width, this.height);
+                b.update(this.width, this.height, false, dtSteps);
             } else {
-                b.x += b.dx;
-                b.y += b.dy;
+                b.x += b.dx * dtSteps;
+                b.y += b.dy * dtSteps;
             }
-            if (b.hit || b.x < -20 || b.x > this.width + 20 || b.y < -20 || b.y > this.height + 20) {
+            if (b.hit || b.x < -40 || b.x > this.width + 40 || b.y < -40 || b.y > this.height + 40) {
                 this.testBullets.splice(i, 1);
             }
         }
 
-        // Clip preview playback
-        if (this.state === 'PREVIEW' && this.rock) {
-            this.clipFrame++;
-            this.rock.x += this.rock.dx;
-            this.rock.y += this.rock.dy;
-            this.rock.rotation += this.rock.rotSpeed;
-
+        // Time-parameterized clip preview playback: P_r(t) = P_{r,0} + v_r * clipFrame (AST-M6)
+        if (this.state === 'PREVIEW' && this.rock && this.rockInitialState) {
+            this.clipFrame += dtSteps;
             if (this.clipFrame >= this.clipDurationFrames) {
                 if (this.loopClip) {
-                    this.playClip();
+                    this.playClip(true);
                 } else {
                     this.stopClipAtEnd();
                 }
+                return;
             }
+            this.rock.x = this.rockInitialState.x + this.rockInitialState.dx * this.clipFrame;
+            this.rock.y = this.rockInitialState.y + this.rockInitialState.dy * this.clipFrame;
+            this.rock.rotation = this.rockInitialState.rotation + this.rockInitialState.rotSpeed * this.clipFrame;
             return;
         }
 
-        // Intercept shot execution
+        // Intercept shot execution with continuous relative-frame swept collision & off-screen CPA tracking (AST-C1, AST-M6)
         if (this.state === 'FIRING' && this.interceptBullet && this.rock) {
             const b = this.interceptBullet;
+            this.firingElapsedFrames += dtSteps;
+
+            // Advance bullet with ignoreBounds = true so off-screen intercepts are never prematurely culled!
             if (typeof b.update === 'function') {
-                b.update(this.width, this.height);
+                b.update(this.width, this.height, true, dtSteps);
             } else {
-                b.x += b.dx;
-                b.y += b.dy;
+                b.x += b.dx * dtSteps;
+                b.y += b.dy * dtSteps;
             }
 
-            // Move rock forward in lockstep
-            this.rock.x += this.rock.dx;
-            this.rock.y += this.rock.dy;
-            this.rock.rotation += this.rock.rotSpeed;
+            // Advance rock in lockstep
+            this.rock.x += this.rock.dx * dtSteps;
+            this.rock.y += this.rock.dy * dtSteps;
+            this.rock.rotation += this.rock.rotSpeed * dtSteps;
 
-            // Collision check using authentic rock.containsBullet from game.js
-            let hit = false;
-            if (typeof this.rock.containsBullet === 'function') {
-                hit = this.rock.containsBullet(b);
-            } else {
-                const d = Math.hypot(b.x - this.rock.x, b.y - this.rock.y);
-                hit = d <= this.rock.radius;
-            }
-
-            // Exact continuous surface distance calculation to polygon edge segments
+            // Continuous relative-frame swept surface distance & collision check from game.js
             let surfaceDist;
-            const pts = typeof this.rock.getTransformedPoints === 'function' ? this.rock.getTransformedPoints() : null;
-            if (pts && typeof this.rock.distToSegmentSquared === 'function') {
-                let minEdgeDistSq = Infinity;
-                for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-                    const dSq = this.rock.distToSegmentSquared(b.x, b.y, pts[j].x, pts[j].y, pts[i].x, pts[i].y);
-                    if (dSq < minEdgeDistSq) minEdgeDistSq = dSq;
-                }
-                surfaceDist = Math.sqrt(minEdgeDistSq);
+            if (typeof this.rock.getSweptSurfaceDistance === 'function') {
+                surfaceDist = this.rock.getSweptSurfaceDistance(b, dtSteps);
             } else {
                 surfaceDist = Math.max(0, Math.hypot(b.x - this.rock.x, b.y - this.rock.y) - this.rock.radius);
             }
@@ -637,17 +666,27 @@ export class AsteroidleEngine {
                 this.closestDistance = centerDist;
             }
 
+            const hit = (surfaceDist <= 0) || (typeof this.rock.containsBullet === 'function' && this.rock.containsBullet(b, dtSteps));
             if (hit) {
                 this.directHit = true;
                 this.minSurfaceDistance = 0;
                 this.screenShake = 18;
+                this.lastImpactPos = { x: b.x, y: b.y };
                 this.resolveRound(true);
                 return;
             }
 
-            // Check if bullet exited arena
-            const margin = 50;
-            if (b.hit || b.x < -margin || b.x > this.width + margin || b.y < -margin || b.y > this.height + margin) {
+            // Evaluate closed-form relative-frame Closest Point of Approach (t_CPA, d_CPA)
+            // Keep tracking even off-screen while t_CPA > 0 (bullet and rock are still converging)
+            const cpa = this.core.computeCPA
+                ? this.core.computeCPA(b.x, b.y, b.dx, b.dy, this.rock.x, this.rock.y, this.rock.dx, this.rock.dy)
+                : { tCPA: 0, dCPA: centerDist };
+
+            const margin = 80;
+            const isBulletOffScreen = (b.x < -margin || b.x > this.width + margin || b.y < -margin || b.y > this.height + margin);
+            const hasPassedCPA = (cpa.tCPA <= 0);
+
+            if ((hasPassedCPA && isBulletOffScreen) || this.firingElapsedFrames >= 240) {
                 this.resolveRound(false);
             }
         }
@@ -666,44 +705,73 @@ export class AsteroidleEngine {
                 this.soundFx.playExplosion(false);
             }
             if (this.particles && typeof this.particles.addExplosion === 'function') {
-                this.particles.addExplosion(this.interceptBullet.x, this.interceptBullet.y, '#facc15', 35);
+                const ix = Math.max(24, Math.min(this.width - 24, this.interceptBullet.x));
+                const iy = Math.max(24, Math.min(this.height - 24, this.interceptBullet.y));
+                this.particles.addExplosion(ix, iy, '#facc15', 35);
             }
+            const wasOffScreen = (
+                this.interceptBullet.x < 0 || this.interceptBullet.x > this.width ||
+                this.interceptBullet.y < 0 || this.interceptBullet.y > this.height
+            );
             this.resultTelemetry = {
                 score: 100,
                 isHit: true,
                 message: "🎯 DIRECT HIT! (100 PTS)",
-                subtext: "Perfect ballistic lead solution."
+                subtext: wasOffScreen
+                    ? "Bullseye! Confirmed long-range off-screen ballistic intercept."
+                    : "Perfect ballistic lead solution."
             };
         } else {
-            // Screen-agnostic proximity scoring:
-            // Normalize by sizeFactor (baseDimension / 1000) so physics and scoring are mathematically identical across all screen resolutions
-            const baseDimension = Math.min(this.width, Math.max(450, this.height * 1.6)) || 800;
+            // Canonical 1600x900 proximity scoring (identical across all devices)
+            const baseDimension = Math.min(CANONICAL_W, Math.max(450, CANONICAL_H * 1.6));
             const sizeFactor = Math.max(0.2, baseDimension / 1000);
 
-            // Baseline forgiveness cushion in normalized reference units (95 units * sizeFactor or 2.6x rock radius)
             const threshold = Math.max(95 * sizeFactor, R * 2.6);
             const missDist = Math.max(0, this.minSurfaceDistance);
 
             if (missDist <= threshold) {
-                // Smooth power curve: close grazes score 75-95 pts; distant misses decay smoothly to 0
                 const ratio = missDist / threshold;
                 score = Math.max(0, Math.round(100 * Math.pow(1 - ratio, 1.35)));
             } else {
                 score = 0;
             }
 
-            const optimalRad = Math.atan2(this.rock.y - this.ship.y, this.rock.x - this.ship.x);
-            const optimalDeg = ((optimalRad * 180 / Math.PI) + 90 + 360) % 360;
-            let angleDiff = Math.abs(this.ship.angle - optimalDeg);
-            if (angleDiff > 180) angleDiff = 360 - angleDiff;
+            // Closed-form quadratic ballistic intercept solution from muzzle at t = 1.0s (AST-C2)
+            const muzzleOffset = (this.ship.height || 52) * 0.55;
+            const endState = this.rockClipEndState || this.rock;
+            const sol = (this.core.solveBallisticIntercept && endState)
+                ? this.core.solveBallisticIntercept(
+                    this.ship.x,
+                    this.ship.y,
+                    0,
+                    0,
+                    endState.x,
+                    endState.y,
+                    endState.dx,
+                    endState.dy,
+                    this.currentBulletSpeed || 14.0,
+                    muzzleOffset
+                )
+                : null;
 
-            // Screen-agnostic distance in meters (10 reference units = 1 meter)
+            let optimalDeg;
+            if (sol && typeof sol.headingDeg === 'number') {
+                optimalDeg = sol.headingDeg;
+            } else {
+                const optimalRad = Math.atan2(this.rock.y - this.ship.y, this.rock.x - this.ship.x);
+                optimalDeg = ((optimalRad * 180 / Math.PI) + 90 + 360) % 360;
+            }
+
+            const signedDiff = ((this.ship.angle - optimalDeg + 540) % 360) - 180;
+            const angleDiff = Math.abs(signedDiff);
+            const dirHint = angleDiff >= 0.1 ? (signedDiff > 0 ? ' CW' : ' CCW') : '';
+
             const missMeters = Math.max(0.1, (missDist / sizeFactor / 10)).toFixed(1);
             this.resultTelemetry = {
                 score,
                 isHit: false,
                 message: score >= 75 ? "⚡ GRAZING NEAR-MISS!" : score >= 40 ? "⚠️ CLOSE SHAVE" : score > 0 ? "⚠️ NEAR MISS" : "❌ BALLISTIC DEFLECTION",
-                subtext: `Missed surface by ${missMeters}m (Angle error: ~${angleDiff.toFixed(1)}°)`
+                subtext: `Missed surface by ${missMeters}m (True lead: ${optimalDeg.toFixed(1)}° | Error: ${angleDiff.toFixed(1)}°${dirHint})`
             };
         }
 
@@ -715,10 +783,20 @@ export class AsteroidleEngine {
 
     render() {
         const ctx = this.ctx;
-        const W = this.width;
-        const H = this.height;
+        const screenW = this.canvas.width;
+        const screenH = this.canvas.height;
+        const dpr = this.canvas._dpr || 1;
 
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.save();
+
+        // Fill outer letterbox/pillarbox backdrop
+        ctx.fillStyle = '#030712';
+        ctx.fillRect(0, 0, screenW, screenH);
+
+        // Apply uniform aspect-fit transform for the canonical 1600x900 arena
+        ctx.translate(this.viewOffsetX, this.viewOffsetY);
+        ctx.scale(this.viewScale, this.viewScale);
 
         // Screen shake effect on impact
         if (this.screenShake > 0) {
@@ -729,16 +807,19 @@ export class AsteroidleEngine {
 
         // 1. Authentic deep space starfield from game.js
         if (this.starfield && typeof this.starfield.draw === 'function') {
-            this.starfield.draw(ctx);
+            this.starfield.draw(ctx, this.showStars);
         } else {
             ctx.fillStyle = '#030712';
-            ctx.fillRect(0, 0, W, H);
+            ctx.fillRect(0, 0, this.width, this.height);
         }
 
-        // 2. Asteroid (using authentic rock.draw from game.js)
+        // 2. Asteroid (using authentic rock.draw from game.js) + off-screen reticle if outside bounds
         if (this.rock && !this.rock.popped) {
             if (typeof this.rock.draw === 'function') {
                 this.rock.draw(ctx);
+            }
+            if (this.rock.x < 0 || this.rock.x > this.width || this.rock.y < 0 || this.rock.y > this.height) {
+                this.renderOffScreenIndicator(ctx, this.rock.x, this.rock.y, '#38bdf8', 'ASTEROID');
             }
         }
 
@@ -761,16 +842,48 @@ export class AsteroidleEngine {
             }
         }
 
-        // 6. Authentic Spaceship sprite from game.js (exact proportions!)
+        // 6. Authentic Spaceship sprite from game.js
         if (this.ship && typeof this.ship.draw === 'function') {
             this.ship.draw(ctx);
         }
 
         // 7. Clip reconnaissance progress bar
         if (this.state === 'PREVIEW') {
-            this.renderClipOverlay(ctx, W, H);
+            this.renderClipOverlay(ctx, this.width, this.height);
         }
 
+        ctx.restore();
+    }
+
+    renderOffScreenIndicator(ctx, targetX, targetY, color, label) {
+        const margin = 36;
+        const cx = Math.max(margin, Math.min(this.width - margin, targetX));
+        const cy = Math.max(margin, Math.min(this.height - margin, targetY));
+        const angle = Math.atan2(targetY - cy, targetX - cx);
+        const distMeters = Math.round(Math.hypot(targetX - cx, targetY - cy) / 10);
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
+
+        ctx.strokeStyle = color;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(14, 0);
+        ctx.lineTo(-10, -9);
+        ctx.lineTo(-6, 0);
+        ctx.lineTo(-10, 9);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.save();
+        ctx.font = '700 11px "Share Tech Mono", monospace';
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${label} (+${distMeters}m)`, cx, cy + (cy > this.height * 0.5 ? -16 : 22));
         ctx.restore();
     }
 

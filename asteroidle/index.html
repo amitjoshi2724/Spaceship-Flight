@@ -68,11 +68,11 @@
             <span class="mode-icon">🎯</span> Practice
           </button>
         </div>
-        <button id="archive-modal-btn" class="hud-btn" title="Daily Archive (Past 30 Days)">📅</button>
-        <button id="stats-modal-btn" class="hud-btn" title="Statistics & Share Score">📊</button>
-        <button id="help-modal-btn" class="hud-btn" title="How to Play">❓</button>
-        <button id="settingsBtn" class="hud-btn" title="Game Settings">⚙️</button>
-        <button id="soundToggleBtn" class="hud-btn sound-btn" title="Toggle Sound">🔇</button>
+        <button id="archive-modal-btn" class="hud-btn" tabindex="-1" title="Mission Calendar Archive">📅</button>
+        <button id="stats-modal-btn" class="hud-btn" tabindex="-1" title="Statistics & Share Score">📊</button>
+        <button id="help-modal-btn" class="hud-btn" tabindex="-1" title="How to Play">❓</button>
+        <button id="settingsBtn" class="hud-btn" tabindex="-1" title="Game Settings">⚙️</button>
+        <button id="soundToggleBtn" class="hud-btn sound-btn" tabindex="-1" title="Toggle Sound">🔇</button>
         <div id="auth-container" class="auth-pill-container"></div>
       </div>
     </header>
@@ -82,20 +82,20 @@
       <!-- Left: Fine-tune steppers and < > loop turn buttons -->
       <div class="touch-group-left">
         <div class="finetune-row">
-          <button class="finetune-pill" data-step="-5">-5°</button>
-          <button class="finetune-pill" data-step="-1">-1°</button>
-          <button class="finetune-pill" data-step="+1">+1°</button>
-          <button class="finetune-pill" data-step="+5">+5°</button>
+          <button class="finetune-pill" tabindex="-1" data-step="-5">-5°</button>
+          <button class="finetune-pill" tabindex="-1" data-step="-1">-1°</button>
+          <button class="finetune-pill" tabindex="-1" data-step="+1">+1°</button>
+          <button class="finetune-pill" tabindex="-1" data-step="+5">+5°</button>
         </div>
         <div class="touch-rot-row">
-          <button id="btnLeft" class="ctrl-btn loop-btn" aria-label="Rotate Counter-Clockwise">
+          <button id="btnLeft" class="ctrl-btn loop-btn" tabindex="-1" aria-label="Rotate Counter-Clockwise">
             <svg viewBox="0 0 40 40" class="loop-arrow-svg">
               <path d="M 20 5 A 15 15 0 1 0 35 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
               <polygon points="17,1 25,5 19,10" fill="currentColor" />
               <text x="20" y="25" text-anchor="middle" font-family="'Orbitron', monospace" font-size="14" font-weight="900" fill="currentColor">&lt;</text>
             </svg>
           </button>
-          <button id="btnRight" class="ctrl-btn loop-btn" aria-label="Rotate Clockwise">
+          <button id="btnRight" class="ctrl-btn loop-btn" tabindex="-1" aria-label="Rotate Clockwise">
             <svg viewBox="0 0 40 40" class="loop-arrow-svg">
               <path d="M 20 5 A 15 15 0 1 1 5 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
               <polygon points="23,1 15,5 21,10" fill="currentColor" />
@@ -109,14 +109,14 @@
       <div class="touch-group-center">
         <div class="telemetry-badge-pill">
           <span class="badge-sublabel">HEADING</span>
-          <span id="telemetry-angle-val" class="angle-readout">0°</span>
+          <span id="telemetry-angle-val" class="angle-readout">0.0°</span>
         </div>
         <div class="action-pills-row">
-          <button id="replay-btn" class="ctrl-pill" title="Replay 1-second clip [R]">
+          <button id="replay-btn" class="ctrl-pill" tabindex="-1" title="Replay 1-second clip [R]">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
             <span>REPLAY [R]</span>
           </button>
-          <button id="test-fire-btn" class="ctrl-pill" title="Test Fire Tracer Bullet [T]">
+          <button id="test-fire-btn" class="ctrl-pill" tabindex="-1" title="Test Fire Tracer Bullet [T]">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
             <span>TRACER [T]</span>
           </button>
@@ -125,7 +125,7 @@
 
       <!-- Right: Authentic Circular Arcade Fire Button from Spaceship Flight -->
       <div class="touch-group-right">
-        <button id="btnFire" class="ctrl-btn action-btn fire-btn" aria-label="Fire Cannon">
+        <button id="btnFire" class="ctrl-btn action-btn fire-btn" tabindex="-1" aria-label="Fire Cannon">
           <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
             <circle cx="12" cy="12" r="4" />
             <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
@@ -148,70 +148,210 @@
       </div>
     </div>
 
-    <!-- Settings Modal (Identical to Spaceship Flight Settings) -->
+    <!-- Settings Modal (Unified Modern Glassmorphic Settings Studio from Spaceship Flight) -->
     <div id="settingsModal" class="overlay">
-      <div class="modal-card glass-panel">
+      <div class="modal-card glass-panel settings-card">
         <h2 class="modal-title">SETTINGS</h2>
 
-        <div class="setting-group">
-          <label class="setting-label">SELECT SPACESHIP</label>
-          <div class="ship-selector">
-            <button id="selectRedShip" class="ship-option active" data-ship="red">
-              <img src="../images/newspaceship.png" alt="Red & White Spaceship">
-              <span>Classic Crimson Red</span>
-            </button>
-            <button id="selectBlueShip" class="ship-option" data-ship="blue">
-              <img src="../images/bluenewspaceship.png" alt="Blue Spaceship">
-              <span>Cobalt Blue</span>
-            </button>
+        <!-- Settings Tabs Navigation -->
+        <div class="settings-tabs-nav">
+          <button type="button" class="settings-tab-btn active" data-tab="general">⚙️ GENERAL</button>
+          <button type="button" class="settings-tab-btn" data-tab="solo">👤 1-PLAYER CONTROLS</button>
+        </div>
+
+        <!-- Tab 1: General Gameplay & Audio Settings -->
+        <div id="settingsPaneGeneral" class="settings-tab-pane active">
+          <div class="setting-group ship-color-studio-group">
+            <div class="color-studio-header">
+              <label class="setting-label">HULL COLOR &amp; CUSTOMIZATION</label>
+              <span class="color-studio-subtext">Choose iconic original ships, custom presets, or pick any hex color</span>
+            </div>
+
+            <!-- Original Fleet (OG) Visual Ship Selector -->
+            <div class="og-fleet-section">
+              <div class="og-fleet-label">ORIGINAL FLEET (OG)</div>
+              <div class="ship-selector">
+                <button type="button" id="selectRedShip" class="ship-option active" data-ship="red" data-color="#850101">
+                  <img src="../images/newspaceship.png" alt="Classic Crimson Spaceship">
+                  <div class="ship-option-info">
+                    <span class="ship-option-name">Classic Crimson (OG)</span>
+                    <span class="ship-option-badge">SOLO DEFAULT</span>
+                  </div>
+                </button>
+                <button type="button" id="selectBlueShip" class="ship-option" data-ship="blue" data-color="#0211d0">
+                  <img src="../images/bluenewspaceship.png" alt="Cobalt Blue Spaceship">
+                  <div class="ship-option-info">
+                    <span class="ship-option-name">Cobalt Blue (OG)</span>
+                    <span class="ship-option-badge">FLEET VARIANT</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Custom Presets Grid -->
+            <div class="custom-palette-section">
+              <div class="custom-palette-label">CUSTOM FLEET PALETTE</div>
+              <div class="color-presets-grid" id="colorPresetsGrid">
+                <button type="button" class="color-preset-chip active" data-color="#850101" data-name="Classic Crimson (OG)" title="Classic Crimson Red (OG - Original 2016)">
+                  <span class="preset-swatch" style="background: #850101;"></span>
+                  <span class="preset-name">Crimson (OG)</span>
+                </button>
+                <button type="button" class="color-preset-chip" data-color="#0211d0" data-name="Cobalt Blue (OG)" title="Cobalt Blue (Original 2016 2-Player)">
+                  <span class="preset-swatch" style="background: #0211d0;"></span>
+                  <span class="preset-name">Cobalt (OG)</span>
+                </button>
+                <button type="button" class="color-preset-chip" data-color="#00f0ff" data-name="Electric Cyan" title="Electric Cyan (High Visibility)">
+                  <span class="preset-swatch" style="background: #00f0ff; box-shadow: 0 0 6px #00f0ff;"></span>
+                  <span class="preset-name">Cyan ★</span>
+                </button>
+                <button type="button" class="color-preset-chip" data-color="#10b981" data-name="Neon Emerald" title="Neon Emerald Green">
+                  <span class="preset-swatch" style="background: #10b981;"></span>
+                  <span class="preset-name">Emerald</span>
+                </button>
+                <button type="button" class="color-preset-chip" data-color="#facc15" data-name="Solar Gold" title="Solar Gold">
+                  <span class="preset-swatch" style="background: #facc15;"></span>
+                  <span class="preset-name">Gold</span>
+                </button>
+                <button type="button" class="color-preset-chip" data-color="#a855f7" data-name="Plasma Purple" title="Plasma Purple">
+                  <span class="preset-swatch" style="background: #a855f7;"></span>
+                  <span class="preset-name">Purple</span>
+                </button>
+                <button type="button" class="color-preset-chip" data-color="#ec4899" data-name="Hot Magenta" title="Hot Magenta Pink">
+                  <span class="preset-swatch" style="background: #ec4899;"></span>
+                  <span class="preset-name">Magenta</span>
+                </button>
+                <button type="button" class="color-preset-chip" data-color="#ffffff" data-name="Starlight White" title="Starlight White">
+                  <span class="preset-swatch" style="background: #ffffff;"></span>
+                  <span class="preset-name">White</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Custom Color Picker + Live Preview Bar -->
+            <div class="custom-color-bar">
+              <div class="custom-color-control">
+                <label for="shipColorPicker" class="custom-color-label">
+                  <span class="color-wheel-icon">🎨</span>
+                  <span>CUSTOM COLOR:</span>
+                </label>
+                <div class="color-input-wrapper">
+                  <input type="color" id="shipColorPicker" value="#850101" class="custom-color-picker-input" title="Choose any custom color">
+                  <span id="shipColorHexDisplay" class="color-hex-tag">#850101</span>
+                </div>
+              </div>
+
+              <div class="color-preview-card">
+                <div class="color-preview-ship-wrap">
+                  <img id="settingsShipPreviewImg" src="../images/newspaceship.png" alt="Ship Preview" class="color-preview-img">
+                </div>
+                <div class="color-preview-details">
+                  <span id="colorPreviewRoleLabel" class="color-preview-role">SOLO / P1 HULL</span>
+                  <span id="colorPreviewNameDisplay" class="color-preview-title">Classic Crimson (OG)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Match Laser to Ship Color Toggle -->
+            <div class="toggle-row match-laser-toggle-row">
+              <div class="toggle-label-wrap">
+                <label for="settingMatchLaserColor" class="setting-label">MATCH LASERS TO SHIP COLOR</label>
+                <span class="setting-subtext">When OFF (default), fires classic yellow lasers. When ON, lasers match hull color.</span>
+              </div>
+              <input type="checkbox" id="settingMatchLaserColor" class="custom-toggle">
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="slider-header">
+              <label for="settingShipSize" class="setting-label">SPACESHIP SIZE</label>
+              <span id="shipSizeVal" class="setting-value">100%</span>
+            </div>
+            <input type="range" id="settingShipSize" min="70" max="130" value="100" step="5" class="custom-slider">
+            <div class="slider-labels">
+              <span>Compact (70%)</span>
+              <span>Standard (100%)</span>
+              <span>Enlarged (130%)</span>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="toggle-row">
+              <label for="settingStars" class="setting-label">BACKGROUND STARS</label>
+              <input type="checkbox" id="settingStars" checked class="custom-toggle">
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="toggle-row">
+              <label for="settingSound" class="setting-label">SOUND EFFECTS</label>
+              <input type="checkbox" id="settingSound" class="custom-toggle">
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="toggle-row">
+              <label for="settingTouchControls" class="setting-label">ON-SCREEN BUTTONS</label>
+              <select id="settingTouchControls" class="custom-select">
+                <option value="auto">Auto (Touch Devices)</option>
+                <option value="always">Always Show</option>
+                <option value="hidden">Hide</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="setting-group" id="btnSizeSettingGroup">
+            <div class="slider-header">
+              <label for="settingBtnSize" class="setting-label">BUTTON SIZE</label>
+              <span id="btnSizeVal" class="setting-value">72px</span>
+            </div>
+            <input type="range" id="settingBtnSize" min="54" max="96" value="72" step="2" class="custom-slider">
+            <div class="slider-labels">
+              <span>Compact (54px)</span>
+              <span>Default (72px)</span>
+              <span>Large (96px)</span>
+            </div>
           </div>
         </div>
 
-        <div class="setting-group">
-          <div class="slider-header">
-            <label for="settingShipSize" class="setting-label">SPACESHIP SIZE</label>
-            <span id="shipSizeVal" class="setting-value">100%</span>
+        <!-- Tab 2: 1-Player Solo Controls Mapping (Shared with Spaceship Flight) -->
+        <div id="settingsPaneSolo" class="settings-tab-pane">
+          <div class="controls-toolbar">
+            <div class="preset-select-wrapper">
+              <label class="setting-label">PRESET LAYOUT</label>
+              <select id="presetSoloSelect" class="custom-select preset-dropdown">
+                <option value="arrows">Classic Arcade (Arrows + Space)</option>
+                <option value="wasd">WASD Gamer (WASD + Space)</option>
+                <option value="okl">Right-Hand Pilot (OKL; + M)</option>
+                <option value="ijkl">IJKL Pilot (IJKL + Space)</option>
+                <option value="custom">Custom Configuration</option>
+              </select>
+            </div>
+            <button type="button" id="resetSoloControlsBtn" class="reset-controls-btn" title="Reset 1-Player controls to default">↺ RESET TO DEFAULT</button>
           </div>
-          <input type="range" id="settingShipSize" min="70" max="130" value="100" step="5" class="custom-slider">
-          <div class="slider-labels">
-            <span>Compact (70%)</span>
-            <span>Standard (100%)</span>
-            <span>Enlarged (130%)</span>
+
+          <p class="controls-hint-text">Click any key slot below, then press any key on your keyboard to rebind. Shared across Spaceship Flight &amp; Asteroidle.</p>
+
+          <div class="key-binder-grid solo-binder-grid">
+            <div class="key-binder-row">
+              <span class="binder-action-label">Rotate Left</span>
+              <button type="button" class="keycap-btn" data-player="solo" data-action="rotateLeft" data-code="ArrowLeft">←</button>
+            </div>
+            <div class="key-binder-row">
+              <span class="binder-action-label">Rotate Right</span>
+              <button type="button" class="keycap-btn" data-player="solo" data-action="rotateRight" data-code="ArrowRight">→</button>
+            </div>
+            <div class="key-binder-row">
+              <span class="binder-action-label">Fire Plasma Cannon</span>
+              <button type="button" class="keycap-btn" data-player="solo" data-action="fire" data-code="Space">SPACE</button>
+            </div>
+          </div>
+
+          <div id="soloConflictBanner" class="controls-conflict-banner hidden">
+            ⚠️ Some actions share the same key! Please assign unique keys.
           </div>
         </div>
 
-        <div class="setting-group">
-          <div class="toggle-row">
-            <label for="settingSound" class="setting-label">SOUND EFFECTS</label>
-            <input type="checkbox" id="settingSound" class="custom-toggle">
-          </div>
-        </div>
-
-        <div class="setting-group">
-          <div class="toggle-row">
-            <label for="settingTouchControls" class="setting-label">ON-SCREEN BUTTONS</label>
-            <select id="settingTouchControls" class="custom-select">
-              <option value="auto">Auto (Touch Devices)</option>
-              <option value="always">Always Show</option>
-              <option value="hidden">Hide</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="setting-group" id="btnSizeSettingGroup">
-          <div class="slider-header">
-            <label for="settingBtnSize" class="setting-label">BUTTON SIZE</label>
-            <span id="btnSizeVal" class="setting-value">72px</span>
-          </div>
-          <input type="range" id="settingBtnSize" min="54" max="96" value="72" step="2" class="custom-slider">
-          <div class="slider-labels">
-            <span>Compact (54px)</span>
-            <span>Default (72px)</span>
-            <span>Large (96px)</span>
-          </div>
-        </div>
-
-        <button id="closeSettingsBtn" class="menu-btn primary-btn">DONE</button>
+        <button id="closeSettingsBtn" class="menu-btn primary-btn" style="margin-top: 18px;">DONE</button>
       </div>
     </div>
 
@@ -337,11 +477,14 @@
             </div>
           </div>
 
-          <!-- Share Button & Toast -->
+          <!-- Share & Replay Actions Row -->
           <div class="share-actions-row">
             <button id="share-score-btn" class="menu-btn primary-btn share-btn">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 6px;"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92c0-1.61-1.31-2.92-2.92-2.92z"/></svg>
               SHARE MISSION INTEL
+            </button>
+            <button id="reset-puzzle-btn" class="menu-btn secondary-btn reset-puzzle-btn" title="Reset and genuinely replay this mission from Round 1">
+              ↺ RESET PUZZLE
             </button>
           </div>
           <div id="share-toast" class="share-toast hidden">Mission Intel Copied to Clipboard!</div>

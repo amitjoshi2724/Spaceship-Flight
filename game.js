@@ -19,6 +19,28 @@
       this.thrustOsc = null;
       this.thrustGain = null;
       this.isThrustingSound = false;
+      this._boundLifecycle = false;
+      this._bindAudioLifecycle();
+    }
+
+    _bindAudioLifecycle() {
+      if (this._boundLifecycle || typeof window === 'undefined') return;
+      this._boundLifecycle = true;
+      const unlock = () => {
+        if (this.enabled) {
+          this.init();
+          this.resume();
+        }
+      };
+      window.addEventListener('pointerdown', unlock, { passive: true });
+      window.addEventListener('keydown', unlock, { passive: true });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && this.enabled) {
+          this.resume();
+        } else if (document.visibilityState === 'hidden') {
+          this.stopThrust(true);
+        }
+      });
     }
 
     init() {
@@ -34,8 +56,8 @@
     }
 
     resume() {
-      if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume();
+      if (this.ctx && (this.ctx.state === 'suspended' || this.ctx.state === 'interrupted')) {
+        this.ctx.resume().catch(() => {});
       }
     }
 
@@ -513,6 +535,7 @@
       this.canvas = canvas;
       this.particles = [];
       this.customReferenceDimension = null;
+      this.suppress = false;
     }
 
     getScreenScale() {
@@ -526,6 +549,7 @@
     }
 
     addExhaust(x, y, angle, shipDx = 0, shipDy = 0) {
+      if (this.suppress) return;
       const scale = this.getScreenScale();
       const rad = ((angle + 90) * Math.PI) / 180;
       const spread = (Math.random() - 0.5) * 0.5;
@@ -544,6 +568,7 @@
     }
 
     addExplosion(x, y, color = '#facc15', count = 22, blastRadius = null) {
+      if (this.suppress) return;
       const scale = this.getScreenScale();
       const speedScale = blastRadius ? Math.min(scale, Math.max(0.2, (blastRadius / 25) * scale)) : scale;
       const baseCount = Math.max(8, Math.round(count * Math.min(1.0, scale + 0.25)));
@@ -595,7 +620,7 @@
   }
 
   // ============================================================================
-  // RESPONSIVE SCREEN METRIC HELPER
+  // RESPONSIVE SCREEN METRIC, HIGH-DPI CANVAS & CLOSED-FORM KINEMATICS HELPERS
   // Dynamically scales physical and visual dimensions across phones, tablets, and 4K displays
   // ============================================================================
   function getScreenScale(canvas) {
@@ -603,6 +628,203 @@
     const baseDimension = Math.min(canvas.width, Math.max(450, canvas.height * 1.6));
     return Math.max(0.6, Math.min(2.0, baseDimension / 1000));
   }
+
+  const nativeCanvasWidthDesc = typeof HTMLCanvasElement !== 'undefined'
+    ? Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'width')
+    : null;
+  const nativeCanvasHeightDesc = typeof HTMLCanvasElement !== 'undefined'
+    ? Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'height')
+    : null;
+
+  function setCanvasLogicalSize(canvas, ctx, logicalW, logicalH) {
+    if (!canvas) return 1;
+    const w = Math.max(1, Math.floor(logicalW));
+    const h = Math.max(1, Math.floor(logicalH));
+    const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
+    canvas._logicalWidth = w;
+    canvas._logicalHeight = h;
+    canvas._dpr = dpr;
+
+    if (!canvas._hiDpiHooked && nativeCanvasWidthDesc && nativeCanvasHeightDesc) {
+      canvas._hiDpiHooked = true;
+      Object.defineProperty(canvas, 'width', {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return this._logicalWidth !== undefined ? this._logicalWidth : nativeCanvasWidthDesc.get.call(this);
+        },
+        set(val) {
+          const lw = Math.max(1, Math.floor(val));
+          const curDpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
+          this._logicalWidth = lw;
+          this._dpr = curDpr;
+          nativeCanvasWidthDesc.set.call(this, Math.round(lw * curDpr));
+        }
+      });
+      Object.defineProperty(canvas, 'height', {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return this._logicalHeight !== undefined ? this._logicalHeight : nativeCanvasHeightDesc.get.call(this);
+        },
+        set(val) {
+          const lh = Math.max(1, Math.floor(val));
+          const curDpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2.5);
+          this._logicalHeight = lh;
+          this._dpr = curDpr;
+          nativeCanvasHeightDesc.set.call(this, Math.round(lh * curDpr));
+        }
+      });
+    }
+
+    if (nativeCanvasWidthDesc && nativeCanvasHeightDesc) {
+      nativeCanvasWidthDesc.set.call(canvas, Math.round(w * dpr));
+      nativeCanvasHeightDesc.set.call(canvas, Math.round(h * dpr));
+    } else {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+
+    if (ctx) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    return dpr;
+  }
+
+  // Shortest squared Euclidean distance from point (px, py) to segment (x1, y1) -> (x2, y2)
+  function pointToSegmentDistSq(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const l2 = dx * dx + dy * dy;
+    if (l2 === 0) return (px - x1) ** 2 + (py - y1) ** 2;
+    const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / l2));
+    const projX = x1 + t * dx;
+    const projY = y1 + t * dy;
+    return (px - projX) ** 2 + (py - projY) ** 2;
+  }
+
+  // Exact 2D Line Segment vs Line Segment Intersection
+  function segmentsIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+    const d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (Math.abs(d) < 1e-9) return false;
+    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / d;
+    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / d;
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+  }
+
+  // Exact Continuous Segment-to-Segment Squared Distance
+  function segToSegDistSq(ax, ay, bx, by, cx, cy, dx, dy) {
+    if (segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy)) return 0;
+    return Math.min(
+      pointToSegmentDistSq(ax, ay, cx, cy, dx, dy),
+      pointToSegmentDistSq(bx, by, cx, cy, dx, dy),
+      pointToSegmentDistSq(cx, cy, ax, ay, bx, by),
+      pointToSegmentDistSq(dx, dy, ax, ay, bx, by)
+    );
+  }
+
+  // Analytical Closest Point of Approach (t_CPA, d_CPA) for r(t) = r0 + v_rel * t
+  function computeCPA(rx, ry, rvx, rvy) {
+    const vRelSq = rvx * rvx + rvy * rvy;
+    const rDotV = rx * rvx + ry * rvy;
+    const tCPA = vRelSq > 1e-8 ? Math.max(0, -rDotV / vRelSq) : 0;
+    const cpaX = rx + rvx * tCPA;
+    const cpaY = ry + rvy * tCPA;
+    const dCPA = Math.hypot(cpaX, cpaY);
+    return {
+      tCPA,
+      dCPA,
+      cpaX,
+      cpaY,
+      isReceding: rDotV > 0,
+      vRelSq,
+      vRelMag: Math.sqrt(vRelSq)
+    };
+  }
+
+  // Closed-Form Quadratic Ballistic Intercept Solver:
+  // Solves (||V_r||^2 - v_b^2) t^2 + 2(dP . V_r - d_nose * v_b) t + (||dP||^2 - d_nose^2) = 0
+  function solveBallisticIntercept(
+    originX,
+    originY,
+    targetX,
+    targetY,
+    targetVx,
+    targetVy,
+    bulletSpeed,
+    muzzleOffset = 0,
+    shooterVx = 0,
+    shooterVy = 0
+  ) {
+    const dPx = targetX - originX;
+    const dPy = targetY - originY;
+    const vRx = targetVx - shooterVx;
+    const vRy = targetVy - shooterVy;
+    const dist = Math.hypot(dPx, dPy);
+    const vB = Math.max(1e-4, bulletSpeed);
+    const dNose = Math.max(0, muzzleOffset);
+
+    const a = vRx * vRx + vRy * vRy - vB * vB;
+    const b = 2 * (dPx * vRx + dPy * vRy - dNose * vB);
+    const c = dPx * dPx + dPy * dPy - dNose * dNose;
+
+    let tStar = -1;
+    if (Math.abs(a) < 1e-7) {
+      if (Math.abs(b) > 1e-7) {
+        const tLin = -c / b;
+        if (tLin >= 0) tStar = tLin;
+      }
+    } else {
+      const disc = b * b - 4 * a * c;
+      if (disc >= 0) {
+        const sqrtD = Math.sqrt(disc);
+        const t1 = (-b - sqrtD) / (2 * a);
+        const t2 = (-b + sqrtD) / (2 * a);
+        if (t1 >= 0 && t2 >= 0) tStar = Math.min(t1, t2);
+        else if (t1 >= 0) tStar = t1;
+        else if (t2 >= 0) tStar = t2;
+      }
+    }
+
+    const hasExactIntercept = tStar >= 0;
+    if (!hasExactIntercept) {
+      tStar = Math.max(0, (dist - dNose) / vB);
+    }
+
+    const leadVecX = dPx + vRx * tStar;
+    const leadVecY = dPy + vRy * tStar;
+    const leadDist = Math.hypot(leadVecX, leadVecY) || 1;
+    const dirX = leadVecX / leadDist;
+    const dirY = leadVecY / leadDist;
+    const impactX = targetX + targetVx * tStar;
+    const impactY = targetY + targetVy * tStar;
+    const angleRad = Math.atan2(dirY, dirX);
+    const angleDeg = ((angleRad * 180) / Math.PI + 90 + 360) % 360;
+
+    return {
+      t: tStar,
+      hasExactIntercept,
+      impactX,
+      impactY,
+      leadVecX,
+      leadVecY,
+      leadDist,
+      dirX,
+      dirY,
+      angleRad,
+      angleDeg
+    };
+  }
+
+  const ROCK_SHAPES = [
+    { x: [0, 25, 15, -5, -8], y: [0, 5, 30, 25, 15] },
+    { x: [-18, 6, 26, 18, -8, -24], y: [-20, -26, -6, 22, 26, 6] },
+    { x: [0, 20, 28, 12, -10, -26, -16], y: [-28, -14, 8, 26, 22, 2, -18] },
+    { x: [-14, 10, 26, 20, 8, -14, -28, -20], y: [-24, -22, -4, 16, 28, 24, 6, -12] },
+    { x: [-10, 14, 30, 16, -14, -24], y: [-30, -26, 6, 28, 30, -6] }
+  ];
 
   // ============================================================================
   // BULLET CLASS
@@ -622,26 +844,30 @@
       this.collisionRadius = this.visualRadius; // Physical hitbox matches rendered plasma envelope
       this.radius = this.coreRadius;
       this.hit = false;
+      this.ignoreBounds = false;
 
       // In Android Bullet: angle is in degrees; moves along ship vector
       const rad = ((angle - 90) * Math.PI) / 180;
       const speed = 14 * Math.max(0.85, Math.min(1.25, sizeFactor));
+      this.speed = speed;
       this.dx = Math.cos(rad) * speed + shipDx * 0.25;
       this.dy = Math.sin(rad) * speed + shipDy * 0.25;
     }
 
-    update(canvasWidth, canvasHeight) {
-      this.x += this.dx;
-      this.y += this.dy;
+    update(canvasWidth, canvasHeight, ignoreBounds = false, dtSteps = 1) {
+      this.x += this.dx * dtSteps;
+      this.y += this.dy * dtSteps;
 
-      // Strict off-screen despawn to eliminate memory overhead
-      if (
-        this.x < -10 ||
-        this.x > canvasWidth + 10 ||
-        this.y < -10 ||
-        this.y > canvasHeight + 10
-      ) {
-        this.hit = true;
+      // Strict off-screen despawn to eliminate memory overhead (unless bypassed for off-screen intercept)
+      if (!ignoreBounds && !this.ignoreBounds) {
+        if (
+          this.x < -10 ||
+          this.x > canvasWidth + 10 ||
+          this.y < -10 ||
+          this.y > canvasHeight + 10
+        ) {
+          this.hit = true;
+        }
       }
     }
 
@@ -776,6 +1002,43 @@
       }
     }
 
+    configureFromChallenge(ch, arenaW, arenaH) {
+      const scale = getScreenScale({ width: arenaW, height: arenaH });
+      this.radius = 28 * ch.radiusScale * scale;
+      this.scale = this.radius / 25;
+      this.rotation = 0;
+      this.rotSpeed = ch.rotSpeed;
+      this.shapeIndex = ch.shapeIndex % ROCK_SHAPES.length;
+      const chosen = ROCK_SHAPES[this.shapeIndex];
+
+      let sumX = 0, sumY = 0;
+      for (let i = 0; i < chosen.x.length; i++) {
+        sumX += chosen.x[i];
+        sumY += chosen.y[i];
+      }
+      const avgX = sumX / chosen.x.length;
+      const avgY = sumY / chosen.y.length;
+
+      this.localPoints = [];
+      for (let i = 0; i < chosen.x.length; i++) {
+        this.localPoints.push({
+          x: (chosen.x[i] - avgX) * this.scale * 1.5,
+          y: (chosen.y[i] - avgY) * this.scale * 1.5
+        });
+      }
+
+      const speedMagnitude = (2.2 * ch.speed) * Math.max(0.85, Math.min(1.25, scale));
+      this.baseSpeedMagnitude = speedMagnitude;
+      this.startX = ch.startX * arenaW;
+      this.startY = ch.startY * arenaH;
+      this.x = this.startX;
+      this.y = this.startY;
+      this.dx = ch.vx * speedMagnitude;
+      this.dy = ch.vy * speedMagnitude;
+      this.popped = false;
+      return this;
+    }
+
     getTransformedPoints() {
       const cos = Math.cos(this.rotation);
       const sin = Math.sin(this.rotation);
@@ -893,65 +1156,57 @@
       return inside;
     }
 
-    // Mathematically exact Continuous Collision Detection (Swept Capsule vs Polygon):
-    // Returns true if bullet body touches the polygon, or if swept trajectory crossed/grazed it
-    containsBullet(bullet) {
-      // Physical hitbox radius queried directly from bullet object (matches rendered outer plasma)
+    // Continuous Relative-Frame Swept Surface Distance (Swept Capsule vs Moving Polygon):
+    // Returns 0 if the bullet's swept capsule in the rock's rest frame touches or penetrates the polygon,
+    // or the exact shortest Euclidean distance (> 0) from the bullet's collision envelope to the polygon surface.
+    getSweptSurfaceDistance(bullet, dtSteps = 1) {
       const bRadius = bullet.collisionRadius || bullet.radius || 3;
-      const rSq = bRadius * bRadius;
-
       const p1x = bullet.x;
       const p1y = bullet.y;
-      const p0x = bullet.dx !== undefined ? bullet.x - bullet.dx : p1x;
-      const p0y = bullet.dy !== undefined ? bullet.y - bullet.dy : p1y;
-
-      // Broad-phase bounding circle check against the swept segment midpoint & radius
+      const relDx = (bullet.dx !== undefined ? bullet.dx : 0) - (this.dx || 0);
+      const relDy = (bullet.dy !== undefined ? bullet.dy : 0) - (this.dy || 0);
+      const p0x = p1x - relDx * dtSteps;
+      const p0y = p1y - relDy * dtSteps;
       const midX = (p0x + p1x) * 0.5;
       const midY = (p0y + p1y) * 0.5;
-      const distSq = (midX - this.x) ** 2 + (midY - this.y) ** 2;
-      const stepLen = Math.hypot(bullet.dx || 0, bullet.dy || 0);
-      const maxDist = this.radius * 1.6 + bRadius + stepLen * 0.5;
-      if (distSq > maxDist * maxDist) return false;
 
-      // 1. If current position, previous position, or midpoint is inside polygon, it's a confirmed hit
       if (this.containsPoint(p1x, p1y) || this.containsPoint(p0x, p0y) || this.containsPoint(midX, midY)) {
-        return true;
+        return 0;
       }
 
       const pts = this.getTransformedPoints();
-
-      // 2. Continuous Collision Detection (CCD):
-      // Check if the bullet's travel segment (p0 -> p1) crossed ANY polygon edge in this frame
+      let minDistSq = Infinity;
       for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-        if (this.segmentsIntersect(p0x, p0y, p1x, p1y, pts[j].x, pts[j].y, pts[i].x, pts[i].y)) {
-          return true;
+        const dSq = segToSegDistSq(p0x, p0y, p1x, p1y, pts[j].x, pts[j].y, pts[i].x, pts[i].y);
+        if (dSq < minDistSq) {
+          minDistSq = dSq;
+          if (minDistSq === 0) return 0;
         }
       }
 
-      // 3. Exact Circle vs Edge Distance Test:
-      // Checks if the bullet's circular body grazes or touches any polygon segment (tested at p1, mid, and p0)
-      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-        const x1 = pts[j].x, y1 = pts[j].y;
-        const x2 = pts[i].x, y2 = pts[i].y;
+      return Math.max(0, Math.sqrt(minDistSq) - bRadius);
+    }
 
-        if (
-          this.distToSegmentSquared(p1x, p1y, x1, y1, x2, y2) <= rSq ||
-          this.distToSegmentSquared(midX, midY, x1, y1, x2, y2) <= rSq ||
-          this.distToSegmentSquared(p0x, p0y, x1, y1, x2, y2) <= rSq
-        ) {
-          return true; // Tangential or grazing collision detected!
-        }
-      }
+    // Mathematically exact Continuous Collision Detection (Swept Capsule vs Moving Polygon):
+    // Returns true if bullet body touches the polygon, or if relative swept trajectory crossed/grazed it
+    containsBullet(bullet, dtSteps = 1) {
+      const bRadius = bullet.collisionRadius || bullet.radius || 3;
+      const p1x = bullet.x;
+      const p1y = bullet.y;
+      const relDx = (bullet.dx !== undefined ? bullet.dx : 0) - (this.dx || 0);
+      const relDy = (bullet.dy !== undefined ? bullet.dy : 0) - (this.dy || 0);
+      const p0x = p1x - relDx * dtSteps;
+      const p0y = p1y - relDy * dtSteps;
 
-      // 4. Asteroid corner graze check:
-      // Checks if any asteroid vertex lies within the bullet's swept capsule radius
-      for (let i = 0; i < pts.length; i++) {
-        if (this.distToSegmentSquared(pts[i].x, pts[i].y, p0x, p0y, p1x, p1y) <= rSq) {
-          return true;
-        }
-      }
+      // Broad-phase bounding circle check against the relative swept segment midpoint & radius
+      const midX = (p0x + p1x) * 0.5;
+      const midY = (p0y + p1y) * 0.5;
+      const distSq = (midX - this.x) ** 2 + (midY - this.y) ** 2;
+      const stepLen = Math.hypot(relDx * dtSteps, relDy * dtSteps);
+      const maxDist = this.radius * 1.6 + bRadius + stepLen * 0.5;
+      if (distSq > maxDist * maxDist) return false;
 
-      return false;
+      return this.getSweptSurfaceDistance(bullet, dtSteps) <= 0;
     }
 
     // Fast 2D Line Segment vs Line Segment Intersection
@@ -1276,32 +1531,24 @@
 
       const p1x = bullet.x;
       const p1y = bullet.y;
-      const p0x = bullet.dx !== undefined ? bullet.x - bullet.dx : p1x;
-      const p0y = bullet.dy !== undefined ? bullet.y - bullet.dy : p1y;
+      const relDx = (bullet.dx !== undefined ? bullet.dx : 0) - (this.dx || 0);
+      const relDy = (bullet.dy !== undefined ? bullet.dy : 0) - (this.dy || 0);
+      const p0x = p1x - relDx;
+      const p0y = p1y - relDy;
       const midX = (p0x + p1x) * 0.5;
       const midY = (p0y + p1y) * 0.5;
 
       const distSq = (this.x - midX) ** 2 + (this.y - midY) ** 2;
       const maxR = this.width * 0.55;
-      const stepLen = Math.hypot(bullet.dx || 0, bullet.dy || 0);
+      const stepLen = Math.hypot(relDx, relDy);
       if (distSq > (maxR + bRadius + stepLen * 0.5) ** 2) return false;
 
       if (this.containsPoint(p1x, p1y) || this.containsPoint(p0x, p0y) || this.containsPoint(midX, midY)) return true;
 
       const pts = this.getTransformedPoints();
       for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-        const x1 = pts[j].x, y1 = pts[j].y;
-        const x2 = pts[i].x, y2 = pts[i].y;
-        const dx = x2 - x1, dy = y2 - y1;
-        const lenSq = dx * dx + dy * dy;
-        if (lenSq === 0) continue;
-
-        for (const [px, py] of [[p1x, p1y], [midX, midY], [p0x, p0y]]) {
-          let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
-          t = Math.max(0, Math.min(1, t));
-          const projX = x1 + t * dx;
-          const projY = y1 + t * dy;
-          if ((px - projX) ** 2 + (py - projY) ** 2 <= rSq) return true;
+        if (segToSegDistSq(p0x, p0y, p1x, p1y, pts[j].x, pts[j].y, pts[i].x, pts[i].y) <= rSq) {
+          return true;
         }
       }
       return false;
@@ -1328,11 +1575,11 @@
     }
 
     rotateLeft() {
-      this.angle -= 4.5;
+      this.angle = (this.angle - 4.5 + 360) % 360;
     }
 
     rotateRight() {
-      this.angle += 4.5;
+      this.angle = (this.angle + 4.5) % 360;
     }
 
     setThrust(active) {
@@ -1377,6 +1624,28 @@
       return true;
     }
 
+    createMuzzleBullet(overrideSpeed = null, inheritShipVel = true) {
+      const rad = ((this.angle - 90) * Math.PI) / 180;
+      const noseDist = this.height * 0.55;
+      const bx = this.x + Math.cos(rad) * noseDist;
+      const by = this.y + Math.sin(rad) * noseDist;
+
+      const scale = getScreenScale(this.canvas);
+      const shooterId = this.playerId || (this.selectedSkin === 'blue' ? 2 : 1);
+      const bulletColor = this.matchLaserColor
+        ? (this.customColor || (shooterId === 2 ? 'cyan' : 'gold'))
+        : (shooterId === 2 ? 'cyan' : 'gold');
+      const sDx = inheritShipVel ? this.dx : 0;
+      const sDy = inheritShipVel ? this.dy : 0;
+      const b = new Bullet(bx, by, this.angle, sDx, sDy, scale, shooterId, bulletColor);
+      if (typeof overrideSpeed === 'number') {
+        b.speed = overrideSpeed;
+        b.dx = Math.cos(rad) * overrideSpeed + sDx * 0.25;
+        b.dy = Math.sin(rad) * overrideSpeed + sDy * 0.25;
+      }
+      return b;
+    }
+
     fire(bullets) {
       const COST_PER_SHOT = (this.powerMode === 'shared') ? 12 : 15;
 
@@ -1393,27 +1662,17 @@
       }
 
       this.fireCooldown = 9; // ~6.6 shots/second maximum (realistic arcade cadence)
-
-      const rad = ((this.angle - 90) * Math.PI) / 180;
-      const noseDist = this.height * 0.55;
-      const bx = this.x + Math.cos(rad) * noseDist;
-      const by = this.y + Math.sin(rad) * noseDist;
-
-      const scale = getScreenScale(this.canvas);
-      const shooterId = this.playerId || (this.selectedSkin === 'blue' ? 2 : 1);
-      const bulletColor = this.matchLaserColor
-        ? (this.customColor || (shooterId === 2 ? 'cyan' : 'gold'))
-        : (shooterId === 2 ? 'cyan' : 'gold');
-      bullets.push(new Bullet(bx, by, this.angle, this.dx, this.dy, scale, shooterId, bulletColor));
+      bullets.push(this.createMuzzleBullet(null, true));
       this.soundFx.playLaser();
       return true;
     }
 
     update(dtSeconds = 1 / 60) {
-      // Thrust physics matching original Java code
+      const step = dtSeconds * 60;
+      // Thrust physics matching original Java code, scaled continuously by step
       if (this.thrusting) {
         const rad = ((this.angle - 90) * Math.PI) / 180;
-        const accel = 0.24;
+        const accel = 0.24 * step;
         this.dx += Math.cos(rad) * accel;
         this.dy += Math.sin(rad) * accel;
 
@@ -1426,18 +1685,21 @@
         }
 
         this.flameFrame++;
-        // Exhaust particle emission
-        const tailRad = ((this.angle + 90) * Math.PI) / 180;
-        const tailX = this.x + Math.cos(tailRad) * (this.height * 0.4);
-        const tailY = this.y + Math.sin(tailRad) * (this.height * 0.4);
-        this.particles.addExhaust(tailX, tailY, this.angle, this.dx, this.dy);
+        // Exhaust particle emission (skip during high-speed turbo RL training to prevent allocation churn)
+        if (!this.suppressParticles && this.particles) {
+          const tailRad = ((this.angle + 90) * Math.PI) / 180;
+          const tailX = this.x + Math.cos(tailRad) * (this.height * 0.4);
+          const tailY = this.y + Math.sin(tailRad) * (this.height * 0.4);
+          this.particles.addExhaust(tailX, tailY, this.angle, this.dx, this.dy);
+        }
       }
 
-      // Movement & friction damping (matches Android dx *= 0.995)
-      this.x += this.dx;
-      this.y += this.dy;
-      this.dx *= 0.992;
-      this.dy *= 0.992;
+      // Movement & continuous exponential friction damping v(t + dt) = v(t) * 0.992^(dt * 60)
+      this.x += this.dx * step;
+      this.y += this.dy * step;
+      const damping = step === 1 ? 0.992 : Math.pow(0.992, step);
+      this.dx *= damping;
+      this.dy *= damping;
 
       // Weapon refire cooldown decrement
       if (this.fireCooldown > 0) {
@@ -2045,32 +2307,24 @@
 
       const p1x = bullet.x;
       const p1y = bullet.y;
-      const p0x = bullet.dx !== undefined ? bullet.x - bullet.dx : p1x;
-      const p0y = bullet.dy !== undefined ? bullet.y - bullet.dy : p1y;
+      const relDx = (bullet.dx !== undefined ? bullet.dx : 0) - (this.dx || 0);
+      const relDy = (bullet.dy !== undefined ? bullet.dy : 0) - (this.dy || 0);
+      const p0x = p1x - relDx;
+      const p0y = p1y - relDy;
       const midX = (p0x + p1x) * 0.5;
       const midY = (p0y + p1y) * 0.5;
 
       const distSq = (this.x - midX) ** 2 + (this.y - midY) ** 2;
       const maxR = this.width * 0.55;
-      const stepLen = Math.hypot(bullet.dx || 0, bullet.dy || 0);
+      const stepLen = Math.hypot(relDx, relDy);
       if (distSq > (maxR + bRadius + stepLen * 0.5) ** 2) return false;
 
       if (this.containsPoint(p1x, p1y) || this.containsPoint(p0x, p0y) || this.containsPoint(midX, midY)) return true;
 
       const pts = this.getTransformedPoints();
       for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-        const x1 = pts[j].x, y1 = pts[j].y;
-        const x2 = pts[i].x, y2 = pts[i].y;
-        const dx = x2 - x1, dy = y2 - y1;
-        const lenSq = dx * dx + dy * dy;
-        if (lenSq === 0) continue;
-
-        for (const [px, py] of [[p1x, p1y], [midX, midY], [p0x, p0y]]) {
-          let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
-          t = Math.max(0, Math.min(1, t));
-          const projX = x1 + t * dx;
-          const projY = y1 + t * dy;
-          if ((px - projX) ** 2 + (py - projY) ** 2 <= rSq) return true;
+        if (segToSegDistSq(p0x, p0y, p1x, p1y, pts[j].x, pts[j].y, pts[i].x, pts[i].y) <= rSq) {
+          return true;
         }
       }
       return false;
@@ -2152,7 +2406,7 @@
       const dScreen = Math.min(this.canvas.width, this.canvas.height);
       const R_radar = Math.max(180, 8.0 * this.radius);
 
-      // 1. Threat assessment for rocks within radar range
+      // 1. Threat assessment for rocks within radar range using closed-form CPA kinematics
       const threats = [];
       this.emergencyOverdrive = false;
 
@@ -2168,14 +2422,28 @@
           const relVx = rock.dx - this.dx;
           const relVy = rock.dy - this.dy;
           const vClosing = -(relX * relVx + relY * relVy) / (dist || 1);
-          
+          const clearance = this.radius + rock.radius + 0.45 * this.radius;
+
+          // Closed-form Closest Point of Approach (t_CPA, d_CPA) in relative frame
+          const cpa = computeCPA(relX, relY, relVx, relVy);
+          const tCPAFrames = cpa.tCPA;
+          const dCPA = cpa.dCPA;
+          const threatensCorridor = dCPA < clearance * 1.45;
+
           // Kinematic time-to-impact urgency (Inverse-Square Law: U = 1 / t_impact^2)
-          // Required evasive acceleration scales quadratically with decreasing time (a = 2d / t^2)
+          // Uses exact boundary contact time along the CPA corridor when closing
           let urgencyKinematic = 0;
           let tImpact = 5.0;
-          if (vClosing > 0.05) {
-            tImpact = (dist / vClosing) / 60; // in SECONDS!
-            urgencyKinematic = 1.0 / Math.max(0.04, tImpact * tImpact);
+          if (vClosing > 0.05 && tCPAFrames > 0) {
+            const chordHalf = dCPA < clearance
+              ? Math.sqrt(Math.max(0, clearance * clearance - dCPA * dCPA)) / Math.max(0.05, cpa.vRelMag)
+              : 0;
+            const contactFrames = Math.max(0.5, tCPAFrames - chordHalf);
+            tImpact = contactFrames / 60; // in SECONDS!
+            const lateralWeight = threatensCorridor
+              ? 1.0
+              : Math.max(0, 1.0 - (dCPA - clearance) / (clearance * 1.5));
+            urgencyKinematic = (1.0 / Math.max(0.04, tImpact * tImpact)) * lateralWeight;
           }
 
           // Static spatial proximity urgency (quadratic ramp: close rocks are inherently dangerous)
@@ -2183,7 +2451,6 @@
           const urgencyProximity = (proximityFactor * proximityFactor) * 3.5;
 
           const urgency = Math.max(urgencyKinematic, urgencyProximity);
-          const clearance = this.radius + rock.radius + 0.45 * this.radius;
 
           threats.push({
             rock,
@@ -2193,11 +2460,14 @@
             urgency,
             clearance,
             tImpact,
-            vClosing
+            vClosing,
+            tCPAFrames,
+            dCPA,
+            threatensCorridor
           });
 
-          // Calibrated emergency detection: only trigger if actually closing on a collision course
-          if (vClosing > 0.3 && (tImpact < 0.70 || (dist < clearance * 1.35 && tImpact < 1.1))) {
+          // Calibrated emergency detection: only trigger if closing on a true collision corridor (d_CPA < clearance * 1.35)
+          if (vClosing > 0.3 && threatensCorridor && (tImpact < 0.70 || (dist < clearance * 1.35 && tImpact < 1.1))) {
             this.emergencyOverdrive = true;
             this.emergencyAlertTimer = 18; // Flashes left red warning strobe
           }
@@ -2300,7 +2570,7 @@
       // If any rock is on a collision course or in the danger bubble, player combat drives are 100% extinguished.
       // -------------------------------------------------------------
       const hasImminentThreat = threats.some(t =>
-        t.vClosing > 0.3 && (t.urgency > 1.8 || (t.dist < t.clearance * 1.5 && t.tImpact < 1.0))
+        t.vClosing > 0.3 && t.threatensCorridor && (t.urgency > 1.8 || (t.dist < t.clearance * 1.5 && t.tImpact < 1.0))
       );
       const currentHeadingDanger = dangerScores[this.currentHeadingIndex] || 0;
       const isFacingDanger = hasImminentThreat || currentHeadingDanger > 0.12;
@@ -2422,8 +2692,8 @@
 
       for (let t = 0; t < threats.length; t++) {
         const th = threats[t];
-        // Closing towards UFO and within interception range (~160px)
-        const isClosing = th.vClosing > 0.15;
+        // Closing towards UFO along an actual collision corridor and within interception range (~160px)
+        const isClosing = th.vClosing > 0.15 && th.threatensCorridor;
         const isWithinRange = th.dist < Math.max(160, th.clearance * 2.2);
         const isDangerous = th.tImpact < 1.30 || th.dist < th.clearance * 1.8;
 
@@ -2435,36 +2705,38 @@
 
       if (emergencyRock && this.defenseTimer >= this.defenseInterval) {
         this.defenseTimer = 0;
-        // Lead the incoming asteroid by bullet travel time
-        const bulletFlightTime = emergencyRock.dist / this.vLaser;
-        const leadX = emergencyRock.relX + emergencyRock.rock.dx * bulletFlightTime;
-        const leadY = emergencyRock.relY + emergencyRock.rock.dy * bulletFlightTime;
-        const aimDist = Math.hypot(leadX, leadY) || 1;
-        const bVx = (leadX / aimDist) * this.vLaser;
-        const bVy = (leadY / aimDist) * this.vLaser;
-
         const rad = (this.drawAngle * Math.PI) / 180;
         const cosA = Math.cos(rad);
         const sinA = Math.sin(rad);
 
-        // Project lead vector into local saucer coordinate frame:
-        // localX < 0 => Threat is on the saucer's LEFT (Port) flank -> Red defensive shot & Red light
-        // localX >= 0 => Threat is on the saucer's RIGHT (Starboard) flank -> Blue defensive shot & Blue light
-        const localX = leadX * cosA + leadY * sinA;
-        const isPort = localX < 0;
+        // Determine Port (Left) vs Starboard (Right) flank in saucer frame, then solve exact quadratic intercept from emitter muzzle
+        const prelimLocalX = emergencyRock.relX * cosA + emergencyRock.relY * sinA;
+        const isPort = prelimLocalX < 0;
+        const emitterOffsetX = isPort ? -0.2656 * this.width : 0.2656 * this.width;
+        const emitterOffsetY = 0.1094 * this.height;
+        const muzzleX = this.x + (emitterOffsetX * cosA - emitterOffsetY * sinA);
+        const muzzleY = this.y + (emitterOffsetX * sinA + emitterOffsetY * cosA);
+
+        const intercept = solveBallisticIntercept(
+          muzzleX,
+          muzzleY,
+          emergencyRock.rock.x,
+          emergencyRock.rock.y,
+          emergencyRock.rock.dx,
+          emergencyRock.rock.dy,
+          this.vLaser,
+          0
+        );
+        const bVx = intercept.dirX * this.vLaser;
+        const bVy = intercept.dirY * this.vLaser;
 
         const bulletScale = getScreenScale(this.canvas);
-        let muzzleX, muzzleY;
         if (isPort) {
           // Left (Port) Red emitter & light flash
-          muzzleX = this.x + (-0.2656 * this.width * cosA - 0.1094 * this.height * sinA);
-          muzzleY = this.y + (-0.2656 * this.width * sinA + 0.1094 * this.height * cosA);
           ufoBullets.push(new UFOBullet(muzzleX, muzzleY, bVx, bVy, 'rock', 'direct', 'red', bulletScale));
           this.leftDefenseFlashTimer = 22;
         } else {
           // Right (Starboard) Blue emitter & light flash
-          muzzleX = this.x + (0.2656 * this.width * cosA - 0.1094 * this.height * sinA);
-          muzzleY = this.y + (0.2656 * this.width * sinA + 0.1094 * this.height * cosA);
           ufoBullets.push(new UFOBullet(muzzleX, muzzleY, bVx, bVy, 'rock', 'direct', 'blue', bulletScale));
           this.rightDefenseFlashTimer = 22;
         }
@@ -2496,13 +2768,28 @@
         this.shootTimer = 0;
         this.telegraphTimer = 0;
 
-        // Predictive or direct lead based on telegraphed nextAimMode
-        let aimX = pDx;
-        let aimY = pDy;
+        const rad = (this.drawAngle * Math.PI) / 180;
+        const cosA = Math.cos(rad);
+        const sinA = Math.sin(rad);
+        const centerMuzzleX = this.x + (0.0156 * this.width * cosA - 0.1406 * this.height * sinA);
+        const centerMuzzleY = this.y + (0.0156 * this.width * sinA + 0.1406 * this.height * cosA);
+
+        // Exact Quadratic Ballistic Intercept (predictive) or direct line-of-sight from center emitter muzzle
+        let baseAimAngle;
         if (this.nextAimMode === 'predictive') {
-          const timeToHit = pDist / this.vLaser;
-          aimX += player.dx * timeToHit;
-          aimY += player.dy * timeToHit;
+          const intercept = solveBallisticIntercept(
+            centerMuzzleX,
+            centerMuzzleY,
+            player.x,
+            player.y,
+            player.dx || 0,
+            player.dy || 0,
+            this.vLaser,
+            0
+          );
+          baseAimAngle = intercept.angleRad;
+        } else {
+          baseAimAngle = Math.atan2(player.y - centerMuzzleY, player.x - centerMuzzleX);
         }
 
         // Box-Muller Gaussian angular dispersion for organic near-miss thrills
@@ -2513,15 +2800,9 @@
         const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
         const angleOffset = Math.max(-2.2 * sigmaRad, Math.min(2.2 * sigmaRad, z0 * sigmaRad));
 
-        const aimAngle = Math.atan2(aimY, aimX) + angleOffset;
+        const aimAngle = baseAimAngle + angleOffset;
         const bVx = Math.cos(aimAngle) * this.vLaser;
         const bVy = Math.sin(aimAngle) * this.vLaser;
-
-        const rad = (this.drawAngle * Math.PI) / 180;
-        const cosA = Math.cos(rad);
-        const sinA = Math.sin(rad);
-        const centerMuzzleX = this.x + (0.0156 * this.width * cosA - 0.1406 * this.height * sinA);
-        const centerMuzzleY = this.y + (0.0156 * this.width * sinA + 0.1406 * this.height * cosA);
 
         const bulletScale = getScreenScale(this.canvas);
         ufoBullets.push(new UFOBullet(centerMuzzleX, centerMuzzleY, bVx, bVy, 'player', this.nextAimMode, 'blue', bulletScale));
@@ -4394,6 +4675,10 @@
         if (this.soundFx) this.soundFx.playReadyToggle(this.onlineGuestRematchReady);
         this.network.sendRematchReady(this.onlineGuestRematchReady, 'guest');
         this.updateRematchReadyUI();
+        if (!this.onlineGuestRematchReady && this.onlineRematchCountdownTimer) {
+          this.abortRematchCountdown('Co-pilot cancelled rematch ready');
+          this.network.sendCountdownAbort('rematch', 'Co-pilot cancelled rematch ready');
+        }
       }
     }
 
@@ -4924,46 +5209,51 @@
         }
       }
 
-      if (snap.s1 && this.ship1) {
-        this.ship1.x = snap.s1.x;
-        this.ship1.y = snap.s1.y;
-        const angle1 = (snap.s1.ang !== undefined ? snap.s1.ang : (snap.s1.rot !== undefined ? snap.s1.rot : 0));
-        this.ship1.angle = angle1;
-        this.ship1.rotation = angle1;
-        this.ship1.dx = snap.s1.dx || 0;
-        this.ship1.dy = snap.s1.dy || 0;
-        this.ship1.thrusting = !!snap.s1.t;
-        this.ship1.thrust = !!snap.s1.t;
-        this.ship1.invincible = !!snap.s1.sh;
-        this.ship1.shield = !!snap.s1.sh;
-        this.ship1.shieldEnergy = snap.s1.she !== undefined ? snap.s1.she : 100;
-        this.ship1.energy = snap.s1.e !== undefined ? snap.s1.e : 100;
-        this.ship1.lives = snap.s1.l !== undefined ? snap.s1.l : 3;
-        this.ship1.alive = snap.s1.al !== undefined ? snap.s1.al : true;
-        if (snap.s1.col) {
-          this.ship1.customColor = snap.s1.col;
+      const reconcileShip = (ship, sSnap) => {
+        if (!ship || !sSnap) return;
+        const isLocal = (!this.isOnlineHost && ship === this.onlineLocalShip && ship.alive && sSnap.al !== false);
+        const snapAngle = (sSnap.ang !== undefined ? sSnap.ang : (sSnap.rot !== undefined ? sSnap.rot : 0));
+        if (isLocal) {
+          const errDist = Math.hypot(sSnap.x - ship.x, sSnap.y - ship.y);
+          if (errDist > 0 && errDist < 90) {
+            ship.x += (sSnap.x - ship.x) * 0.35;
+            ship.y += (sSnap.y - ship.y) * 0.35;
+          } else {
+            ship.x = sSnap.x;
+            ship.y = sSnap.y;
+          }
+          let angDiff = ((snapAngle - ship.angle + 540) % 360) - 180;
+          if (Math.abs(angDiff) < 35) {
+            ship.angle = (((ship.angle + angDiff * 0.35) % 360) + 360) % 360;
+          } else {
+            ship.angle = snapAngle;
+          }
+          ship.rotation = ship.angle;
+          ship.dx = ship.dx * 0.4 + (sSnap.dx || 0) * 0.6;
+          ship.dy = ship.dy * 0.4 + (sSnap.dy || 0) * 0.6;
+        } else {
+          ship.x = sSnap.x;
+          ship.y = sSnap.y;
+          ship.angle = snapAngle;
+          ship.rotation = snapAngle;
+          ship.dx = sSnap.dx || 0;
+          ship.dy = sSnap.dy || 0;
+          ship.thrusting = !!sSnap.t;
+          ship.thrust = !!sSnap.t;
         }
-      }
-      if (snap.s2 && this.ship2) {
-        this.ship2.x = snap.s2.x;
-        this.ship2.y = snap.s2.y;
-        const angle2 = (snap.s2.ang !== undefined ? snap.s2.ang : (snap.s2.rot !== undefined ? snap.s2.rot : 0));
-        this.ship2.angle = angle2;
-        this.ship2.rotation = angle2;
-        this.ship2.dx = snap.s2.dx || 0;
-        this.ship2.dy = snap.s2.dy || 0;
-        this.ship2.thrusting = !!snap.s2.t;
-        this.ship2.thrust = !!snap.s2.t;
-        this.ship2.invincible = !!snap.s2.sh;
-        this.ship2.shield = !!snap.s2.sh;
-        this.ship2.shieldEnergy = snap.s2.she !== undefined ? snap.s2.she : 100;
-        this.ship2.energy = snap.s2.e !== undefined ? snap.s2.e : 100;
-        this.ship2.lives = snap.s2.l !== undefined ? snap.s2.l : 3;
-        this.ship2.alive = snap.s2.al !== undefined ? snap.s2.al : true;
-        if (snap.s2.col) {
-          this.ship2.customColor = snap.s2.col;
+        ship.invincible = !!sSnap.sh;
+        ship.shield = !!sSnap.sh;
+        ship.shieldEnergy = sSnap.she !== undefined ? sSnap.she : 100;
+        ship.energy = sSnap.e !== undefined ? sSnap.e : 100;
+        ship.lives = sSnap.l !== undefined ? sSnap.l : 3;
+        ship.alive = sSnap.al !== undefined ? sSnap.al : true;
+        if (sSnap.col) {
+          ship.customColor = sSnap.col;
         }
-      }
+      };
+
+      if (snap.s1 && this.ship1) reconcileShip(this.ship1, snap.s1);
+      if (snap.s2 && this.ship2) reconcileShip(this.ship2, snap.s2);
 
       if (Array.isArray(snap.r)) {
         const existingMap = new Map();
@@ -5093,14 +5383,7 @@
       rock.scale = rData.sc;
       rock.shapeIndex = rData.shp || 0;
 
-      const shapes = [
-        { x: [0, 25, 15, -5, -8], y: [0, 5, 30, 25, 15] },
-        { x: [-18, 6, 26, 18, -8, -24], y: [-20, -26, -6, 22, 26, 6] },
-        { x: [0, 20, 28, 12, -10, -26, -16], y: [-28, -14, 8, 26, 22, 2, -18] },
-        { x: [-14, 10, 26, 20, 8, -14, -28, -20], y: [-24, -22, -4, 16, 28, 24, 6, -12] },
-        { x: [-10, 14, 30, 16, -14, -24], y: [-30, -26, 6, 28, 30, -6] }
-      ];
-      const chosen = shapes[rock.shapeIndex] || shapes[0];
+      const chosen = ROCK_SHAPES[rock.shapeIndex] || ROCK_SHAPES[0];
       let sumX = 0, sumY = 0;
       for (let i = 0; i < chosen.x.length; i++) {
         sumX += chosen.x[i];
@@ -5138,13 +5421,46 @@
       }
     }
 
-    updateGuestSimulation(dtSeconds) {
+    updateGuestSimulation(dtSeconds = 1 / 60) {
       const refW = this.hostCanvasWidth || this.canvas.width;
       const refH = this.hostCanvasHeight || this.canvas.height;
+      const step = (dtSeconds > 0 ? dtSeconds : (1 / 60)) * 60;
+      const scale = Math.max(0.42, Math.min(1.2, (refH || 720) / 720));
+
       for (const s of this.ships) {
         if (s && s.alive) {
-          s.x += s.dx;
-          s.y += s.dy;
+          if (s === this.onlineLocalShip && this.guestInputState) {
+            if (this.guestInputState.left) {
+              s.angle = (((s.angle - 4.5 * step) % 360) + 360) % 360;
+            }
+            if (this.guestInputState.right) {
+              s.angle = (s.angle + 4.5 * step) % 360;
+            }
+            s.rotation = s.angle;
+            s.thrusting = !!this.guestInputState.up;
+            s.thrust = s.thrusting;
+            if (s.thrusting) {
+              const rad = ((s.angle - 90) * Math.PI) / 180;
+              const accel = 0.16 * scale * step;
+              s.dx += Math.cos(rad) * accel;
+              s.dy += Math.sin(rad) * accel;
+              if (this.particles && Math.random() < 0.65) {
+                const tailDist = s.height * 0.42;
+                this.particles.addExhaust(
+                  s.x - Math.cos(rad) * tailDist,
+                  s.y - Math.sin(rad) * tailDist,
+                  s.angle,
+                  s.dx,
+                  s.dy
+                );
+              }
+            }
+            const drag = Math.pow(0.992, step);
+            s.dx *= drag;
+            s.dy *= drag;
+          }
+          s.x += s.dx * step;
+          s.y += s.dy * step;
           if (s.x < -s.width) s.x = refW + s.width;
           else if (s.x > refW + s.width) s.x = -s.width;
           if (s.y < -s.height) s.y = refH + s.height;
@@ -5152,11 +5468,16 @@
         }
       }
 
+      if (this.ufo && this.ufo.alive) {
+        this.ufo.x += (this.ufo.dx || 0) * step;
+        this.ufo.y += (this.ufo.dy || 0) * step;
+      }
+
       for (const r of this.rocks) {
         if (r && !r.popped) {
-          r.x += r.dx;
-          r.y += r.dy;
-          r.rotation += r.rotSpeed;
+          r.x += r.dx * step;
+          r.y += r.dy * step;
+          r.rotation += r.rotSpeed * step;
         }
       }
 
@@ -5166,8 +5487,8 @@
           this.bullets.splice(i, 1);
           continue;
         }
-        b.x += b.dx;
-        b.y += b.dy;
+        b.x += b.dx * step;
+        b.y += b.dy * step;
       }
 
       for (let i = this.ufoBullets.length - 1; i >= 0; i--) {
@@ -5176,8 +5497,8 @@
           this.ufoBullets.splice(i, 1);
           continue;
         }
-        ub.x += ub.dx;
-        ub.y += ub.dy;
+        ub.x += ub.dx * step;
+        ub.y += ub.dy * step;
       }
 
       this.sendGuestInput();
@@ -5235,14 +5556,26 @@
 
         accumulator += frameTime;
 
-        // Run fixed 60Hz physics updates (with multi-tick turbo speed during RL training)
+        // Run fixed 60Hz physics updates (with multi-tick turbo speed during RL training and a 12ms frame budget)
         const dtSeconds = FIXED_TIMESTEP / 1000; // Exact seconds per physics step (e.g. 0.016667s)
+        const stepStart = performance.now();
+        const suppressFX = (this.state === 'PLAYING' && this.rlMode === 'training' && this.trainingSpeed > 2);
+        if (this.particles) this.particles.suppress = suppressFX;
+        if (this.ship) this.ship.suppressParticles = suppressFX;
+
         while (accumulator >= FIXED_TIMESTEP) {
           const ticks = (this.state === 'PLAYING' && this.rlMode === 'training') ? this.trainingSpeed : 1;
           for (let s = 0; s < ticks; s++) {
             this.update(dtSeconds);
+            if (ticks > 1 && (performance.now() - stepStart) > 12) {
+              break;
+            }
           }
           accumulator -= FIXED_TIMESTEP;
+          if ((performance.now() - stepStart) > 12) {
+            accumulator = 0;
+            break;
+          }
         }
 
         // Render at screen refresh rate
@@ -5258,18 +5591,19 @@
       const screenH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
 
       const isPortrait = screenH > screenW;
+      let targetW, targetH;
 
       if (isPortrait) {
         // Enforce 16:9 widescreen canvas horizontally with letterbox padding
-        const targetW = screenW;
-        const targetH = Math.floor(screenW * (9 / 16));
-        this.canvas.width = targetW;
-        this.canvas.height = targetH;
+        targetW = Math.floor(screenW);
+        targetH = Math.floor(screenW * (9 / 16));
       } else {
         // Fullscreen widescreen in landscape / desktop
-        this.canvas.width = Math.floor(screenW);
-        this.canvas.height = Math.floor(screenH);
+        targetW = Math.floor(screenW);
+        targetH = Math.floor(screenH);
       }
+
+      setCanvasLogicalSize(this.canvas, this.ctx, targetW, targetH);
 
       if (this.particles) this.particles.canvas = this.canvas;
 
@@ -5708,12 +6042,22 @@
       let canvasTouchHold = null;
       this.canvas.addEventListener('pointerdown', (e) => {
         if (this.state !== 'PLAYING') return;
-        // If clicking on HUD or touch buttons, skip
-        if (e.clientY < 70) return;
+        // Skip direct canvas tap/hold if on-screen D-pad touch controls are actively visible
+        if (
+          this.domElements.touchControls &&
+          !this.domElements.touchControls.classList.contains('hidden') &&
+          !this.domElements.touchControls.classList.contains('auto-hide')
+        ) {
+          return;
+        }
+        // Normalize pointer Y against canvas bounding box
+        const rect = this.canvas.getBoundingClientRect();
+        if (e.clientY - rect.top < 70) return;
 
         this.soundFx.init();
         this.soundFx.resume();
 
+        if (canvasTouchHold) clearTimeout(canvasTouchHold);
         canvasTouchHold = setTimeout(() => {
           if (this.isOnline && !this.isOnlineHost) {
             this.guestInputState.up = true;
@@ -5753,16 +6097,22 @@
         this.ship.setThrust(false);
       });
 
-      this.canvas.addEventListener('pointercancel', () => {
-        if (canvasTouchHold) clearTimeout(canvasTouchHold);
+      const cancelCanvasTouchHold = () => {
+        if (canvasTouchHold) {
+          clearTimeout(canvasTouchHold);
+          canvasTouchHold = null;
+        }
         if (this.isOnline && !this.isOnlineHost) {
           this.guestInputState.up = false;
           this.sendGuestInput();
           if (this.onlineLocalShip && this.onlineLocalShip.alive) this.onlineLocalShip.setThrust(false);
-        } else {
+        } else if (this.ship) {
           this.ship.setThrust(false);
         }
-      });
+      };
+
+      this.canvas.addEventListener('pointercancel', cancelCanvasTouchHold);
+      this.canvas.addEventListener('pointerleave', cancelCanvasTouchHold);
     }
 
     bindUI() {
@@ -6229,6 +6579,13 @@
 
       this.setHudMode(this.gameMode);
 
+      if (this.gameMode === 'multiplayer' && !this.isOnline) {
+        const isCoarsePointer = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window);
+        if (isCoarsePointer) {
+          this.showCoopHardwareKeyboardNotice();
+        }
+      }
+
       if (this.gameMode === 'multiplayer') {
         const w = this.canvas.width;
         const h = this.canvas.height;
@@ -6279,6 +6636,31 @@
       }
 
       this.state = 'PLAYING';
+    }
+
+    showCoopHardwareKeyboardNotice() {
+      let banner = document.getElementById('coopHardwareKeyboardNotice');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'coopHardwareKeyboardNotice';
+        banner.style.cssText = 'position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(15,23,42,0.92);border:1px solid rgba(56,189,248,0.65);border-radius:10px;padding:10px 18px;color:#e0f2fe;font-family:"Share Tech Mono",monospace;font-size:12px;letter-spacing:0.6px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,0.6);max-width:92vw;text-align:center;';
+        const textSpan = document.createElement('span');
+        textSpan.textContent = '⌨️ 2-PLAYER LOCAL CO-OP: Connect a hardware keyboard or gamepad for Player 2 controls (or use Online Co-Op on two devices).';
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '✕';
+        closeBtn.style.cssText = 'background:transparent;border:1px solid rgba(56,189,248,0.4);color:#38bdf8;border-radius:6px;padding:2px 7px;cursor:pointer;font-size:11px;';
+        closeBtn.addEventListener('click', () => {
+          banner.style.display = 'none';
+        });
+        banner.appendChild(textSpan);
+        banner.appendChild(closeBtn);
+        document.body.appendChild(banner);
+      }
+      banner.style.display = 'flex';
+      if (this._coopNoticeTimeout) clearTimeout(this._coopNoticeTimeout);
+      this._coopNoticeTimeout = setTimeout(() => {
+        if (banner) banner.style.display = 'none';
+      }, 6500);
     }
 
     startWatchTrainedAI() {
@@ -7726,6 +8108,8 @@
         }
       }
 
+      const dpr = this.canvas._dpr || 1;
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.ctx.save();
 
       // Screen shake effect
@@ -7831,7 +8215,11 @@
         }
       }
 
-      // High-visibility Canvas HUD Banner for Online Co-op Pause
+      if (appliedGuestViewport) {
+        this.ctx.restore();
+      }
+
+      // High-visibility Canvas HUD Banner for Online Co-op Pause (drawn in Guest screen space after restore)
       if (this.isOnline && this.state === 'PAUSED') {
         const isRemote = (this.onlinePausedBy === 'remote');
         const pausedByDisplay = this.onlinePausedByName || (isRemote ? (this.isOnlineHost ? (this.onlineGuestName || 'CO-PILOT') : (this.onlineHostName || 'HOST')) : 'YOU');
@@ -7864,7 +8252,7 @@
         this.ctx.restore();
       }
 
-      // Spectator Notice for destroyed co-pilot while partner is still flying
+      // Spectator Notice for destroyed co-pilot while partner is still flying (drawn in Guest screen space)
       if (this.isOnline && !this.isOnlineHost && this.onlineLocalShip && !this.onlineLocalShip.alive && this.state === 'PLAYING') {
         this.ctx.save();
         this.ctx.font = '700 12px "Share Tech Mono", monospace';
@@ -7894,10 +8282,6 @@
         this.ctx.restore();
       }
 
-      if (appliedGuestViewport) {
-        this.ctx.restore();
-      }
-
       // Hint for guest if playing in portrait against a widescreen host
       if (this.isOnline && !this.isOnlineHost && (this.canvas.height <= 260 || this.canvas.height > this.canvas.width) && this.state === 'PLAYING') {
         this.ctx.save();
@@ -7921,14 +8305,13 @@
     ParticleSystem,
     Starfield,
     getScreenScale,
-    ROCK_SHAPES: [
-      { x: [0, 25, 15, -5, -8], y: [0, 5, 30, 25, 15] },
-      { x: [-18, 6, 26, 18, -8, -24], y: [-20, -26, -6, 22, 26, 6] },
-      { x: [0, 20, 28, 12, -10, -26, -16], y: [-28, -14, 8, 26, 22, 2, -18] },
-      { x: [-14, 10, 26, 20, 8, -14, -28, -20], y: [-24, -22, -4, 16, 28, 24, 6, -12] },
-
-      { x: [-10, 14, 30, 16, -14, -24], y: [-30, -26, 6, 28, 30, -6] }
-    ]
+    setCanvasLogicalSize,
+    pointToSegmentDistSq,
+    segmentsIntersect,
+    segToSegDistSq,
+    computeCPA,
+    solveBallisticIntercept,
+    ROCK_SHAPES
   };
 
   // Launch on DOM ready (only if arcade game canvas & startScreen exist and not in Asteroidle mode)

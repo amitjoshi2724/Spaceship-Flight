@@ -1,20 +1,19 @@
 /**
  * Asteroidle - Daily Manager & Arcade UI Controller
  * Manages 5-round puzzle progression, Calendar Archive, Stats Modal,
- * Wordle-style emoji sharing, Unlimited Mode, and Game Settings.
+ * Wordle-style emoji sharing, Unlimited Mode, and Unified Game Settings Studio.
  */
 import { 
+    EPOCH_DATE_STR,
     generateDailyChallenges, 
     getTodayDateStr, 
     getPuzzleNumber, 
     getDateForPuzzleNumber,
-    parseDate, 
-    formatDate, 
-    createMulberry32, 
-    hashString 
+    parseDate
 } from './prng.js';
 import { 
     recordDailyCompletion, 
+    resetDailyCompletion,
     getStats, 
     getHistory, 
     getRecordForDate, 
@@ -24,9 +23,33 @@ import {
 import { AsteroidleEngine } from './asteroidle.js';
 import './auth.js'; // Initializes Google Auth
 
+const SOLO_PRESETS = {
+    arrows: { thrust: 'ArrowUp', rotateLeft: 'ArrowLeft', rotateRight: 'ArrowRight', fire: 'Space', shield: 'ArrowDown' },
+    wasd:   { thrust: 'KeyW',    rotateLeft: 'KeyA',      rotateRight: 'KeyD',       fire: 'Space', shield: 'KeyS' },
+    okl:    { thrust: 'KeyO',    rotateLeft: 'KeyK',      rotateRight: 'Semicolon',  fire: 'KeyM',  shield: 'KeyL' },
+    ijkl:   { thrust: 'KeyI',    rotateLeft: 'KeyJ',      rotateRight: 'KeyL',       fire: 'Space', shield: 'KeyK' }
+};
+
+function formatKeyCodeLabel(code) {
+    if (!code) return '?';
+    const map = {
+        ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+        Space: 'SPACE', ShiftLeft: 'L-SHIFT', ShiftRight: 'R-SHIFT',
+        ControlLeft: 'L-CTRL', ControlRight: 'R-CTRL',
+        AltLeft: 'L-ALT', AltRight: 'R-ALT',
+        Enter: 'ENTER', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/'
+    };
+    if (map[code]) return map[code];
+    if (code.startsWith('Key')) return code.slice(3);
+    if (code.startsWith('Digit')) return code.slice(5);
+    if (code.startsWith('Numpad')) return 'NUM ' + code.slice(6);
+    return code.toUpperCase();
+}
+
 export class DailyManager {
     constructor() {
         this.isUnlimited = false;
+        this.isReviewMode = false;
         this.currentDateStr = getTodayDateStr();
         this.puzzleNum = getPuzzleNumber(this.currentDateStr);
         const todayObj = parseDate(this.currentDateStr);
@@ -36,6 +59,7 @@ export class DailyManager {
         this.currentRound = 1; // 1 to 5
         this.roundScores = [];
         this.engine = null;
+        this.listeningKeycapBtn = null;
 
         this.initDOM();
         this.checkURLParams();
@@ -52,10 +76,15 @@ export class DailyManager {
         const urlParams = new URLSearchParams(window.location.search);
         const dateParam = urlParams.get('date');
         const modeParam = urlParams.get('mode');
+        const todayStr = getTodayDateStr();
 
         if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
-            this.currentDateStr = dateParam;
-            this.puzzleNum = getPuzzleNumber(dateParam);
+            // Clamp date parameter to [EPOCH_DATE_STR, todayStr] so future or pre-epoch dates cannot be loaded (AST-L4)
+            let safeDate = dateParam;
+            if (safeDate > todayStr) safeDate = todayStr;
+            if (safeDate < EPOCH_DATE_STR) safeDate = EPOCH_DATE_STR;
+            this.currentDateStr = safeDate;
+            this.puzzleNum = getPuzzleNumber(safeDate);
             this.isUnlimited = false;
         } else if (modeParam === 'practice' || modeParam === 'unlimited') {
             this.isUnlimited = true;
@@ -82,10 +111,16 @@ export class DailyManager {
         const dailyBtn = document.getElementById('mode-daily-btn');
         const practiceBtn = document.getElementById('mode-practice-btn');
         if (dailyBtn) {
-            dailyBtn.addEventListener('click', () => this.setGameMode(false));
+            dailyBtn.addEventListener('click', () => {
+                dailyBtn.blur();
+                this.setGameMode(false);
+            });
         }
         if (practiceBtn) {
-            practiceBtn.addEventListener('click', () => this.setGameMode(true));
+            practiceBtn.addEventListener('click', () => {
+                practiceBtn.blur();
+                this.setGameMode(true);
+            });
         }
 
         // Backward compatibility for single mode toggle button
@@ -102,6 +137,7 @@ export class DailyManager {
             const isSoundOn = localStorage.getItem('spaceship_flight_sound') === 'true';
             soundBtn.textContent = isSoundOn ? '🔊' : '🔇';
             soundBtn.addEventListener('click', () => {
+                soundBtn.blur();
                 const nextState = !(localStorage.getItem('spaceship_flight_sound') === 'true');
                 this.engine.setSound(nextState);
                 soundBtn.textContent = nextState ? '🔊' : '🔇';
@@ -119,6 +155,7 @@ export class DailyManager {
         if (nextBtn) {
             nextBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
+                nextBtn.blur();
                 this.advanceNextRound();
             });
         }
@@ -194,27 +231,42 @@ export class DailyManager {
     }
 
     startPuzzle(dateStr) {
+        const todayStr = getTodayDateStr();
+        if (dateStr > todayStr) dateStr = todayStr;
+        if (dateStr < EPOCH_DATE_STR) dateStr = EPOCH_DATE_STR;
+
         this.currentDateStr = dateStr;
         this.puzzleNum = getPuzzleNumber(dateStr);
         this.challenges = generateDailyChallenges(dateStr);
         this.roundScores = [];
         this.currentRound = 1;
+        this.isReviewMode = false;
 
-        // Check if already completed today
+        // Check if already completed for this date (AST-C4)
         const existing = getRecordForDate(dateStr);
         if (existing && existing.completed) {
-            this.roundScores = existing.roundScores || [0, 0, 0, 0, 0];
+            this.isReviewMode = true;
+            this.roundScores = [...(existing.roundScores || [0, 0, 0, 0, 0])];
+            this.currentRound = 6;
             this.updateHeaderBanner();
             this.updatePips();
+            // Load Round 1 into the arena for non-destructive review/practice while keeping official record locked
+            if (this.challenges[0]) {
+                this.engine.loadChallenge(this.challenges[0]);
+            }
             this.showResultsModal(existing.totalScore);
             return;
         }
 
-        // Restore active progress if partially played
+        // Restore active progress if partially played (AST-C5: resume at scores.length + 1)
         const saved = loadActiveState(dateStr);
-        if (saved && saved.round > 1 && Array.isArray(saved.scores)) {
-            this.currentRound = Math.min(5, saved.round);
-            this.roundScores = saved.scores;
+        if (saved && Array.isArray(saved.scores) && saved.scores.length > 0) {
+            this.roundScores = saved.scores.slice(0, 5);
+            this.currentRound = this.roundScores.length + 1;
+            if (this.currentRound > 5) {
+                this.finalizePuzzle();
+                return;
+            }
         }
 
         this.updateHeaderBanner();
@@ -222,84 +274,41 @@ export class DailyManager {
         this.loadCurrentRound();
     }
 
+    /**
+     * Unlimited Practice Mode seeded via Date.now() (System.currentTimeMillis equivalent)
+     * Reuses generateDailyChallenges directly with zero code duplication (AST-H4)
+     */
     startUnlimitedPuzzle() {
-        const randomSeed = `unlimited-${Date.now()}-${Math.random()}`;
+        const nowMillis = String(Date.now());
         this.currentDateStr = 'UNLIMITED';
-        this.puzzleNum = Math.floor(Math.random() * 9000) + 1000;
-        const rng = createMulberry32(hashString(randomSeed));
-        
-        // Guarantee exactly one of each of the 5 canonical rock shapes
-        const shapes = [0, 1, 2, 3, 4];
-        for (let i = shapes.length - 1; i > 0; i--) {
-            const j = Math.floor(rng() * (i + 1));
-            [shapes[i], shapes[j]] = [shapes[j], shapes[i]];
-        }
-
-        this.challenges = [];
-        for (let r = 1; r <= 5; r++) {
-            let startX, startY, moveAngle;
-            if (r === 1) {
-                // Middle origin
-                startX = 0.42 + rng() * 0.16;
-                startY = 0.42 + rng() * 0.16;
-                moveAngle = rng() * Math.PI * 2;
-            } else if (r === 2) {
-                // Upper interior
-                startX = 0.20 + rng() * 0.60;
-                startY = 0.18 + rng() * 0.22;
-                moveAngle = (0.2 + rng() * 0.6) * Math.PI;
-            } else if (r === 3) {
-                // Mid-flank cross
-                const fromLeft = rng() < 0.5;
-                startX = fromLeft ? (0.15 + rng() * 0.15) : (0.70 + rng() * 0.15);
-                startY = 0.35 + rng() * 0.30;
-                moveAngle = fromLeft ? ((rng() - 0.5) * 0.8) : (Math.PI + (rng() - 0.5) * 0.8);
-            } else if (r === 4) {
-                // Lower interior
-                startX = 0.22 + rng() * 0.56;
-                startY = 0.60 + rng() * 0.22;
-                moveAngle = (1.2 + rng() * 0.6) * Math.PI;
-            } else {
-                // Anywhere in field
-                startX = 0.18 + rng() * 0.64;
-                startY = 0.18 + rng() * 0.64;
-                moveAngle = rng() * Math.PI * 2;
-            }
-
-            let shipX, shipY;
-            let attempts = 0;
-            do {
-                shipX = 0.18 + rng() * 0.64;
-                shipY = 0.18 + rng() * 0.64;
-                attempts++;
-            } while (Math.hypot(shipX - startX, shipY - startY) < 0.32 && attempts < 20);
-
-            if (Math.hypot(shipX - startX, shipY - startY) < 0.32) {
-                shipX = startX > 0.5 ? startX - 0.35 : startX + 0.35;
-                shipY = startY > 0.5 ? startY - 0.35 : startY + 0.35;
-            }
-
-            this.challenges.push({
-                round: r,
-                shapeIndex: shapes[r - 1],
-                baseRadius: 18 + rng() * 18,
-                speed: 0.9 + rng() * 0.5,
-                rotSpeed: (rng() - 0.5) * 0.06,
-                bulletTier: 3,
-                startX,
-                startY,
-                moveAngle,
-                shipX,
-                shipY,
-                initialHeading: Math.floor(rng() * 360)
-            });
-        }
-
+        this.puzzleNum = (Date.now() % 9000) + 1000;
+        this.isReviewMode = false;
+        this.challenges = generateDailyChallenges(nowMillis);
         this.roundScores = [];
         this.currentRound = 1;
         this.updateHeaderBanner();
         this.updatePips();
         this.loadCurrentRound();
+    }
+
+    /**
+     * Reset the current puzzle and genuinely replay from Round 1 (AST-C4)
+     */
+    resetCurrentPuzzle() {
+        document.getElementById('stats-modal')?.classList.remove('active');
+        const resultBanner = document.getElementById('round-result-banner');
+        if (resultBanner) {
+            resultBanner.classList.remove('visible');
+            resultBanner.style.display = 'none';
+        }
+
+        if (this.isUnlimited) {
+            this.startUnlimitedPuzzle();
+        } else {
+            resetDailyCompletion(this.currentDateStr);
+            this.isReviewMode = false;
+            this.startPuzzle(this.currentDateStr);
+        }
     }
 
     updateHeaderBanner() {
@@ -309,7 +318,9 @@ export class DailyManager {
             pNumBadge.textContent = this.isUnlimited ? `SECTOR #${this.puzzleNum}` : `ASTEROIDLE #${this.puzzleNum}`;
         }
         if (pDateLabel) {
-            pDateLabel.textContent = this.isUnlimited ? `UNLIMITED MISSION` : this.currentDateStr;
+            pDateLabel.textContent = this.isUnlimited
+                ? `UNLIMITED MISSION`
+                : (this.isReviewMode ? `${this.currentDateStr} (COMPLETED)` : this.currentDateStr);
         }
 
         const roundInd = document.getElementById('round-indicator');
@@ -368,10 +379,12 @@ export class DailyManager {
     }
 
     onRoundResolved(score, telem) {
-        this.roundScores[this.currentRound - 1] = score;
-
-        if (!this.isUnlimited) {
-            saveActiveState(this.currentDateStr, this.currentRound, this.roundScores);
+        // In review mode (already completed daily puzzle), allow free practice shots without overwriting history (AST-C4)
+        if (!this.isReviewMode) {
+            this.roundScores[this.currentRound - 1] = score;
+            if (!this.isUnlimited) {
+                saveActiveState(this.currentDateStr, this.currentRound + 1, this.roundScores);
+            }
         }
 
         this.updateHeaderBanner();
@@ -388,7 +401,7 @@ export class DailyManager {
         if (points) points.textContent = `+${score} PTS`;
         if (subtext) subtext.textContent = telem.subtext;
         if (nextBtn) {
-            const isLastRound = this.currentRound >= 5;
+            const isLastRound = this.isReviewMode || this.currentRound >= 5;
             const mainLabel = nextBtn.querySelector('.btn-main-label');
             const subLabel = nextBtn.querySelector('.btn-sub-label');
             if (mainLabel) {
@@ -417,6 +430,12 @@ export class DailyManager {
             resultBanner.style.display = 'none';
         }
 
+        if (this.isReviewMode) {
+            const total = this.roundScores.reduce((a, b) => a + b, 0);
+            this.showResultsModal(total);
+            return;
+        }
+
         this.currentRound++;
         if (this.currentRound <= 5) {
             this.loadCurrentRound();
@@ -428,8 +447,9 @@ export class DailyManager {
     finalizePuzzle() {
         const total = this.roundScores.reduce((a, b) => a + b, 0);
 
-        if (!this.isUnlimited) {
+        if (!this.isUnlimited && !this.isReviewMode) {
             recordDailyCompletion(this.currentDateStr, this.puzzleNum, this.roundScores, total);
+            this.isReviewMode = true;
         }
 
         this.showResultsModal(total);
@@ -444,7 +464,7 @@ export class DailyManager {
     setupModals() {
         // Modal close buttons (data-close="modal-id")
         document.querySelectorAll('.modal-close-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', () => {
                 const targetId = btn.dataset.close;
                 if (targetId) {
                     document.getElementById(targetId)?.classList.remove('active');
@@ -455,26 +475,29 @@ export class DailyManager {
         });
 
         // Close on backdrop click
-        document.querySelectorAll('.modal-backdrop').forEach(modal => {
+        document.querySelectorAll('.modal-backdrop, .overlay').forEach(modal => {
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) modal.classList.remove('active');
             });
         });
 
         // Help Modal
-        document.getElementById('help-modal-btn')?.addEventListener('click', () => {
+        document.getElementById('help-modal-btn')?.addEventListener('click', (e) => {
+            e.currentTarget.blur();
             document.getElementById('help-modal')?.classList.add('active');
         });
 
         // Stats Modal
-        document.getElementById('stats-modal-btn')?.addEventListener('click', () => {
+        document.getElementById('stats-modal-btn')?.addEventListener('click', (e) => {
+            e.currentTarget.blur();
             this.renderStatsModal();
             document.getElementById('stats-modal')?.classList.add('active');
         });
 
         // Archive Modal
         this.setupArchiveTabs();
-        document.getElementById('archive-modal-btn')?.addEventListener('click', () => {
+        document.getElementById('archive-modal-btn')?.addEventListener('click', (e) => {
+            e.currentTarget.blur();
             this.renderArchiveModal();
             document.getElementById('archive-modal')?.classList.add('active');
         });
@@ -483,46 +506,92 @@ export class DailyManager {
         document.getElementById('share-score-btn')?.addEventListener('click', () => {
             this.shareScore();
         });
+
+        // Reset / Replay Puzzle button (AST-C4)
+        document.getElementById('reset-puzzle-btn')?.addEventListener('click', () => {
+            this.resetCurrentPuzzle();
+        });
     }
 
+    /**
+     * Unified Modern Settings Studio (Shared with Spaceship Flight - AST-C6, AST-C7, SYS-02, AST-L3)
+     */
     setupSettings() {
         const settingsModal = document.getElementById('settingsModal');
         const settingsBtn = document.getElementById('settingsBtn');
         const closeBtn = document.getElementById('closeSettingsBtn');
 
         if (settingsBtn && settingsModal) {
-            settingsBtn.addEventListener('click', () => settingsModal.classList.add('active'));
+            settingsBtn.addEventListener('click', () => {
+                settingsBtn.blur();
+                this.updateColorStudioUI();
+                this.updateControlsUI();
+                settingsModal.classList.add('active');
+            });
         }
         if (closeBtn && settingsModal) {
-            closeBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
+            closeBtn.addEventListener('click', () => {
+                this.stopKeybindListening();
+                settingsModal.classList.remove('active');
+            });
         }
 
-        // Ship Skin Selection
+        // Settings Tabs Navigation (General vs 1-Player Controls)
+        const tabBtns = settingsModal ? settingsModal.querySelectorAll('.settings-tab-btn') : [];
+        const paneGeneral = document.getElementById('settingsPaneGeneral');
+        const paneSolo = document.getElementById('settingsPaneSolo');
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.stopKeybindListening();
+                const tab = btn.dataset.tab;
+                tabBtns.forEach(b => b.classList.toggle('active', b === btn));
+                if (paneGeneral) paneGeneral.classList.toggle('active', tab === 'general');
+                if (paneSolo) paneSolo.classList.toggle('active', tab === 'solo');
+            });
+        });
+
+        // Hull Color Studio (Original Fleet, 8 Neon Presets, Custom Hex Picker, Live Preview)
         const redBtn = document.getElementById('selectRedShip');
         const blueBtn = document.getElementById('selectBlueShip');
-        const currentSkin = localStorage.getItem('spaceship_flight_ship_skin') || 'red';
+        const presetsGrid = document.getElementById('colorPresetsGrid');
+        const colorPicker = document.getElementById('shipColorPicker');
+        const matchLaserCheckbox = document.getElementById('settingMatchLaserColor');
 
-        if (currentSkin === 'blue') {
-            blueBtn?.classList.add('active');
-            redBtn?.classList.remove('active');
-        } else {
-            redBtn?.classList.add('active');
-            blueBtn?.classList.remove('active');
-        }
-
-        const updateSkin = (skin) => {
-            this.engine.setShipSkin(skin);
-            if (skin === 'blue') {
-                blueBtn?.classList.add('active');
-                redBtn?.classList.remove('active');
-            } else {
-                redBtn?.classList.add('active');
-                blueBtn?.classList.remove('active');
-            }
+        const applyHullColor = (hexColor) => {
+            this.engine.setShipColor(hexColor);
+            this.updateColorStudioUI();
         };
 
-        redBtn?.addEventListener('click', () => updateSkin('red'));
-        blueBtn?.addEventListener('click', () => updateSkin('blue'));
+        redBtn?.addEventListener('click', () => applyHullColor('#850101'));
+        blueBtn?.addEventListener('click', () => applyHullColor('#0211d0'));
+
+        if (presetsGrid) {
+            presetsGrid.querySelectorAll('.color-preset-chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    if (chip.dataset.color) applyHullColor(chip.dataset.color);
+                });
+            });
+        }
+
+        if (colorPicker) {
+            colorPicker.addEventListener('input', (e) => {
+                applyHullColor(e.target.value);
+            });
+        }
+
+        if (matchLaserCheckbox) {
+            matchLaserCheckbox.checked = localStorage.getItem('spaceship_flight_match_laser_color') === 'true';
+            matchLaserCheckbox.addEventListener('change', (e) => {
+                this.engine.setMatchLaserColor(e.target.checked);
+            });
+        }
+
+        if (this.engine && this.engine.ship && this.engine.ship.sprites && this.engine.ship.sprites.redNormal) {
+            this.engine.ship.sprites.redNormal.addEventListener('load', () => {
+                this.updateColorStudioUI();
+            });
+        }
+        this.updateColorStudioUI();
 
         // Ship Scale Slider
         const shipScaleSlider = document.getElementById('settingShipSize');
@@ -539,6 +608,15 @@ export class DailyManager {
             });
         }
 
+        // Background Stars Toggle
+        const starsCheckbox = document.getElementById('settingStars');
+        if (starsCheckbox) {
+            starsCheckbox.checked = localStorage.getItem('spaceship_flight_stars') !== 'false';
+            starsCheckbox.addEventListener('change', (e) => {
+                this.engine.setShowStars(e.target.checked);
+            });
+        }
+
         // Sound Toggle Checkbox in Settings
         const soundCheckbox = document.getElementById('settingSound');
         const soundBtn = document.getElementById('soundToggleBtn');
@@ -551,22 +629,32 @@ export class DailyManager {
             });
         }
 
-        // Touch Controls Visibility Selector
+        // Touch Controls Visibility Selector (Unified key: spaceship_flight_touch_controls - SYS-02, AST-L3)
         const touchSelect = document.getElementById('settingTouchControls');
         const touchControls = document.getElementById('touchControls');
-        const savedTouch = localStorage.getItem('spaceship_flight_touch_visibility') || 'auto';
+        const savedTouch = localStorage.getItem('spaceship_flight_touch_controls') ||
+            localStorage.getItem('spaceship_flight_touch_visibility') || 'auto';
+
+        const applyTouchVisibility = (mode) => {
+            if (!touchControls) return;
+            touchControls.classList.remove('hidden', 'auto-hide');
+            if (mode === 'hidden') {
+                touchControls.classList.add('hidden');
+            } else if (mode === 'auto') {
+                touchControls.classList.add('auto-hide');
+            }
+        };
+
+        applyTouchVisibility(savedTouch);
         if (touchSelect) {
             touchSelect.value = savedTouch;
-            if (touchControls) {
-                touchControls.classList.toggle('hidden', savedTouch === 'hidden');
-            }
-
             touchSelect.addEventListener('change', (e) => {
                 const val = e.target.value;
-                try { localStorage.setItem('spaceship_flight_touch_visibility', val); } catch (err) { }
-                if (touchControls) {
-                    touchControls.classList.toggle('hidden', val === 'hidden');
-                }
+                try {
+                    localStorage.setItem('spaceship_flight_touch_controls', val);
+                    localStorage.setItem('spaceship_flight_touch_visibility', val);
+                } catch (err) { }
+                applyTouchVisibility(val);
             });
         }
 
@@ -585,6 +673,158 @@ export class DailyManager {
                 document.documentElement.style.setProperty('--ctrl-btn-size', `${sz}px`);
                 try { localStorage.setItem('spaceship_flight_btn_size', sz); } catch (err) { }
             });
+        }
+
+        // 1-Player Solo Controls Keybinder (Shared with Spaceship Flight - AST-C7)
+        this.setupControlsBinder();
+    }
+
+    updateColorStudioUI() {
+        const SpaceshipClass = window.SpaceshipCore && window.SpaceshipCore.Spaceship;
+        if (!SpaceshipClass || !this.engine || !this.engine.ship) return;
+
+        const currentColor = SpaceshipClass.normalizeHexColor(
+            this.engine.ship.customColor || localStorage.getItem('spaceship_flight_ship_color_p1') || '#850101'
+        );
+        const colorName = SpaceshipClass.getColorName(currentColor);
+
+        const redBtn = document.getElementById('selectRedShip');
+        const blueBtn = document.getElementById('selectBlueShip');
+        redBtn?.classList.toggle('active', currentColor === '#850101');
+        blueBtn?.classList.toggle('active', currentColor === '#0211d0');
+
+        const presetsGrid = document.getElementById('colorPresetsGrid');
+        if (presetsGrid) {
+            presetsGrid.querySelectorAll('.color-preset-chip').forEach(chip => {
+                const chipColor = SpaceshipClass.normalizeHexColor(chip.dataset.color);
+                chip.classList.toggle('active', chipColor === currentColor);
+            });
+        }
+
+        const picker = document.getElementById('shipColorPicker');
+        if (picker) picker.value = currentColor;
+
+        const hexDisplay = document.getElementById('shipColorHexDisplay');
+        if (hexDisplay) hexDisplay.textContent = currentColor.toUpperCase();
+
+        const nameDisplay = document.getElementById('colorPreviewNameDisplay');
+        if (nameDisplay) nameDisplay.textContent = colorName;
+
+        const previewImg = document.getElementById('settingsShipPreviewImg');
+        if (previewImg) {
+            const baseSprite = this.engine.ship.sprites && this.engine.ship.sprites.redNormal;
+            if (currentColor === '#850101') {
+                previewImg.src = '../images/newspaceship.png';
+            } else if (currentColor === '#0211d0') {
+                previewImg.src = '../images/bluenewspaceship.png';
+            } else if (baseSprite) {
+                previewImg.src = SpaceshipClass.getRecoloredDataUrl(baseSprite, currentColor);
+            }
+        }
+    }
+
+    setupControlsBinder() {
+        const presetSelect = document.getElementById('presetSoloSelect');
+        const resetBtn = document.getElementById('resetSoloControlsBtn');
+        const paneSolo = document.getElementById('settingsPaneSolo');
+
+        if (presetSelect) {
+            presetSelect.addEventListener('change', (e) => {
+                this.stopKeybindListening();
+                const preset = SOLO_PRESETS[e.target.value];
+                if (preset) {
+                    this.saveSoloControls({ ...preset });
+                }
+            });
+        }
+
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                this.stopKeybindListening();
+                this.saveSoloControls({ ...SOLO_PRESETS.arrows });
+            });
+        }
+
+        if (paneSolo) {
+            paneSolo.querySelectorAll('.keycap-btn[data-player="solo"]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (this.listeningKeycapBtn === btn) {
+                        this.stopKeybindListening();
+                        return;
+                    }
+                    this.stopKeybindListening();
+                    this.listeningKeycapBtn = btn;
+                    btn.classList.add('listening');
+                    btn.textContent = 'PRESS KEY...';
+                });
+            });
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (!this.listeningKeycapBtn) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (e.code === 'Escape') {
+                this.stopKeybindListening();
+                return;
+            }
+
+            const action = this.listeningKeycapBtn.dataset.action;
+            if (action) {
+                const updated = { ...this.engine.loadSoloControls(), [action]: e.code };
+                this.saveSoloControls(updated);
+            }
+            this.stopKeybindListening();
+        }, true);
+
+        this.updateControlsUI();
+    }
+
+    stopKeybindListening() {
+        if (this.listeningKeycapBtn) {
+            this.listeningKeycapBtn.classList.remove('listening');
+            this.listeningKeycapBtn = null;
+            this.updateControlsUI();
+        }
+    }
+
+    saveSoloControls(controls) {
+        try {
+            localStorage.setItem('spaceship_flight_controls_solo', JSON.stringify(controls));
+        } catch (_) {}
+        if (this.engine) {
+            this.engine.setSoloControls(controls);
+        }
+        this.updateControlsUI();
+    }
+
+    updateControlsUI() {
+        const controls = this.engine ? this.engine.loadSoloControls() : SOLO_PRESETS.arrows;
+        const paneSolo = document.getElementById('settingsPaneSolo');
+        if (paneSolo) {
+            paneSolo.querySelectorAll('.keycap-btn[data-player="solo"]').forEach(btn => {
+                const action = btn.dataset.action;
+                const code = controls[action] || SOLO_PRESETS.arrows[action];
+                btn.dataset.code = code;
+                btn.textContent = formatKeyCodeLabel(code);
+            });
+        }
+
+        const presetSelect = document.getElementById('presetSoloSelect');
+        if (presetSelect) {
+            let matched = 'custom';
+            for (const [name, map] of Object.entries(SOLO_PRESETS)) {
+                if (
+                    controls.rotateLeft === map.rotateLeft &&
+                    controls.rotateRight === map.rotateRight &&
+                    controls.fire === map.fire
+                ) {
+                    matched = name;
+                    break;
+                }
+            }
+            presetSelect.value = matched;
         }
     }
 
@@ -607,9 +847,11 @@ export class DailyManager {
             const maxVal = Math.max(1, ...keys.map(k => stats.distribution[k] || 0));
             const total = this.roundScores.reduce((a, b) => a + b, 0);
 
-            // Determine if current puzzle was completed to highlight the active score bracket
+            // Highlight active score bracket when puzzle is completed or in review mode (AST-L6)
             let activeBracket = null;
-            if (this.currentRound > 5 && this.roundScores.length === 5) {
+            const dateRecord = !this.isUnlimited ? getRecordForDate(this.currentDateStr) : null;
+            const isCompletedMission = (this.currentRound > 5 && this.roundScores.length === 5) || !!(dateRecord && dateRecord.completed);
+            if (isCompletedMission && this.roundScores.length === 5) {
                 if (total <= 100) activeBracket = '0-100';
                 else if (total <= 200) activeBracket = '101-200';
                 else if (total <= 300) activeBracket = '201-300';
@@ -675,7 +917,12 @@ export class DailyManager {
             return `🔴  ${s}`;
         });
 
-        const shareText = `Asteroidle #${this.puzzleNum} 🎯 ${total}/500\n` +
+        // Distinguish Unlimited vs Daily in shared header (AST-L5)
+        const titleLine = this.isUnlimited
+            ? `Asteroidle Unlimited (Sector #${this.puzzleNum}) 🎯 ${total}/500\n`
+            : `Asteroidle #${this.puzzleNum} 🎯 ${total}/500\n`;
+
+        const shareText = titleLine +
             emojis.map((e, idx) => `🪨 R${idx + 1}: ${e}`).join('\n') +
             `\nhttps://amitjoshi2724.github.io/Spaceship-Flight/asteroidle/`;
 
@@ -734,7 +981,7 @@ export class DailyManager {
             }
             yearSelect.value = String(this.calYear);
             yearSelect.addEventListener('change', (e) => {
-                this.calYear = Number(e.target.value);
+                this.calYear = Math.max(2024, Number(e.target.value));
                 this.renderCalendarView();
             });
         }
@@ -749,12 +996,13 @@ export class DailyManager {
             });
         }
 
-        // Month navigation buttons
+        // Month navigation buttons with lower bound clamped to Jan 2024 (AST-L4)
         document.getElementById('cal-prev-month-btn')?.addEventListener('click', () => {
+            if (this.calYear <= 2024 && this.calMonth <= 0) return;
             this.calMonth--;
             if (this.calMonth < 0) {
                 this.calMonth = 11;
-                this.calYear--;
+                this.calYear = Math.max(2024, this.calYear - 1);
             }
             this.renderCalendarView();
         });
@@ -801,16 +1049,29 @@ export class DailyManager {
         const container = document.getElementById('calendar-days-container');
         if (!container) return;
 
+        // Clamp calendar view to [2024-01, today] (AST-L4)
         const todayStr = getTodayDateStr();
         const todayDate = parseDate(todayStr);
+        if (this.calYear < 2024) {
+            this.calYear = 2024;
+            this.calMonth = 0;
+        }
+        if (this.calYear > todayDate.getFullYear() || (this.calYear === todayDate.getFullYear() && this.calMonth > todayDate.getMonth())) {
+            this.calYear = todayDate.getFullYear();
+            this.calMonth = todayDate.getMonth();
+        }
 
         const monthSelect = document.getElementById('cal-month-select');
         const yearSelect = document.getElementById('cal-year-select');
+        const prevBtn = document.getElementById('cal-prev-month-btn');
         const nextBtn = document.getElementById('cal-next-month-btn');
 
         if (monthSelect) monthSelect.value = String(this.calMonth);
         if (yearSelect) yearSelect.value = String(this.calYear);
 
+        if (prevBtn) {
+            prevBtn.disabled = (this.calYear <= 2024 && this.calMonth <= 0);
+        }
         if (nextBtn) {
             const isFutureMonth =
                 this.calYear > todayDate.getFullYear() ||

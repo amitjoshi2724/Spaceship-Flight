@@ -54,6 +54,9 @@ export function parseDate(dateStr) {
  * Get Puzzle Number from date string (1-indexed from epoch)
  */
 export function getPuzzleNumber(dateStr, epochStr = EPOCH_DATE_STR) {
+    if (!dateStr || typeof dateStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        return 0;
+    }
     const [y1, m1, d1] = dateStr.split('-').map(Number);
     const [y2, m2, d2] = epochStr.split('-').map(Number);
     const utc1 = Date.UTC(y1, m1 - 1, d1);
@@ -149,17 +152,67 @@ export function generateDailyChallenges(dateStr) {
         }
 
         // Ship positioned with guaranteed safe separation from asteroid start (>= 0.32 normalized distance)
+        // and verified closed-form ballistic intercept inside the canonical 1600x900 arena
+        const CANON_W = 1600;
+        const CANON_H = 900;
+        const tierSpeeds = { 1: 8.5, 2: 11.5, 3: 14.0, 4: 17.5, 5: 21.0 };
+        const scale = Math.max(0.42, Math.min(1.2, CANON_H / 720));
+        const bScale = Math.max(0.85, Math.min(1.25, scale));
+        const vB = (tierSpeeds[bulletTier] || 14.0) * bScale;
+        const rSpeed = 3.2 * speed * scale;
+
+        const hasVisibleIntercept = (sxNorm, syNorm, rxNorm, ryNorm, mAngle) => {
+            const rx = rxNorm * CANON_W;
+            const ry = ryNorm * CANON_H;
+            const sx = sxNorm * CANON_W;
+            const sy = syNorm * CANON_H;
+            const vx = Math.cos(mAngle) * rSpeed;
+            const vy = Math.sin(mAngle) * rSpeed;
+            const dx = rx - sx;
+            const dy = ry - sy;
+            const a = (vx * vx + vy * vy) - (vB * vB);
+            const b = 2 * (dx * vx + dy * vy);
+            const c = dx * dx + dy * dy;
+            let tHit = -1;
+            if (Math.abs(a) < 1e-6) {
+                if (Math.abs(b) > 1e-6) tHit = -c / b;
+            } else {
+                const disc = b * b - 4 * a * c;
+                if (disc >= 0) {
+                    const sqrtD = Math.sqrt(disc);
+                    const t1 = (-b - sqrtD) / (2 * a);
+                    const t2 = (-b + sqrtD) / (2 * a);
+                    if (t1 > 2 && t2 > 2) tHit = Math.min(t1, t2);
+                    else if (t1 > 2) tHit = t1;
+                    else if (t2 > 2) tHit = t2;
+                }
+            }
+            if (tHit <= 2 || tHit > 150) return false;
+            const hitX = rx + vx * tHit;
+            const hitY = ry + vy * tHit;
+            return (hitX >= 75 && hitX <= CANON_W - 75 && hitY >= 75 && hitY <= CANON_H - 75);
+        };
+
         let shipX, shipY;
         let attempts = 0;
         do {
             shipX = 0.18 + rng() * 0.64;
             shipY = 0.18 + rng() * 0.64;
             attempts++;
-        } while (Math.hypot(shipX - startX, shipY - startY) < 0.32 && attempts < 20);
+        } while (
+            (Math.hypot(shipX - startX, shipY - startY) < 0.32 ||
+             !hasVisibleIntercept(shipX, shipY, startX, startY, moveAngle)) &&
+            attempts < 25
+        );
 
         if (Math.hypot(shipX - startX, shipY - startY) < 0.32) {
             shipX = startX > 0.5 ? startX - 0.35 : startX + 0.35;
             shipY = startY > 0.5 ? startY - 0.35 : startY + 0.35;
+        }
+
+        // If the asteroid trajectory would carry the intercept point outside the arena, aim moveAngle inward toward arena interior
+        if (!hasVisibleIntercept(shipX, shipY, startX, startY, moveAngle)) {
+            moveAngle = Math.atan2(0.5 - startY, 0.5 - startX) + (rng() - 0.5) * 0.5;
         }
 
         challenges.push({

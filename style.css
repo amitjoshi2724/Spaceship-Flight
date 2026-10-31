@@ -4270,6 +4270,32 @@ html, body {
   animation: readyPulse 1s ease-in-out infinite alternate;
 }
 
+/* Responsive Multiplayer HUD Compact Mode (COOP-03) */
+@media (max-width: 768px) {
+  #hud.multiplayer-active #hudMultiplayer {
+    padding-right: 76px;
+    gap: 4px;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    width: 100%;
+  }
 
+  #hud.multiplayer-active .hud-mp-player {
+    gap: 3px;
+    flex-shrink: 1;
+  }
 
+  #hud.multiplayer-active .mp-player-badge {
+    padding: 2px 5px 3px;
+  }
+
+  #hud.multiplayer-active .energy-hud {
+    padding: 3px 5px;
+    min-width: 48px;
+  }
+
+  #hud.multiplayer-active .energy-bar-track {
+    width: 38px;
+  }
+}
 

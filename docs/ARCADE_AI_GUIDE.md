@@ -1770,77 +1770,51 @@ $$\text{Collision Confirmed} \iff (0 \le t \le 1) \quad \text{AND} \quad (0 \le 
 
 This guarantees that no matter how fast a laser travels—even jumping 100 pixels in a single tick—it can never leap across an asteroid boundary unnoticed. Tunneling is mathematically impossible.
 
-#### Stage 3: Swept Capsule Spine Proximity (Tangential Grazes)
-If the bullet didn't cut all the way through an edge, did its glowing plasma envelope brush against an edge?
-Evaluate the segment distance $d^2(\vec{P}, AB)$ across three sample points along the capsule spine:
-1. Start point $\vec{P}_0 = (x - dx, y - dy)$
-2. Midpoint $\vec{P}_{\text{mid}} = (\vec{P}_0 + \vec{P}_1) / 2$
-3. End point $\vec{P}_1 = (x, y)$
-
-$$\text{Edge Graze} \iff \min\left(d^2(\vec{P}_0, AB), d^2(\vec{P}_{\text{mid}}, AB), d^2(\vec{P}_1, AB)\right) \le R_c^2$$
-
-#### Stage 4: Asteroid Vertex-to-Capsule Distance (Sharp Corner Graze)
-What if a sharp asteroid corner $\vec{V}_i$ points into the side of the swept capsule without crossing the center line?
-Test the distance from each vertex $\vec{V}_i$ to the bullet's trajectory segment $\vec{P}_0 \vec{P}_1$:
-$$t = \text{clamp}\left(\frac{(\vec{V}_i - \vec{P}_0) \cdot (\vec{P}_1 - \vec{P}_0)}{||\vec{P}_1 - \vec{P}_0||^2}, 0, 1\right)$$
-$$\vec{Q} = \vec{P}_0 + t(\vec{P}_1 - \vec{P}_0)$$
-$$\text{Corner Graze} \iff ||\vec{V}_i - \vec{Q}||^2 \le R_c^2$$
+#### Stage 3: Exact Continuous Segment-to-Segment Distance in the Target's Relative Rest Frame
+If the bullet didn't cut all the way through an edge, did its glowing plasma envelope brush against an edge or vertex while both the bullet and target were moving?
+Instead of sampling discrete points in world space, we form the bullet's swept segment in the **moving target's rest frame**:
+$$\vec{P}_1 = (x_b, y_b), \quad \vec{P}_0 = \vec{P}_1 - (\vec{v}_b - \vec{v}_{\text{target}})\Delta t$$
+And evaluate the exact continuous segment-to-segment distance squared $\operatorname{segToSegDistSq}(\vec{P}_0\vec{P}_1, \vec{E}_i\vec{E}_{i+1})$ against every polygon edge $\vec{E}_i\vec{E}_{i+1}$:
+$$\operatorname{segToSegDistSq}(AB, CD) = \begin{cases} 0, & \text{if } AB \text{ intersects } CD \\ \min\left(d^2(A, CD), d^2(B, CD), d^2(C, AB), d^2(D, AB)\right), & \text{otherwise} \end{cases}$$
+$$\text{Hit} \iff \vec{P}_1 \in \text{Polygon} \;\lor\; \min_i \operatorname{segToSegDistSq}(\vec{P}_0\vec{P}_1, \vec{E}_i\vec{E}_{i+1}) \le R_c^2$$
 
 ---
 
 ### 16.4 Production Implementation in Spaceship Flight
 
-Here is the exact, high-performance algorithm operating in `Rock.prototype.containsBullet` in `game.js`:
+Here is the exact, high-performance relative-frame CCD algorithm operating in `Rock.prototype.containsBullet`, `Spaceship.prototype.containsBullet`, and `UFO.prototype.containsBullet` in `game.js`:
 
 ```javascript
-containsBullet(bullet) {
+containsBullet(bullet, dtSteps = 1) {
   // 1. Authoritative Hitbox Radius: Queried directly from bullet object
   const bRadius = bullet.collisionRadius || bullet.radius || 3;
   const rSq = bRadius * bRadius;
 
+  // 2. Relative Swept Segment in Target's Rest Frame
   const p1x = bullet.x;
   const p1y = bullet.y;
-  const p0x = bullet.dx !== undefined ? bullet.x - bullet.dx : p1x;
-  const p0y = bullet.dy !== undefined ? bullet.y - bullet.dy : p1y;
+  const relDx = ((bullet.dx || 0) - (this.dx || 0)) * dtSteps;
+  const relDy = ((bullet.dy || 0) - (this.dy || 0)) * dtSteps;
+  const p0x = p1x - relDx;
+  const p0y = p1y - relDy;
 
-  // 2. Swept Broadphase Cull
+  // 3. Swept Broadphase Cull
   const midX = (p0x + p1x) * 0.5;
   const midY = (p0y + p1y) * 0.5;
   const distSq = (midX - this.x) ** 2 + (midY - this.y) ** 2;
-  const stepLen = Math.hypot(bullet.dx || 0, bullet.dy || 0);
+  const stepLen = Math.hypot(relDx, relDy);
   const maxDist = this.radius * 1.6 + bRadius + stepLen * 0.5;
   if (distSq > maxDist * maxDist) return false;
 
-  // 3. Point-in-Polygon (Endpoints & Midpoint)
+  // 4. Point-in-Polygon (Endpoints & Midpoint)
   if (this.containsPoint(p1x, p1y) || this.containsPoint(p0x, p0y) || this.containsPoint(midX, midY)) {
     return true;
   }
 
+  // 5. Exact Continuous Segment-to-Segment Distance Across All Polygon Edges
   const pts = this.getTransformedPoints();
-
-  // 4. Continuous Trajectory Ray-Crossing (Eliminates Tunneling)
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-    if (this.segmentsIntersect(p0x, p0y, p1x, p1y, pts[j].x, pts[j].y, pts[i].x, pts[i].y)) {
-      return true;
-    }
-  }
-
-  // 5. Swept Capsule Edge Distance (Catches Grazes Along Path)
-  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-    const x1 = pts[j].x, y1 = pts[j].y;
-    const x2 = pts[i].x, y2 = pts[i].y;
-    if (
-      this.distToSegmentSquared(p1x, p1y, x1, y1, x2, y2) <= rSq ||
-      this.distToSegmentSquared(midX, midY, x1, y1, x2, y2) <= rSq ||
-      this.distToSegmentSquared(p0x, p0y, x1, y1, x2, y2) <= rSq
-    ) {
-      return true;
-    }
-  }
-
-  // 6. Vertex-to-Capsule Distance (Catches Jagged Corners)
-  for (let i = 0; i < pts.length; i++) {
-    if (this.distToSegmentSquared(pts[i].x, pts[i].y, p0x, p0y, p1x, p1y) <= rSq) {
+    if (segToSegDistSq(p0x, p0y, p1x, p1y, pts[j].x, pts[j].y, pts[i].x, pts[i].y) <= rSq) {
       return true;
     }
   }
@@ -2200,18 +2174,16 @@ Implemented in [`game.js:L2246-2250`](file:///Users/amitjoshi2724/Desktop/Spaces
 ### 2. Threat Radar Range
 Only rocks within radar range $R_{\text{radar}} = \max(180, 8.0 \times R_{\text{ufo}})$ are analyzed ([`game.js:L2153`](file:///Users/amitjoshi2724/Desktop/Spaceship-Flight/game.js#L2153)), discarding distant clutter.
 
-### 3. Kinematic Closing Velocity & Time-to-Impact
-For each rock within radar, closing velocity along the relative position vector is:
+### 3. Kinematic Closing Velocity, Closest Point of Approach ($t_{\text{CPA}}, d_{\text{CPA}}$), & Time-to-Impact
+For each rock within radar, closing velocity along the relative position vector and analytical Closest Point of Approach (`computeCPA`) are evaluated in closed form:
 
-$$v_{\text{closing}} = -\frac{\vec{r} \cdot \vec{v}_{\text{rel}}}{\|\vec{r}\|}$$
+$$v_{\text{closing}} = -\frac{\vec{r} \cdot \vec{v}_{\text{rel}}}{\|\vec{r}\|}, \quad t_{\text{CPA}} = \max\left(0, -\frac{\vec{r} \cdot \vec{v}_{\text{rel}}}{\|\vec{v}_{\text{rel}}\|^2}\right), \quad d_{\text{CPA}} = \|\vec{r} + \vec{v}_{\text{rel}} t_{\text{CPA}}\|$$
 
-Implemented in [`game.js:L2170`](file:///Users/amitjoshi2724/Desktop/Spaceship-Flight/game.js#L2170).
+When $v_{\text{closing}} > 0.05\text{ px/frame}$, time-to-impact uses $t_{\text{CPA}}$ when the rock's trajectory threatens the saucer's clearance corridor ($d_{\text{CPA}} \le 1.35 R_{\text{clearance}}$), preventing false-positive panic on rocks passing harmlessly wide:
 
-When $v_{\text{closing}} > 0.05\text{ px/frame}$, time-to-impact and quadratic urgency are:
+$$t_{\text{impact}} = \begin{cases} t_{\text{CPA}} / 60, & \text{if } t_{\text{CPA}} > 0 \;\land\; d_{\text{CPA}} \le 1.35 R_{\text{clearance}} \\ (d / v_{\text{closing}}) / 60, & \text{otherwise} \end{cases}, \quad U_{\text{kinematic}} = \frac{1}{\max(0.04, t_{\text{impact}}^2)}$$
 
-$$t_{\text{impact}} = \frac{d / v_{\text{closing}}}{60}, \quad U_{\text{kinematic}} = \frac{1}{\max(0.04, t_{\text{impact}}^2)}$$
-
-Implemented in [`game.js:L2177-2178`](file:///Users/amitjoshi2724/Desktop/Spaceship-Flight/game.js#L2177-L2178).
+Moreover, emergency evasive overdrive (`imminentThreatDetected`) triggers only when the threat corridor genuinely intersects the saucer's safety envelope ($d_{\text{CPA}} \le 1.15 R_{\text{clearance}}$).
 
 ### 4. Static Proximity Urgency Ramp
 To ensure slow-moving or stationary obstacles are never ignored:
@@ -2373,20 +2345,21 @@ Section 6 explored combat AI, predictive aiming, and dodging counterplay. Our UF
 ```
 
 ### Channel 1: Defensive Point-Defense CIWS
-When an asteroid enters interception range ($d < 160\text{px}$, $v_{\text{closing}} > 0.15$, $t_{\text{impact}} < 1.30\text{s}$, [`game.js:L2423-2434`](file:///Users/amitjoshi2724/Desktop/Spaceship-Flight/game.js#L2423-L2434)), the saucer solves first-order lead intercept:
+When an asteroid enters interception range ($d < 160\text{px}$, $v_{\text{closing}} > 0.15$, $t_{\text{impact}} < 1.30\text{s}$, and lateral miss distance $d_{\text{CPA}} \le 1.25 R_{\text{clearance}}$), the saucer determines the active emitter flank (`localX < 0` for Port Red at $(-0.2656w, +0.1094h)$, `localX >= 0` for Starboard Blue at $(+0.2656w, +0.1094h)$) and solves the **exact closed-form quadratic ballistic intercept equation** (`solveBallisticIntercept`) directly from the physical emitter muzzle coordinate $\vec{x}_{\text{muzzle}}$:
 
-$$t_{\text{flight}} = \frac{d}{v_{\text{laser}}}, \quad \vec{x}_{\text{lead}} = \vec{x}_{\text{rock}} + \vec{v}_{\text{rock}} \cdot t_{\text{flight}}$$
+$$\left(\|\vec{v}_{\text{rock}}\|^2 - v_{\text{laser}}^2\right) t^2 + 2\left((\vec{x}_{\text{rock}} - \vec{x}_{\text{muzzle}}) \cdot \vec{v}_{\text{rock}}\right) t + \|\vec{x}_{\text{rock}} - \vec{x}_{\text{muzzle}}\|^2 = 0$$
 
-Projecting $\vec{x}_{\text{lead}}$ into the saucer's local frame determines the emitter flank:
+$$\vec{x}_{\text{lead}} = \vec{x}_{\text{rock}} + \vec{v}_{\text{rock}} \cdot t^* - \vec{x}_{\text{muzzle}}$$
+
 - $\text{localX} < 0 \implies$ Fires **Ruby-Red Bolt** (`#ff1744`) from Port Emitter.
 - $\text{localX} \ge 0 \implies$ Fires **Royal-Blue Bolt** (`#1761f2`) from Starboard Emitter.
 
 ### Channel 2: Offensive Laser Cannon & Counterplay
-In [`game.js:L2486-2519`](file:///Users/amitjoshi2724/Desktop/Spaceship-Flight/game.js#L2486-L2519), offensive shots alternate with 50/50 probability between two modes, each designed with clear counterplay:
-1. **🟢 Emerald Direct Aim (`#00ff8e`)**: Aims at current player coordinates $\vec{x}_p$.  
+Offensive shots emerge from the central ventral emitter at $(+0.0156w, +0.1406h)$ and alternate with 50/50 probability between two modes, each designed with clear counterplay:
+1. **🟢 Emerald Direct Aim (`#00ff8e`)**: Aims from the ventral muzzle $\vec{x}_{\text{muzzle}}$ at current player coordinates $\vec{x}_p$.  
    *Counterplay*: **Keep moving!** Maintaining cruise speed guarantees the bolt lands behind you.
-2. **🟣 Alien Violet Predictive Lead (`#c084fc`)**: Solves lead vector $\vec{x}_{\text{lead}} = \vec{x}_p + \vec{v}_p \cdot (d_p / v_{\text{laser}})$.  
-   *Counterplay*: **Brake, reverse, or cut sharply!** Changing speed or heading causes the predictive shot to fly harmlessly past.
+2. **🟣 Alien Violet Predictive Lead (`#c084fc`)**: Solves the exact quadratic ballistic intercept (`solveBallisticIntercept`) from the ventral muzzle $\vec{x}_{\text{muzzle}}$ to the moving player $\vec{x}_p(t) = \vec{x}_p + \vec{v}_p t^*$.  
+   *Counterplay*: **Brake, reverse, or cut sharply!** Changing speed or heading invalidates the quadratic root $t^*$ and causes the predictive shot to fly harmlessly past.
 
 ---
 
@@ -2493,26 +2466,33 @@ $$\text{localX} = \text{leadX} \cdot \cos\theta + \text{leadY} \cdot \sin\theta$
 > [!IMPORTANT]
 > **Do not confuse the physical muzzle spawn coordinates with the bullet's flight direction!**
 
-* **The Muzzle Coordinate $(-0.2656w, +0.1094h)$**:  
-  This is purely the **physical spawn origin $(x_0, y_0)$ on the saucer hull**. It guarantees the laser visually emerges from the red light aperture on the sprite rather than magically appearing out of thin air in the center of the ship.
-* **The Dynamic Aim Vector $(bVx, bVy)$**:  
-  The flight direction is **completely dynamic and omnidirectional**. The UFO's combat computer calculates the asteroid's velocity, solves travel time $t = d / v_{\text{laser}}$, projects future rock coordinates $\vec{x}_{\text{intercept}} = \vec{x}_{\text{rock}} + \vec{v}_{\text{rock}} \cdot t$, and normalizes $(bVx, bVy)$ directly toward that predicted intercept point!
+* **The Muzzle Coordinate $(-0.2656w, +0.1094h)$ (Port) or $(+0.2656w, +0.1094h)$ (Starboard)**:  
+  This is the **physical spawn origin $(x_{\text{muzzle}}, y_{\text{muzzle}})$ on the saucer hull**. It guarantees the laser visually emerges from the red or blue light aperture on the sprite rather than magically appearing out of thin air in the center of the ship.
+* **The Closed-Form Quadratic Intercept Vector $(bVx, bVy)$**:  
+  The flight direction is **completely dynamic, omnidirectional, and solved directly from the physical muzzle coordinate** using `solveBallisticIntercept`. The UFO's combat computer solves the exact quadratic equation $(\|\vec{v}_{\text{rock}}\|^2 - v_{\text{laser}}^2)t^2 + 2(\Delta\vec{P} \cdot \vec{v}_{\text{rock}})t + \|\Delta\vec{P}\|^2 = 0$ for the earliest positive root $t^*$, projects the exact intercept point $\vec{x}_{\text{intercept}} = \vec{x}_{\text{rock}} + \vec{v}_{\text{rock}} \cdot t^*$, and normalizes $(bVx, bVy)$ from `(muzzleX, muzzleY)` directly toward that intercept point!
 
 ```javascript
-// 1. DYNAMIC AIM VECTOR (Calculates where to shoot):
-const bulletFlightTime = emergencyRock.dist / this.vLaser;
-const leadX = emergencyRock.relX + emergencyRock.rock.dx * bulletFlightTime;
-const leadY = emergencyRock.relY + emergencyRock.rock.dy * bulletFlightTime;
+// 1. PHYSICAL SPAWN POINT (Where on the hull the laser emerges):
+const muzzleLocalX = isLeftSide ? -0.2656 * this.width : 0.2656 * this.width;
+const muzzleLocalY = 0.1094 * this.height;
+const muzzleX = this.x + (muzzleLocalX * cosA - muzzleLocalY * sinA);
+const muzzleY = this.y + (muzzleLocalX * sinA + muzzleLocalY * cosA);
+
+// 2. CLOSED-FORM QUADRATIC BALLISTIC INTERCEPT (Solved from exact muzzle origin):
+const ciwsSol = solveBallisticIntercept(
+  muzzleX, muzzleY,
+  emergencyRock.rock.x, emergencyRock.rock.y,
+  emergencyRock.rock.dx || 0, emergencyRock.rock.dy || 0,
+  this.vLaser, 0
+);
+const leadX = ciwsSol.aimX;
+const leadY = ciwsSol.aimY;
 const aimDist = Math.hypot(leadX, leadY) || 1;
 const bVx = (leadX / aimDist) * this.vLaser; // Bullet velocity X
 const bVy = (leadY / aimDist) * this.vLaser; // Bullet velocity Y
 
-// 2. PHYSICAL SPAWN POINT (Where on the hull the laser emerges):
-const muzzleX = this.x + (-0.2656 * this.width * cosA - 0.1094 * this.height * sinA);
-const muzzleY = this.y + (-0.2656 * this.width * sinA + 0.1094 * this.height * cosA);
-
-// The bullet spawns at (muzzleX, muzzleY), but tracks dynamically along (bVx, bVy)!
-ufoBullets.push(new UFOBullet(muzzleX, muzzleY, bVx, bVy, 'rock', 'direct', 'red'));
+// The bullet spawns at (muzzleX, muzzleY) and tracks along the exact intercept vector (bVx, bVy)!
+ufoBullets.push(new UFOBullet(muzzleX, muzzleY, bVx, bVy, 'rock', 'direct', isLeftSide ? 'red' : 'blue'));
 ```
 
 ---
