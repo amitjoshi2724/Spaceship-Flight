@@ -18,7 +18,10 @@ import {
     getHistory, 
     getRecordForDate, 
     saveActiveState, 
-    loadActiveState 
+    loadActiveState,
+    clearActiveState,
+    onStorageChange,
+    waitForStorageReady
 } from './storage.js';
 import { AsteroidleEngine } from './asteroidle.js';
 import './auth.js'; // Initializes Google Auth
@@ -65,6 +68,7 @@ export class DailyManager {
         this.checkURLParams();
         this.setupModals();
         this.setupSettings();
+        this.bindStorageSync();
         if (this.isUnlimited) {
             this.startUnlimitedPuzzle();
         } else {
@@ -230,6 +234,77 @@ export class DailyManager {
         } catch (e) { }
     }
 
+    bindStorageSync() {
+        // Subscribe to real-time local/cloud storage updates across tabs & devices
+        onStorageChange(({ stats, history }) => {
+            this.onStorageUpdated(stats, history);
+        });
+
+        // Startup hydration gate: when cloud profile hydrates, seamlessly transition if completed
+        waitForStorageReady().then(({ history }) => {
+            if (!this.isUnlimited && history) {
+                const rec = history[this.currentDateStr];
+                if (rec && rec.completed && !this.isReviewMode) {
+                    this.applyCompletedRecord(rec);
+                }
+            }
+        });
+    }
+
+    onStorageUpdated(stats, history) {
+        if (!this.isUnlimited && history) {
+            const rec = history[this.currentDateStr];
+            if (rec && rec.completed) {
+                if (!this.isReviewMode) {
+                    this.applyCompletedRecord(rec);
+                } else {
+                    const currentTotal = this.roundScores.reduce((a, b) => a + b, 0);
+                    if (rec.totalScore !== undefined && rec.totalScore > currentTotal) {
+                        this.roundScores = [...(rec.roundScores || this.roundScores)];
+                        this.updateHeaderBanner();
+                        this.updatePips();
+                    }
+                }
+            }
+        }
+
+        // If stats modal is open, re-render it so streaks & scores update live
+        const statsModal = document.getElementById('stats-modal');
+        if (statsModal && statsModal.classList.contains('active')) {
+            this.renderStatsModal();
+        }
+
+        // If archive modal is open, re-render it so calendar/list reflects synced completions
+        const archiveModal = document.getElementById('archive-modal');
+        if (archiveModal && archiveModal.classList.contains('active')) {
+            this.renderArchiveModal();
+        }
+    }
+
+    applyCompletedRecord(record) {
+        if (!record || !record.completed) return;
+        this.isReviewMode = true;
+        this.roundScores = [...(record.roundScores || [0, 0, 0, 0, 0])];
+        this.currentRound = 6;
+        clearActiveState(this.currentDateStr);
+        this.updateHeaderBanner();
+        this.updatePips();
+
+        // Dismiss floating telemetry result banner if active
+        const resultBanner = document.getElementById('round-result-banner');
+        if (resultBanner) {
+            resultBanner.classList.remove('visible');
+            resultBanner.style.display = 'none';
+        }
+
+        // Load Round 1 into arena for non-destructive review
+        if (this.challenges && this.challenges[0]) {
+            this.engine.loadChallenge(this.challenges[0]);
+        }
+
+        this.showResultsModal(record.totalScore);
+    }
+
     startPuzzle(dateStr) {
         const todayStr = getTodayDateStr();
         if (dateStr > todayStr) dateStr = todayStr;
@@ -245,16 +320,7 @@ export class DailyManager {
         // Check if already completed for this date (AST-C4)
         const existing = getRecordForDate(dateStr);
         if (existing && existing.completed) {
-            this.isReviewMode = true;
-            this.roundScores = [...(existing.roundScores || [0, 0, 0, 0, 0])];
-            this.currentRound = 6;
-            this.updateHeaderBanner();
-            this.updatePips();
-            // Load Round 1 into the arena for non-destructive review/practice while keeping official record locked
-            if (this.challenges[0]) {
-                this.engine.loadChallenge(this.challenges[0]);
-            }
-            this.showResultsModal(existing.totalScore);
+            this.applyCompletedRecord(existing);
             return;
         }
 

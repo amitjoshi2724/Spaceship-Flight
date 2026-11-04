@@ -13,6 +13,25 @@ const authListeners = new Set();
 let currentAuthUser = null;
 let isInitialized = false;
 
+let authReadyResolve;
+const authReadyPromise = new Promise((resolve) => {
+    authReadyResolve = resolve;
+});
+
+// Safety fallback: if auth resolution takes more than 3000ms, resolve so callers are never blocked
+setTimeout(() => {
+    if (authReadyResolve) {
+        authReadyResolve(currentAuthUser);
+    }
+}, 3000);
+
+/**
+ * Returns a promise that resolves when Firebase Auth initial state has been determined
+ */
+export function waitForAuthReady() {
+    return authReadyPromise;
+}
+
 // Initialize Firebase Auth if running on http/https
 (async () => {
     try {
@@ -25,6 +44,9 @@ let isInitialized = false;
             authFns.onAuthStateChanged(firebaseAuth, (user) => {
                 currentAuthUser = user;
                 isInitialized = true;
+                if (authReadyResolve) {
+                    authReadyResolve(user);
+                }
                 renderAuthUI(user);
                 authListeners.forEach(cb => {
                     try {
@@ -41,6 +63,9 @@ let isInitialized = false;
     }
 
     isInitialized = true;
+    if (authReadyResolve) {
+        authReadyResolve(null);
+    }
     renderAuthUI(null);
 })();
 

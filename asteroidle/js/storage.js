@@ -4,7 +4,7 @@
  * Operates seamlessly on file:// protocol, offline, or with active network connection.
  */
 import { initFirebase } from './firebase-config.js';
-import { onAuthChange, getCurrentUser } from './auth.js';
+import { onAuthChange, getCurrentUser, waitForAuthReady } from './auth.js';
 import { getTodayDateStr, getPuzzleNumber } from './prng.js';
 
 let firestoreDb = null;
@@ -22,6 +22,33 @@ const firestoreReadyPromise = (async () => {
         console.warn("Firestore unavailable, running in local-storage-only mode:", e);
     }
 })();
+
+let storageHydratedResolve;
+let isStorageHydrated = false;
+const storageHydratedPromise = new Promise((resolve) => {
+    storageHydratedResolve = resolve;
+});
+
+function markStorageHydrated() {
+    if (!isStorageHydrated) {
+        isStorageHydrated = true;
+        if (storageHydratedResolve) {
+            storageHydratedResolve({ stats: memoryStats, history: memoryHistory });
+        }
+    }
+}
+
+// Timeout fallback: mark storage hydrated within 2500ms max so offline/slow network never hangs UI
+setTimeout(() => {
+    markStorageHydrated();
+}, 2500);
+
+/**
+ * Returns a promise that resolves when initial cloud data has hydrated and merged into local storage
+ */
+export function waitForStorageReady() {
+    return storageHydratedPromise;
+}
 
 const STATS_KEY = 'asteroidle_stats_v1';
 const HISTORY_KEY = 'asteroidle_history_v1';
@@ -80,14 +107,24 @@ function computeStreaksFromHistory(history) {
 }
 
 /**
- * Merge two history dictionaries, preserving the higher totalScore for each date (AST-M4)
+ * Merge two history dictionaries, preserving completed puzzles and higher totalScore for each date (AST-M4)
  */
 function mergeHistoryRecords(baseHistory, incomingHistory) {
     const merged = { ...(baseHistory || {}) };
     for (const [date, rec] of Object.entries(incomingHistory || {})) {
         if (!rec) continue;
-        if (!merged[date] || ((rec.totalScore || 0) > (merged[date].totalScore || 0))) {
+        const existing = merged[date];
+        if (!existing) {
             merged[date] = rec;
+        } else {
+            // Completed puzzles strictly take precedence over incomplete puzzles
+            if (rec.completed && !existing.completed) {
+                merged[date] = rec;
+            } else if (!rec.completed && existing.completed) {
+                merged[date] = existing;
+            } else if ((rec.totalScore || 0) >= (existing.totalScore || 0)) {
+                merged[date] = rec;
+            }
         }
     }
     return merged;
@@ -319,19 +356,26 @@ function notifyListeners() {
 /**
  * Sync local state to Firestore
  */
-async function syncToCloud() {
+export async function syncToCloud() {
     await firestoreReadyPromise;
-    const user = getCurrentUser();
+    let user = getCurrentUser();
+    if (!user) {
+        user = await waitForAuthReady();
+    }
     if (!user || !firestoreDb || !firestoreFns) return;
 
     try {
         const userRef = firestoreFns.doc(firestoreDb, 'users', user.uid);
         const cleanStats = sanitizeStats(memoryStats, memoryHistory);
-        await firestoreFns.setDoc(userRef, {
+        const payload = {
             asteroidle_stats: cleanStats,
-            asteroidle_history: memoryHistory,
             lastUpdated: Date.now()
-        }, { merge: true });
+        };
+        // Only write asteroidle_history if we have records to avoid wiping cloud data from empty clients
+        if (Object.keys(memoryHistory).length > 0) {
+            payload.asteroidle_history = memoryHistory;
+        }
+        await firestoreFns.setDoc(userRef, payload, { merge: true });
     } catch (e) {
         console.warn("Could not sync Asteroidle data to Firestore:", e);
     }
@@ -347,7 +391,10 @@ onAuthChange(async (user) => {
     }
 
     await firestoreReadyPromise;
-    if (!user || !firestoreDb || !firestoreFns) return;
+    if (!user || !firestoreDb || !firestoreFns) {
+        markStorageHydrated();
+        return;
+    }
 
     try {
         const userRef = firestoreFns.doc(firestoreDb, 'users', user.uid);
@@ -386,32 +433,48 @@ onAuthChange(async (user) => {
             localStorage.setItem(STATS_KEY, JSON.stringify(memoryStats));
             localStorage.setItem(HISTORY_KEY, JSON.stringify(memoryHistory));
             notifyListeners();
+            markStorageHydrated();
 
             // Push clean merged data back to cloud
             await syncToCloud();
         } else {
-            // First time login for this user: seed cloud with current local stats
-            await syncToCloud();
+            // First time login for this user: seed cloud with current local stats if non-empty
+            markStorageHydrated();
+            if (Object.keys(memoryHistory).length > 0 || memoryStats.played > 0) {
+                await syncToCloud();
+            }
         }
 
         // Setup real-time listener for multi-tab or cross-device updates
         firestoreUnsubscribe = firestoreFns.onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
                 const updated = docSnap.data();
+                let changed = false;
                 if (updated.asteroidle_history) {
-                    memoryHistory = mergeHistoryRecords(memoryHistory, updated.asteroidle_history);
+                    const merged = mergeHistoryRecords(memoryHistory, updated.asteroidle_history);
+                    if (JSON.stringify(merged) !== JSON.stringify(memoryHistory)) {
+                        memoryHistory = merged;
+                        changed = true;
+                    }
                 }
                 if (updated.asteroidle_stats) {
-                    memoryStats = sanitizeStats({ ...DEFAULT_STATS, ...updated.asteroidle_stats }, memoryHistory);
-                } else {
+                    const sanitized = sanitizeStats({ ...DEFAULT_STATS, ...updated.asteroidle_stats }, memoryHistory);
+                    if (JSON.stringify(sanitized) !== JSON.stringify(memoryStats)) {
+                        memoryStats = sanitized;
+                        changed = true;
+                    }
+                } else if (changed) {
                     memoryStats = sanitizeStats(memoryStats, memoryHistory);
                 }
-                localStorage.setItem(STATS_KEY, JSON.stringify(memoryStats));
-                localStorage.setItem(HISTORY_KEY, JSON.stringify(memoryHistory));
-                notifyListeners();
+                if (changed) {
+                    localStorage.setItem(STATS_KEY, JSON.stringify(memoryStats));
+                    localStorage.setItem(HISTORY_KEY, JSON.stringify(memoryHistory));
+                    notifyListeners();
+                }
             }
         });
     } catch (e) {
         console.warn("Error setting up Firestore storage sync:", e);
+        markStorageHydrated();
     }
 });

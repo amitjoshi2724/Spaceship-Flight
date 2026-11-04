@@ -309,6 +309,25 @@ const authListeners = new Set();
 let currentAuthUser = null;
 let isInitialized = false;
 
+let authReadyResolve;
+const authReadyPromise = new Promise((resolve) => {
+    authReadyResolve = resolve;
+});
+
+// Safety fallback: if auth resolution takes more than 3000ms, resolve so callers are never blocked
+setTimeout(() => {
+    if (authReadyResolve) {
+        authReadyResolve(currentAuthUser);
+    }
+}, 3000);
+
+/**
+ * Returns a promise that resolves when Firebase Auth initial state has been determined
+ */
+function waitForAuthReady() {
+    return authReadyPromise;
+}
+
 // Initialize Firebase Auth if running on http/https
 (async () => {
     try {
@@ -321,6 +340,9 @@ let isInitialized = false;
             authFns.onAuthStateChanged(firebaseAuth, (user) => {
                 currentAuthUser = user;
                 isInitialized = true;
+                if (authReadyResolve) {
+                    authReadyResolve(user);
+                }
                 renderAuthUI(user);
                 authListeners.forEach(cb => {
                     try {
@@ -337,6 +359,9 @@ let isInitialized = false;
     }
 
     isInitialized = true;
+    if (authReadyResolve) {
+        authReadyResolve(null);
+    }
     renderAuthUI(null);
 })();
 
@@ -513,6 +538,33 @@ const firestoreReadyPromise = (async () => {
     }
 })();
 
+let storageHydratedResolve;
+let isStorageHydrated = false;
+const storageHydratedPromise = new Promise((resolve) => {
+    storageHydratedResolve = resolve;
+});
+
+function markStorageHydrated() {
+    if (!isStorageHydrated) {
+        isStorageHydrated = true;
+        if (storageHydratedResolve) {
+            storageHydratedResolve({ stats: memoryStats, history: memoryHistory });
+        }
+    }
+}
+
+// Timeout fallback: mark storage hydrated within 2500ms max so offline/slow network never hangs UI
+setTimeout(() => {
+    markStorageHydrated();
+}, 2500);
+
+/**
+ * Returns a promise that resolves when initial cloud data has hydrated and merged into local storage
+ */
+function waitForStorageReady() {
+    return storageHydratedPromise;
+}
+
 const STATS_KEY = 'asteroidle_stats_v1';
 const HISTORY_KEY = 'asteroidle_history_v1';
 const ACTIVE_KEY = 'asteroidle_active_state_v1';
@@ -570,14 +622,24 @@ function computeStreaksFromHistory(history) {
 }
 
 /**
- * Merge two history dictionaries, preserving the higher totalScore for each date (AST-M4)
+ * Merge two history dictionaries, preserving completed puzzles and higher totalScore for each date (AST-M4)
  */
 function mergeHistoryRecords(baseHistory, incomingHistory) {
     const merged = { ...(baseHistory || {}) };
     for (const [date, rec] of Object.entries(incomingHistory || {})) {
         if (!rec) continue;
-        if (!merged[date] || ((rec.totalScore || 0) > (merged[date].totalScore || 0))) {
+        const existing = merged[date];
+        if (!existing) {
             merged[date] = rec;
+        } else {
+            // Completed puzzles strictly take precedence over incomplete puzzles
+            if (rec.completed && !existing.completed) {
+                merged[date] = rec;
+            } else if (!rec.completed && existing.completed) {
+                merged[date] = existing;
+            } else if ((rec.totalScore || 0) >= (existing.totalScore || 0)) {
+                merged[date] = rec;
+            }
         }
     }
     return merged;
@@ -811,17 +873,24 @@ function notifyListeners() {
  */
 async function syncToCloud() {
     await firestoreReadyPromise;
-    const user = getCurrentUser();
+    let user = getCurrentUser();
+    if (!user) {
+        user = await waitForAuthReady();
+    }
     if (!user || !firestoreDb || !firestoreFns) return;
 
     try {
         const userRef = firestoreFns.doc(firestoreDb, 'users', user.uid);
         const cleanStats = sanitizeStats(memoryStats, memoryHistory);
-        await firestoreFns.setDoc(userRef, {
+        const payload = {
             asteroidle_stats: cleanStats,
-            asteroidle_history: memoryHistory,
             lastUpdated: Date.now()
-        }, { merge: true });
+        };
+        // Only write asteroidle_history if we have records to avoid wiping cloud data from empty clients
+        if (Object.keys(memoryHistory).length > 0) {
+            payload.asteroidle_history = memoryHistory;
+        }
+        await firestoreFns.setDoc(userRef, payload, { merge: true });
     } catch (e) {
         console.warn("Could not sync Asteroidle data to Firestore:", e);
     }
@@ -837,7 +906,10 @@ onAuthChange(async (user) => {
     }
 
     await firestoreReadyPromise;
-    if (!user || !firestoreDb || !firestoreFns) return;
+    if (!user || !firestoreDb || !firestoreFns) {
+        markStorageHydrated();
+        return;
+    }
 
     try {
         const userRef = firestoreFns.doc(firestoreDb, 'users', user.uid);
@@ -876,33 +948,49 @@ onAuthChange(async (user) => {
             localStorage.setItem(STATS_KEY, JSON.stringify(memoryStats));
             localStorage.setItem(HISTORY_KEY, JSON.stringify(memoryHistory));
             notifyListeners();
+            markStorageHydrated();
 
             // Push clean merged data back to cloud
             await syncToCloud();
         } else {
-            // First time login for this user: seed cloud with current local stats
-            await syncToCloud();
+            // First time login for this user: seed cloud with current local stats if non-empty
+            markStorageHydrated();
+            if (Object.keys(memoryHistory).length > 0 || memoryStats.played > 0) {
+                await syncToCloud();
+            }
         }
 
         // Setup real-time listener for multi-tab or cross-device updates
         firestoreUnsubscribe = firestoreFns.onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
                 const updated = docSnap.data();
+                let changed = false;
                 if (updated.asteroidle_history) {
-                    memoryHistory = mergeHistoryRecords(memoryHistory, updated.asteroidle_history);
+                    const merged = mergeHistoryRecords(memoryHistory, updated.asteroidle_history);
+                    if (JSON.stringify(merged) !== JSON.stringify(memoryHistory)) {
+                        memoryHistory = merged;
+                        changed = true;
+                    }
                 }
                 if (updated.asteroidle_stats) {
-                    memoryStats = sanitizeStats({ ...DEFAULT_STATS, ...updated.asteroidle_stats }, memoryHistory);
-                } else {
+                    const sanitized = sanitizeStats({ ...DEFAULT_STATS, ...updated.asteroidle_stats }, memoryHistory);
+                    if (JSON.stringify(sanitized) !== JSON.stringify(memoryStats)) {
+                        memoryStats = sanitized;
+                        changed = true;
+                    }
+                } else if (changed) {
                     memoryStats = sanitizeStats(memoryStats, memoryHistory);
                 }
-                localStorage.setItem(STATS_KEY, JSON.stringify(memoryStats));
-                localStorage.setItem(HISTORY_KEY, JSON.stringify(memoryHistory));
-                notifyListeners();
+                if (changed) {
+                    localStorage.setItem(STATS_KEY, JSON.stringify(memoryStats));
+                    localStorage.setItem(HISTORY_KEY, JSON.stringify(memoryHistory));
+                    notifyListeners();
+                }
             }
         });
     } catch (e) {
         console.warn("Error setting up Firestore storage sync:", e);
+        markStorageHydrated();
     }
 });
 
@@ -1866,6 +1954,7 @@ class DailyManager {
         this.checkURLParams();
         this.setupModals();
         this.setupSettings();
+        this.bindStorageSync();
         if (this.isUnlimited) {
             this.startUnlimitedPuzzle();
         } else {
@@ -2031,6 +2120,77 @@ class DailyManager {
         } catch (e) { }
     }
 
+    bindStorageSync() {
+        // Subscribe to real-time local/cloud storage updates across tabs & devices
+        onStorageChange(({ stats, history }) => {
+            this.onStorageUpdated(stats, history);
+        });
+
+        // Startup hydration gate: when cloud profile hydrates, seamlessly transition if completed
+        waitForStorageReady().then(({ history }) => {
+            if (!this.isUnlimited && history) {
+                const rec = history[this.currentDateStr];
+                if (rec && rec.completed && !this.isReviewMode) {
+                    this.applyCompletedRecord(rec);
+                }
+            }
+        });
+    }
+
+    onStorageUpdated(stats, history) {
+        if (!this.isUnlimited && history) {
+            const rec = history[this.currentDateStr];
+            if (rec && rec.completed) {
+                if (!this.isReviewMode) {
+                    this.applyCompletedRecord(rec);
+                } else {
+                    const currentTotal = this.roundScores.reduce((a, b) => a + b, 0);
+                    if (rec.totalScore !== undefined && rec.totalScore > currentTotal) {
+                        this.roundScores = [...(rec.roundScores || this.roundScores)];
+                        this.updateHeaderBanner();
+                        this.updatePips();
+                    }
+                }
+            }
+        }
+
+        // If stats modal is open, re-render it so streaks & scores update live
+        const statsModal = document.getElementById('stats-modal');
+        if (statsModal && statsModal.classList.contains('active')) {
+            this.renderStatsModal();
+        }
+
+        // If archive modal is open, re-render it so calendar/list reflects synced completions
+        const archiveModal = document.getElementById('archive-modal');
+        if (archiveModal && archiveModal.classList.contains('active')) {
+            this.renderArchiveModal();
+        }
+    }
+
+    applyCompletedRecord(record) {
+        if (!record || !record.completed) return;
+        this.isReviewMode = true;
+        this.roundScores = [...(record.roundScores || [0, 0, 0, 0, 0])];
+        this.currentRound = 6;
+        clearActiveState(this.currentDateStr);
+        this.updateHeaderBanner();
+        this.updatePips();
+
+        // Dismiss floating telemetry result banner if active
+        const resultBanner = document.getElementById('round-result-banner');
+        if (resultBanner) {
+            resultBanner.classList.remove('visible');
+            resultBanner.style.display = 'none';
+        }
+
+        // Load Round 1 into arena for non-destructive review
+        if (this.challenges && this.challenges[0]) {
+            this.engine.loadChallenge(this.challenges[0]);
+        }
+
+        this.showResultsModal(record.totalScore);
+    }
+
     startPuzzle(dateStr) {
         const todayStr = getTodayDateStr();
         if (dateStr > todayStr) dateStr = todayStr;
@@ -2046,16 +2206,7 @@ class DailyManager {
         // Check if already completed for this date (AST-C4)
         const existing = getRecordForDate(dateStr);
         if (existing && existing.completed) {
-            this.isReviewMode = true;
-            this.roundScores = [...(existing.roundScores || [0, 0, 0, 0, 0])];
-            this.currentRound = 6;
-            this.updateHeaderBanner();
-            this.updatePips();
-            // Load Round 1 into the arena for non-destructive review/practice while keeping official record locked
-            if (this.challenges[0]) {
-                this.engine.loadChallenge(this.challenges[0]);
-            }
-            this.showResultsModal(existing.totalScore);
+            this.applyCompletedRecord(existing);
             return;
         }
 
