@@ -95,6 +95,7 @@ export class AsteroidleEngine {
 
         // Screen shake on hit
         this.screenShake = 0;
+        this.isCompleted = false;
 
         // Animation
         this.animId = null;
@@ -213,9 +214,52 @@ export class AsteroidleEngine {
     }
 
     /**
+     * Lock or unlock the engine when a mission is completed
+     */
+    setCompleted(isCompleted) {
+        this.isCompleted = !!isCompleted;
+        if (this.isCompleted) {
+            this.state = 'COMPLETED';
+            this.rock = null;
+            this.bullet = null;
+            this.interceptBullet = null;
+            this.testBullets = [];
+            this.trajectory = [];
+        }
+        this.updateControlsState();
+    }
+
+    updateControlsState() {
+        const btnFire = document.getElementById('btnFire');
+        if (btnFire) {
+            if (this.isCompleted) {
+                btnFire.classList.add('disabled');
+                btnFire.setAttribute('disabled', 'true');
+                const subtext = btnFire.querySelector('.btn-subtext');
+                if (subtext) subtext.textContent = 'DONE';
+            } else {
+                btnFire.classList.remove('disabled');
+                btnFire.removeAttribute('disabled');
+                const subtext = btnFire.querySelector('.btn-subtext');
+                if (subtext) subtext.textContent = 'FIRE';
+            }
+        }
+
+        const replayBtn = document.getElementById('replay-btn');
+        const testFireBtn = document.getElementById('test-fire-btn');
+        if (replayBtn) replayBtn.disabled = this.isCompleted;
+        if (testFireBtn) testFireBtn.disabled = this.isCompleted;
+
+        const ftPills = document.querySelectorAll('.finetune-pill');
+        ftPills.forEach(p => { p.disabled = this.isCompleted; });
+    }
+
+    /**
      * Load an asteroid challenge for the current round
      */
     loadChallenge(challenge) {
+        this.isCompleted = false;
+        this.updateControlsState();
         this.challenge = challenge;
         this.testBullets = [];
         this.interceptBullet = null;
@@ -291,6 +335,7 @@ export class AsteroidleEngine {
      * Replay the 1-second preview clip (guarded against FIRING / RESOLVED states - AST-C3)
      */
     playClip(force = false) {
+        if (this.isCompleted) return;
         if (!force && (this.state === 'FIRING' || this.state === 'RESOLVED')) return;
         if (!this.rockInitialState) return;
         this.state = 'PREVIEW';
@@ -340,7 +385,7 @@ export class AsteroidleEngine {
      * Test-fire a tracer bullet using Spaceship.prototype.createMuzzleBullet (AST-C3, AST-C7, AST-L1)
      */
     testFire() {
-        if ((this.state !== 'AIMING' && this.state !== 'PREVIEW') || !this.ship) return;
+        if (this.isCompleted || (this.state !== 'AIMING' && this.state !== 'PREVIEW') || !this.ship) return;
 
         let b = null;
         if (typeof this.ship.createMuzzleBullet === 'function') {
@@ -360,7 +405,7 @@ export class AsteroidleEngine {
      * Commit the real interception shot using Spaceship.prototype.createMuzzleBullet (AST-C1, AST-C7, AST-L1)
      */
     fireInterceptShot() {
-        if (this.state !== 'AIMING' && this.state !== 'PREVIEW') return;
+        if (this.isCompleted || (this.state !== 'AIMING' && this.state !== 'PREVIEW')) return;
         if (!this.ship) return;
 
         // Place rock at the exact t = 1.0s clip end position
@@ -393,7 +438,7 @@ export class AsteroidleEngine {
         let isPointerDown = false;
 
         const handlePointer = (e) => {
-            if (this.state === 'FIRING' || this.state === 'RESOLVED') return;
+            if (this.isCompleted || this.state === 'FIRING' || this.state === 'RESOLVED') return;
             const rect = this.canvas.getBoundingClientRect();
             const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
             const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
@@ -406,6 +451,10 @@ export class AsteroidleEngine {
 
         this.canvas.addEventListener('mousedown', (e) => {
             if (this.isAnyModalOpen()) return;
+            if (this.isCompleted) {
+                document.getElementById('stats-modal')?.classList.add('active');
+                return;
+            }
             isPointerDown = true;
             handlePointer(e);
         });
@@ -420,6 +469,10 @@ export class AsteroidleEngine {
 
         this.canvas.addEventListener('touchstart', (e) => {
             if (this.isAnyModalOpen()) return;
+            if (this.isCompleted) {
+                document.getElementById('stats-modal')?.classList.add('active');
+                return;
+            }
             isPointerDown = true;
             handlePointer(e);
             e.preventDefault();
@@ -455,6 +508,10 @@ export class AsteroidleEngine {
                 const banner = document.getElementById('round-result-banner');
                 if (banner && banner.classList.contains('visible')) return;
                 e.preventDefault();
+                if (this.isCompleted) {
+                    document.getElementById('stats-modal')?.classList.add('active');
+                    return;
+                }
                 if (this.state === 'AIMING' || this.state === 'PREVIEW') {
                     this.fireInterceptShot();
                 }
@@ -502,6 +559,10 @@ export class AsteroidleEngine {
 
         if (btnFire) {
             btnFire.addEventListener('click', () => {
+                if (this.isCompleted) {
+                    document.getElementById('stats-modal')?.classList.add('active');
+                    return;
+                }
                 if (this.state === 'AIMING' || this.state === 'PREVIEW') {
                     this.fireInterceptShot();
                 }
@@ -509,6 +570,10 @@ export class AsteroidleEngine {
             btnFire.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 btnFire.classList.add('pressed');
+                if (this.isCompleted) {
+                    document.getElementById('stats-modal')?.classList.add('active');
+                    return;
+                }
                 if (this.state === 'AIMING' || this.state === 'PREVIEW') {
                     this.fireInterceptShot();
                 }
@@ -844,6 +909,48 @@ export class AsteroidleEngine {
         if (this.state === 'PREVIEW') {
             this.renderClipOverlay(ctx, this.width, this.height);
         }
+
+        // 8. Completed mission overlay indicator
+        if (this.isCompleted) {
+            this.renderCompletedOverlay(ctx, this.width, this.height);
+        }
+
+        ctx.restore();
+    }
+
+    renderCompletedOverlay(ctx, W, H) {
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const cx = W / 2;
+        const cy = H * 0.45;
+
+        // Subtle glowing backdrop card
+        const cardW = Math.min(360, W * 0.85);
+        const cardH = 64;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+        ctx.lineWidth = 1;
+        if (typeof ctx.roundRect === 'function') {
+            ctx.beginPath();
+            ctx.roundRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 8);
+            ctx.fill();
+            ctx.stroke();
+        } else {
+            ctx.fillRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH);
+            ctx.strokeRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH);
+        }
+
+        ctx.font = '800 13px "Orbitron", -apple-system, sans-serif';
+        ctx.fillStyle = '#38bdf8';
+        ctx.shadowColor = 'rgba(56, 189, 248, 0.6)';
+        ctx.shadowBlur = 8;
+        ctx.fillText('MISSION COMPLETE', cx, cy - 10);
+
+        ctx.shadowBlur = 0;
+        ctx.font = '600 11px "Share Tech Mono", monospace';
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText('CLICK ARENA OR STATS TO VIEW INTEL', cx, cy + 12);
 
         ctx.restore();
     }

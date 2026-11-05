@@ -123,7 +123,7 @@ export class DailyManager {
         if (practiceBtn) {
             practiceBtn.addEventListener('click', () => {
                 practiceBtn.blur();
-                this.setGameMode(true);
+                this.setGameMode(true, true);
             });
         }
 
@@ -178,8 +178,13 @@ export class DailyManager {
         this.updateModeButton();
     }
 
-    setGameMode(isUnlimited) {
-        if (this.isUnlimited === isUnlimited) return;
+    setGameMode(isUnlimited, forceNew = false) {
+        if (this.isUnlimited === isUnlimited) {
+            if (isUnlimited && forceNew) {
+                this.startUnlimitedPuzzle();
+            }
+            return;
+        }
         this.isUnlimited = isUnlimited;
         this.updateModeButton();
         if (this.isUnlimited) {
@@ -297,9 +302,9 @@ export class DailyManager {
             resultBanner.style.display = 'none';
         }
 
-        // Load Round 1 into arena for non-destructive review
-        if (this.challenges && this.challenges[0]) {
-            this.engine.loadChallenge(this.challenges[0]);
+        // Definitively lock engine in completed mode so no asteroid wanders or bullets fire
+        if (this.engine) {
+            this.engine.setCompleted(true);
         }
 
         this.showResultsModal(record.totalScore);
@@ -349,6 +354,9 @@ export class DailyManager {
         this.currentDateStr = 'UNLIMITED';
         this.puzzleNum = (Date.now() % 9000) + 1000;
         this.isReviewMode = false;
+        if (this.engine) {
+            this.engine.setCompleted(false);
+        }
         this.challenges = generateDailyChallenges(nowMillis);
         this.roundScores = [];
         this.currentRound = 1;
@@ -368,6 +376,10 @@ export class DailyManager {
             resultBanner.style.display = 'none';
         }
 
+        if (this.engine) {
+            this.engine.setCompleted(false);
+        }
+
         if (this.isUnlimited) {
             this.startUnlimitedPuzzle();
         } else {
@@ -385,13 +397,18 @@ export class DailyManager {
         }
         if (pDateLabel) {
             pDateLabel.textContent = this.isUnlimited
-                ? `UNLIMITED MISSION`
+                ? `PRACTICE SECTOR`
                 : (this.isReviewMode ? `${this.currentDateStr} (COMPLETED)` : this.currentDateStr);
+        }
+
+        const newPracticeHudBtn = document.getElementById('new-practice-hud-btn');
+        if (newPracticeHudBtn) {
+            newPracticeHudBtn.style.display = this.isUnlimited ? 'inline-flex' : 'none';
         }
 
         const roundInd = document.getElementById('round-indicator');
         if (roundInd) {
-            roundInd.textContent = `${Math.min(5, this.currentRound)} / 5`;
+            roundInd.textContent = this.isReviewMode ? 'COMPLETED' : `${Math.min(5, this.currentRound)} / 5`;
         }
 
         const totalScoreVal = document.getElementById('total-score-val');
@@ -424,6 +441,14 @@ export class DailyManager {
     }
 
     loadCurrentRound() {
+        if (this.isReviewMode) {
+            if (this.engine) this.engine.setCompleted(true);
+            return;
+        }
+        if (this.engine) {
+            this.engine.setCompleted(false);
+        }
+
         if (this.currentRound > 5) {
             this.finalizePuzzle();
             return;
@@ -576,6 +601,17 @@ export class DailyManager {
         // Reset / Replay Puzzle button (AST-C4)
         document.getElementById('reset-puzzle-btn')?.addEventListener('click', () => {
             this.resetCurrentPuzzle();
+        });
+
+        // New Practice Game button in stats modal
+        document.getElementById('new-practice-btn')?.addEventListener('click', () => {
+            document.getElementById('stats-modal')?.classList.remove('active');
+            this.startUnlimitedPuzzle();
+        });
+
+        // New Practice Game button in top HUD bar
+        document.getElementById('new-practice-hud-btn')?.addEventListener('click', () => {
+            this.startUnlimitedPuzzle();
         });
     }
 
@@ -972,6 +1008,15 @@ export class DailyManager {
                 `;
             }).join('');
         }
+
+        const newPracticeBtn = document.getElementById('new-practice-btn');
+        const resetBtn = document.getElementById('reset-puzzle-btn');
+        if (newPracticeBtn) {
+            newPracticeBtn.style.display = this.isUnlimited ? 'block' : 'none';
+        }
+        if (resetBtn) {
+            resetBtn.style.display = this.isUnlimited ? 'none' : 'block';
+        }
     }
 
     shareScore() {
@@ -983,23 +1028,39 @@ export class DailyManager {
             return `🔴  ${s}`;
         });
 
-        // Distinguish Unlimited vs Daily in shared header (AST-L5)
-        const titleLine = this.isUnlimited
-            ? `Asteroidle Unlimited (Sector #${this.puzzleNum}) 🎯 ${total}/500\n`
-            : `Asteroidle #${this.puzzleNum} 🎯 ${total}/500\n`;
+        // Canonical branding: Spaceship Flight: Asteroidle
+        const shareTitle = this.isUnlimited
+            ? `Spaceship Flight: Asteroidle Unlimited (Sector #${this.puzzleNum})`
+            : `Spaceship Flight: Asteroidle #${this.puzzleNum}`;
+        const titleLine = `${shareTitle} 🎯 ${total}/500\n`;
+        const shareUrl = 'https://amitjoshi2724.github.io/Spaceship-Flight/asteroidle/';
 
         const shareText = titleLine +
             emojis.map((e, idx) => `🪨 R${idx + 1}: ${e}`).join('\n') +
-            `\nhttps://amitjoshi2724.github.io/Spaceship-Flight/asteroidle/`;
+            `\n${shareUrl}`;
 
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(shareText).then(() => {
-                this.showToast();
+        if (navigator.share && /mobile|android|iphone|ipad/i.test(navigator.userAgent)) {
+            navigator.share({
+                title: shareTitle,
+                text: shareText,
+                url: shareUrl
             }).catch(() => {
-                alert(shareText);
+                this.copyToClipboard(shareText);
             });
         } else {
-            alert(shareText);
+            this.copyToClipboard(shareText);
+        }
+    }
+
+    copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                this.showToast();
+            }).catch(() => {
+                prompt("Copy mission intel:", text);
+            });
+        } else {
+            prompt("Copy mission intel:", text);
         }
     }
 
