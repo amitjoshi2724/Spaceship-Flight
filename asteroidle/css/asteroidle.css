@@ -11,22 +11,40 @@
   top: 0;
   left: 0;
   width: 100%;
-  padding: max(10px, env(safe-area-inset-top, 10px)) max(18px, env(safe-area-inset-right, 18px)) 10px max(18px, env(safe-area-inset-left, 18px));
+  padding: max(8px, env(safe-area-inset-top, 8px)) max(14px, env(safe-area-inset-right, 14px)) 6px max(14px, env(safe-area-inset-left, 14px));
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: clamp(6px, 1.2vw, 12px);
   z-index: 30;
   pointer-events: none;
   box-sizing: border-box;
 }
 
-.asteroidle-hud .hud-left,
-.asteroidle-hud .hud-center,
+.asteroidle-hud .hud-left {
+  display: flex;
+  align-items: center;
+  gap: clamp(4px, 1vw, 8px);
+  flex: 0 0 auto;
+  min-width: 0;
+  pointer-events: auto;
+}
+
+.asteroidle-hud .hud-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  pointer-events: auto;
+}
+
 .asteroidle-hud .hud-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: clamp(3px, 0.8vw, 8px);
+  flex: 0 0 auto;
+  min-width: 0;
   pointer-events: auto;
 }
 
@@ -171,10 +189,10 @@
    ========================================================================== */
 .asteroidle-touch-controls {
   position: absolute;
-  bottom: max(18px, env(safe-area-inset-bottom, 18px));
+  bottom: max(14px, env(safe-area-inset-bottom, 14px));
   left: 0;
   width: 100%;
-  padding: 0 max(24px, env(safe-area-inset-right, 24px)) 0 max(24px, env(safe-area-inset-left, 24px));
+  padding: 0 max(20px, env(safe-area-inset-right, 20px)) 0 max(20px, env(safe-area-inset-left, 20px));
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -183,13 +201,42 @@
   box-sizing: border-box;
 }
 
-.asteroidle-touch-controls .touch-group-left,
-.asteroidle-touch-controls .touch-group-center,
-.asteroidle-touch-controls .touch-group-right {
+.asteroidle-touch-controls .touch-group-left {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.telemetry-badge-pill {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
+  padding: 4px 10px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 6px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  margin-bottom: 2px;
+}
+
+.badge-sublabel {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #94a3b8;
+}
+
+.angle-readout {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 800;
+  color: #00f0ff;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
+  min-width: 42px;
+  text-align: right;
 }
 
 .finetune-row {
@@ -201,7 +248,7 @@
 
 .finetune-pill {
   padding: 5px 9px;
-  background: rgba(15, 23, 42, 0.28);
+  background: rgba(15, 23, 42, 0.35);
   border: 1px solid rgba(56, 189, 248, 0.35);
   border-radius: 6px;
   color: #38bdf8;
@@ -221,60 +268,33 @@
   transform: translateY(-1px);
 }
 
-/* Center group: Heading Readout & Replay / Tracer pills */
-.asteroidle-touch-controls .touch-group-center {
-  align-items: center;
-  justify-content: flex-end;
-  margin-bottom: 4px;
-}
-
-.telemetry-badge-pill {
+/* Right pod: Replay & Tracer Action pills paired above Fire Button */
+.asteroidle-touch-controls .touch-group-right {
+  pointer-events: auto;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  background: rgba(15, 23, 42, 0.28);
-  border: 1px solid rgba(56, 189, 248, 0.4);
-  border-radius: 8px;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-}
-
-.badge-sublabel {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1px;
-  color: #94a3b8;
-}
-
-.angle-readout {
-  font-family: var(--font-mono);
-  font-size: 15px;
-  font-weight: 800;
-  color: #00f0ff;
-  text-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
-  min-width: 44px;
-  text-align: right;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .action-pills-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 6px;
+  margin-bottom: 2px;
 }
 
 .ctrl-pill {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  background: rgba(15, 23, 42, 0.28);
+  gap: 5px;
+  padding: 6px 11px;
+  background: rgba(15, 23, 42, 0.45);
   border: 1px solid rgba(56, 189, 248, 0.35);
-  border-radius: 8px;
+  border-radius: 6px;
   color: #e0f2fe;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.5px;
   cursor: pointer;
@@ -288,13 +308,7 @@
   border-color: #00f0ff;
   color: #ffffff;
   box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
-  transform: translateY(-2px);
-}
-
-/* Right Fire Button */
-.asteroidle-touch-controls .touch-group-right {
-  align-items: center;
-  justify-content: flex-end;
+  transform: translateY(-1px);
 }
 
 /* ==========================================================================
@@ -416,30 +430,273 @@
 }
 
 /* ==========================================================================
-   Responsive Adaptations
+   Responsive Adaptations & Mobile De-Crowding
    ========================================================================== */
-@media (max-width: 768px) {
+
+/* 1. Mobile Landscape & Compact Viewports (iPhone, Android in landscape, small windows) */
+@media (max-width: 1100px), (max-height: 540px) {
   .asteroidle-hud {
-    padding: max(8px, env(safe-area-inset-top, 8px)) max(12px, env(safe-area-inset-right, 12px)) 8px max(12px, env(safe-area-inset-left, 12px));
+    padding: max(4px, env(safe-area-inset-top, 4px)) max(8px, env(safe-area-inset-right, 8px)) 4px max(8px, env(safe-area-inset-left, 8px));
+    gap: clamp(4px, 1vw, 8px);
   }
 
+  /* Compact HUD Left: icon-only back button and short puzzle badge */
+  .arcade-back-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+    gap: 4px;
+    height: 28px;
+    box-sizing: border-box;
+  }
   .arcade-back-btn .btn-text {
     display: none;
   }
-
-  .asteroidle-touch-controls {
-    padding: 0 max(12px, env(safe-area-inset-right, 12px)) 0 max(12px, env(safe-area-inset-left, 12px));
-    bottom: max(12px, env(safe-area-inset-bottom, 12px));
+  .puzzle-stat {
+    padding: 2px 6px;
+    height: 28px;
+    box-sizing: border-box;
+    justify-content: center;
+  }
+  .puzzle-stat .date-value {
+    display: none;
+  }
+  .puzzle-stat .hud-label {
+    font-size: 9px;
+    letter-spacing: 0.5px;
   }
 
-  .finetune-pill {
+  /* Compact HUD Center: slim round tracker & mini pips */
+  .round-tracker-container {
+    padding: 2px 8px;
+    gap: 6px;
+    border-radius: 8px;
+  }
+  .score-substat .hud-label {
+    font-size: 7.5px;
+    letter-spacing: 0.5px;
+  }
+  .score-substat .hud-value {
+    font-size: 12px;
+  }
+  .score-divider {
+    height: 16px;
+    margin: 0 1px;
+  }
+  .round-pips {
+    gap: 3px;
+    margin-left: 2px;
+  }
+  .round-pip {
+    width: 16px;
+    height: 16px;
+    font-size: 9px;
+    border-radius: 3px;
+  }
+
+  /* Compact HUD Right: icon-only mode toggle and mini utility buttons */
+  .asteroidle-hud .hud-right {
+    gap: 4px;
+  }
+  .mode-segmented-toggle {
+    padding: 2px;
+    gap: 2px;
+  }
+  .mode-toggle-btn {
     padding: 4px 6px;
     font-size: 10px;
   }
+  .mode-toggle-btn .mode-label {
+    display: none;
+  }
+  .mode-toggle-btn .mode-icon {
+    font-size: 12px;
+    line-height: 1;
+  }
 
+  .asteroidle-hud .hud-btn {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    max-width: 28px;
+    padding: 0;
+    font-size: 13px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Compact Auth Profile on Mobile */
+  .user-profile-badge {
+    height: 28px;
+    padding: 2px 4px;
+    gap: 2px;
+  }
+  .user-display-name {
+    display: none;
+  }
+  .dropdown-caret {
+    font-size: 7px;
+    margin-left: 1px;
+  }
+  .google-btn {
+    height: 28px;
+    padding: 0 6px;
+  }
+  .google-btn-text {
+    display: none;
+  }
+  .google-btn svg {
+    margin-right: 0 !important;
+  }
+
+  /* Compact Touch Controls: side-anchored with zero center clutter */
+  .asteroidle-touch-controls {
+    bottom: max(6px, env(safe-area-inset-bottom, 6px));
+    padding: 0 max(10px, env(safe-area-inset-right, 10px)) 0 max(10px, env(safe-area-inset-left, 10px));
+  }
+
+  .telemetry-badge-pill {
+    padding: 2px 7px;
+    gap: 5px;
+    border-radius: 5px;
+    margin-bottom: 1px;
+  }
+  .badge-sublabel {
+    font-size: 7.5px;
+    letter-spacing: 0.5px;
+  }
+  .angle-readout {
+    font-size: 12px;
+    min-width: 36px;
+  }
+
+  .finetune-row {
+    gap: 4px;
+    margin-bottom: 2px;
+  }
+  .finetune-pill {
+    padding: 3px 6px;
+    font-size: 9.5px;
+    min-width: 26px;
+  }
+
+  .touch-rot-row {
+    gap: 6px;
+  }
+  .ctrl-btn.loop-btn {
+    width: clamp(46px, 12.5vh, 58px);
+    height: clamp(46px, 12.5vh, 58px);
+  }
+
+  .action-pills-row {
+    gap: 4px;
+    margin-bottom: 2px;
+  }
   .ctrl-pill {
-    padding: 6px 10px;
-    font-size: 10px;
+    padding: 3px 6px;
+    font-size: 9px;
+    gap: 3px;
+    border-radius: 5px;
+  }
+  .ctrl-pill svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .ctrl-btn.action-btn.fire-btn {
+    width: clamp(52px, 14vh, 64px);
+    height: clamp(52px, 14vh, 64px);
+    border-radius: 14px;
+  }
+  .ctrl-btn.action-btn.fire-btn svg {
+    width: 22px;
+    height: 22px;
+  }
+  .ctrl-btn.action-btn.fire-btn .btn-subtext {
+    font-size: 7.5px;
+  }
+}
+
+/* 2. Portrait Orientation: 2-Tier Upper HUD above Letterboxed Canvas */
+@media (max-width: 600px) and (orientation: portrait) {
+  .asteroidle-hud {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    padding: max(8px, env(safe-area-inset-top, 8px)) 10px 4px 10px;
+    row-gap: 8px;
+  }
+
+  .asteroidle-hud .hud-left {
+    order: 1;
+  }
+
+  .asteroidle-hud .hud-right {
+    order: 2;
+  }
+
+  .asteroidle-hud .hud-center {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    margin-top: 2px;
+  }
+
+  .round-tracker-container {
+    width: 100%;
+    max-width: 320px;
+    justify-content: space-around;
+  }
+
+  /* In portrait, touch controls stay comfortably below the letterboxed canvas */
+  .asteroidle-touch-controls {
+    bottom: max(20px, env(safe-area-inset-bottom, 20px));
+    padding: 0 16px;
+  }
+  .ctrl-btn.loop-btn {
+    width: 64px;
+    height: 64px;
+  }
+  .ctrl-btn.action-btn.fire-btn {
+    width: 68px;
+    height: 68px;
+  }
+}
+
+/* 3. Extra Narrow Portrait Screens (e.g. iPhone SE / mini) */
+@media (max-width: 380px) and (orientation: portrait) {
+  .asteroidle-hud .hud-right {
+    gap: 3px;
+  }
+  .asteroidle-hud .hud-btn {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    font-size: 12px;
+  }
+  .round-tracker-container {
+    max-width: 290px;
+    padding: 2px 6px;
+    gap: 4px;
+  }
+  .round-pip {
+    width: 15px;
+    height: 15px;
+    font-size: 8px;
+  }
+  .finetune-pill {
+    padding: 3px 5px;
+    font-size: 9px;
+    min-width: 24px;
+  }
+  .ctrl-btn.loop-btn {
+    width: 56px;
+    height: 56px;
+  }
+  .ctrl-btn.action-btn.fire-btn {
+    width: 60px;
+    height: 60px;
   }
 }
 
